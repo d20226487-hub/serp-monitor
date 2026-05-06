@@ -1,0 +1,34 @@
+{$SITE_HOST} {
+	encode zstd gzip
+
+	# === Optional Basic Auth ===================================================
+	# OFF by default — this is a single-user internal tool, so most deploys live
+	# behind a VPN or company firewall. If you DO need to expose this on the open
+	# internet (or on a flat office network), uncomment the block below and set
+	# the two env vars.
+	#
+	# 1. Generate a bcrypt hash without leaving plaintext on disk:
+	#      docker run --rm caddy:2-alpine caddy hash-password --plaintext 'yourpass'
+	#
+	# 2. Put the credentials in `.env`:
+	#      BASIC_AUTH_USER=admin
+	#      BASIC_AUTH_PASSWORD_HASH=$$2a$$14$$abc...   ← NOTE: doubled dollar signs
+	#
+	#    Docker Compose interpolates $VARS in env files, so each `$` in the bcrypt
+	#    hash must be written as `$$` in `.env`. Caddy itself sees the unescaped
+	#    string and uses it verbatim.
+	#
+	# 3. Uncomment the block, then:
+	#      docker compose up -d --force-recreate caddy
+	#
+	# basic_auth /* {
+	# 	{$BASIC_AUTH_USER} {$BASIC_AUTH_PASSWORD_HASH}
+	# }
+	# ===========================================================================
+
+	handle_path /api/* {
+		reverse_proxy api:8000
+	}
+
+	reverse_proxy web:3000
+}

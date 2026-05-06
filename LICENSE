@@ -1,0 +1,46 @@
+SERP Monitor — Internal Use License
+
+Copyright (c) 2026 — All rights reserved.
+
+This software and accompanying documentation (the "Software") is proprietary
+and confidential. It is provided exclusively for internal use within the
+organization that owns this repository.
+
+You MAY:
+  - Use, copy, run, and modify the Software for internal business purposes
+    of the owning organization.
+  - Deploy the Software to servers controlled by the owning organization.
+  - Share the Software internally with employees, contractors, and agents
+    of the owning organization on a need-to-know basis, provided they agree
+    to comply with the terms of this license.
+
+You MAY NOT:
+  - Distribute, sublicense, sell, rent, lease, lend, or otherwise transfer
+    the Software or any portion of it to any party outside the owning
+    organization.
+  - Make the Software, or any derivative work of it, publicly available
+    (including but not limited to public source-code hosting, public
+    container registries, public package indexes, or public web services
+    accessible to non-employees).
+  - Remove, alter, or obscure any proprietary notices on the Software.
+  - Use the Software in a way that competes with the owning organization
+    or for the benefit of a third party.
+
+NO WARRANTY. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN
+NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY
+CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM THE USE OF THE SOFTWARE.
+
+THIRD-PARTY COMPONENTS. This Software incorporates open-source libraries
+governed by their own licenses (e.g. Next.js, React, FastAPI, SQLAlchemy,
+APScheduler, httpx, selectolax, Tailwind CSS, cmdk, lucide-react, Caddy).
+Those components remain subject to their respective upstream licenses;
+this Internal Use License applies only to the original code in this
+repository and its compiled artifacts.
+
+Termination. Any breach of this license terminates all rights granted
+herein automatically. Upon termination, all copies of the Software in
+your possession must be destroyed.
+
+For questions about this license, contact the repository owner.

@@ -1,0 +1,40 @@
+services:
+  api:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/data
+    expose:
+      - "8000"
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_BASE: /api
+    restart: unless-stopped
+    env_file: .env
+    expose:
+      - "3000"
+    depends_on:
+      - api
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+      - "${HTTPS_PORT:-8443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - web
+
+volumes:
+  caddy_data:
+  caddy_config:

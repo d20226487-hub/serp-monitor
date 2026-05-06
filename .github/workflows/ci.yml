@@ -1,0 +1,72 @@
+name: CI
+
+# Runs on every push and PR. The frontend job catches the kind of TypeScript
+# error that `next dev` doesn't surface but `next build` does (e.g. literal-
+# type mismatches under `as const`); the backend job catches Python import /
+# syntax errors before deploy time.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  frontend:
+    name: Frontend (Next.js + React)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      # No separate lint step: Next.js 16 removed `next lint`, so the
+      # ESLint config that ships with this project would need a real
+      # `eslint .` invocation to do anything. We rely on `next build`
+      # below to catch TypeScript and import errors. Add a real
+      # ESLint setup here if you start collaborating with another dev.
+      - name: Build (catches TypeScript errors that dev mode misses)
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_BASE: /api
+
+  backend:
+    name: Backend (FastAPI)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile-check all .py files
+        run: python -m compileall -q app
+
+      - name: Import smoke test
+        # Don't actually start the server; just import the FastAPI app to
+        # confirm all modules load and there are no top-level NameErrors,
+        # missing imports, or Pydantic validation issues at module scope.
+        env:
+          DATABASE_URL: sqlite:///./_ci.db
+        run: python -c "from app.main import app; print('imports ok:', app.title)"

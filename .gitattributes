@@ -1,0 +1,29 @@
+# Enforce LF line endings in the repo for files that need to run inside Linux
+# containers. Windows checkouts can still display CRLF in their working copy
+# (autocrlf=true), but the stored bytes are always LF.
+
+# Default: text files normalized to LF in repo
+* text=auto eol=lf
+
+# Files that MUST be LF-only (CRLF breaks them in Linux):
+*.sh         text eol=lf
+Dockerfile   text eol=lf
+Caddyfile    text eol=lf
+*.yml        text eol=lf
+*.yaml       text eol=lf
+.env*        text eol=lf
+
+# Frontend / backend code — LF
+*.ts         text eol=lf
+*.tsx        text eol=lf
+*.js         text eol=lf
+*.mjs        text eol=lf
+*.cjs        text eol=lf
+*.json       text eol=lf
+*.css        text eol=lf
+*.py         text eol=lf
+*.toml       text eol=lf
+*.md         text eol=lf
+
+# Lockfiles — keep verbatim
+package-lock.json -diff

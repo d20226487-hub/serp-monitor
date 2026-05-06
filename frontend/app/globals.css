@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Tell the browser we support both color schemes; the actual choice is
+   driven by the .dark class on <html> set by the pre-paint script. */
+:root { color-scheme: light; }
+html.dark { color-scheme: dark; }
+
+html, body { height: 100%; }
+body {
+  @apply bg-neutral-50 text-neutral-900 antialiased;
+  @apply dark:bg-neutral-950 dark:text-neutral-100;
+}
+
+/* cmdk basic styling — already uses class-based dark: variants */
+[cmdk-root] { @apply rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700; }
+[cmdk-input] { @apply w-full px-3 py-2 outline-none bg-transparent border-b dark:border-neutral-700; }
+[cmdk-list]  { @apply max-h-64 overflow-auto p-1; }
+[cmdk-item]  { @apply px-3 py-1.5 rounded cursor-pointer text-sm; }
+[cmdk-item][data-selected="true"] { @apply bg-neutral-100 dark:bg-neutral-800; }
+[cmdk-empty] { @apply px-3 py-3 text-sm text-neutral-500; }

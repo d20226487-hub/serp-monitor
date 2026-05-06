@@ -1,0 +1,36 @@
+# Secrets & runtime data
+.env
+data/
+
+# Backend
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.venv/
+backend/*.db
+
+# Frontend
+frontend/.next/
+frontend/node_modules/
+frontend/out/
+node_modules/
+
+# Build / runtime artifacts
+*.log
+build*.log
+*.pid
+*.swp
+*.bak
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor / tooling
+.vscode/
+.idea/
+*.iml
+
+# Caddy local persistence (if anyone bind-mounts it)
+caddy_data/
+caddy_config/
