@@ -226,7 +226,7 @@ export default function RunPage() {
         className="w-full px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700"
       />
 
-      <RunOverview results={results} />
+      <RunOverview results={results} runId={id} />
 
       {verifyEntries.length > 0 && (
         <details className="border rounded-md dark:border-neutral-700 group">
