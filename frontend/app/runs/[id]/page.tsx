@@ -5,6 +5,7 @@ import { api, JobRun, Result, SavedLocation } from "@/lib/api";
 import { buildBrowserUrl, variantLabel } from "@/lib/browser-urls";
 import { ExternalLink } from "lucide-react";
 import { useT } from "@/lib/i18n";
+import { RunOverview } from "@/components/run-overview";
 
 // One color per axis. Keyword wins the header; engine/device/location/language
 // each get a distinctly-colored chip in the variant bar so you can scan a long
@@ -224,6 +225,8 @@ export default function RunPage() {
         placeholder={t.run.filterPlaceholder}
         className="w-full px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700"
       />
+
+      <RunOverview results={results} />
 
       {verifyEntries.length > 0 && (
         <details className="border rounded-md dark:border-neutral-700 group">
