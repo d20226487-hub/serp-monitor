@@ -1,6 +1,9 @@
 # Secrets & runtime data
 .env
-data/
+# Repo-root SQLite volume ONLY. Anchored with a leading slash so it does NOT
+# also match backend/app/data/ — that dir holds shipped languages/google-domain
+# /seed-location JSON the app needs at runtime and MUST be committed.
+/data/
 
 # Backend
 backend/__pycache__/
