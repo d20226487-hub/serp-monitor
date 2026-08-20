@@ -62,6 +62,13 @@ export type AnalysisUrl = {
   /** The canonical URL actually sent to Ahrefs (AMP/tracking stripped). */
   analyzed_url: string;
   normalized: boolean;
+  /** Best SERP slot this page reached across every engine/device/location. */
+  position: number;
+  /** Every slot it held — a page can rank #2 in one city and #9 in another. */
+  positions: number[];
+  /** Host of the canonical URL, www-stripped. Used to keep one site from
+   *  taking more than one place in the weakest-competitors cohort. */
+  domain: string;
   metrics: Record<string, number | null>;
   error: boolean;
   analysed: boolean;
@@ -71,13 +78,9 @@ export type AnalysisRow = {
   keyword: string;
   urls_total: number;
   urls_analysed: number;
-  medians: Record<string, number | null>;
-  means: Record<string, number | null>;
-  mins: Record<string, number | null>;
-  maxes: Record<string, number | null>;
-  /** Results below the weak threshold — realistically displaceable slots. */
-  weak_slots: number | null;
-  weak_field: string | null;
+  /** Every page in this keyword's SERP, ordered by position. The UI reduces
+   *  this to the weakest-domain cohort at the selected depth and averages it —
+   *  see lib/serp-strength. */
   urls: AnalysisUrl[];
   domains: { domain: string; metrics: Record<string, number | null>; analysed: boolean }[];
   /** AI verdict: "low" | "medium" | "hard" | "too hard", or null. */

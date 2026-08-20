@@ -246,7 +246,7 @@ export default function RunPage() {
       {/* Analyzer mode replaces the domain/URL distribution with the
           per-keyword difficulty table — different question, different view. */}
       {analysis?.mode === "analyzer" ? (
-        <RunAnalysisTable analysis={analysis} />
+        <RunAnalysisTable analysis={analysis} runId={id} />
       ) : (
         <RunOverview results={results} runId={id} />
       )}

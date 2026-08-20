@@ -108,8 +108,16 @@ const messagesEn = {
   },
   analysis: {
     title: "SERP analysis",
-    subtitle: "Median Ahrefs metrics across every URL in each keyword's SERP",
+    subtitle: (depth: number, size: number, ranker: string) =>
+      depth === 0
+        ? `Entry bar across the whole SERP — the ${size} weakest domains by ${ranker}, averaged`
+        : `Entry bar for the top ${depth} — the ${size} weakest domains by ${ranker}, averaged`,
+    depthLabel: "Aiming for",
+    depthOption: (n: number) => `Top ${n}`,
+    depthAll: "All",
     colKeyword: "Keyword",
+    colShape: "SERP shape",
+    colSoft: "Soft slots",
     colCoverage: "Analysed",
     colDifficulty: "SERP difficulty",
     colComment: "AI comment",
@@ -123,20 +131,57 @@ const messagesEn = {
     aiFailed: "AI failed",
     empty: "No analysis yet. Run this job to collect Ahrefs metrics.",
     units: (n: number) => `${n.toLocaleString()} Ahrefs units`,
-    partialHint: "Some URLs in this SERP could not be analysed",
-    cellHint: (mean: string, min: string, max: string) =>
-      `avg ${mean} · min ${min} · max ${max}`,
-    weakSlots: (n: number) => `· ${n} weak`,
-    weakHint: (field: string) =>
-      `Results with ${field === "url_rating" ? "UR" : "DR"} under 20 — the realistically displaceable slots`,
+    partialHint: "Some URLs in this depth could not be analysed",
+    cellHint: (metric: string, from: number, of: number, ranker: string, positions: string) =>
+      from < of
+        ? `Mean ${metric} of ${positions} — the ${of} weakest domains by ${ranker}. Only ${from} of them reported this metric.`
+        : `Mean ${metric} of ${positions} — the ${of} weakest domains by ${ranker}`,
+    cohortLabel: (positions: string) => `weakest: ${positions}`,
+    cohortHint: (size: number, ranker: string) =>
+      `The ${size} weakest domains by ${ranker} in this depth, one page each — every figure in this row is their average`,
+    inCohort: "averaged",
+    bandCount: (band: string, n: number) =>
+      `${n} ${({
+        soft: "soft",
+        propped: "domain-carried",
+        moderate: "moderate",
+        strong: "strong",
+        unknown: "unknown",
+      } as Record<string, string>)[band] ?? band}`,
+    softHint: (soft: number, total: number, breakdown: string) =>
+      `${soft} of ${total} slots are weak pages on weak domains — the realistic targets. Full split: ${breakdown}`,
+    coverageHint: (analysed: number, total: number) =>
+      `Ahrefs returned metrics for ${analysed} of the ${total} pages in this depth`,
+    exportCsv: "Export table",
+    exportHint: "Download these rows as CSV, at the depth shown",
+    noneInDepth: "No results in this depth",
+    bandLabels: {
+      soft: "soft",
+      propped: "domain-carried",
+      moderate: "moderate",
+      strong: "strong",
+      unknown: "unknown",
+    } as Record<string, string>,
+    bandHints: {
+      soft: "Weak page on a weak domain — the realistic target",
+      propped: "Page has no links of its own, but sits on a strong domain",
+      moderate: "Page has some link equity behind it",
+      strong: "Genuinely well-linked page",
+      unknown: "Not analysed",
+    } as Record<string, string>,
+    gapHint: (pos: number) =>
+      `#${pos} — no organic result here (an ad or a SERP feature took the slot)`,
+    legendTitle: "Bar height = page strength · colour =",
     rawTitle: "Raw Ahrefs data for every URL in this SERP",
     rawDomainTitle: "Domain-level metrics for the sites above",
     colDomain: "Domain",
+    colPos: "#",
+    alsoAt: (positions: string) => `also at ${positions}`,
     analyzedAs: "analysed as",
     notAnalysed: "not analysed",
     fetchFailed: "fetch failed",
     footnote:
-      "Headline figure is the median; hover a cell for average / min / max. Median resists a single very strong result skewing the picture, but ranking top-10 means beating the weakest reachable result — so watch the “weak” count too. URLs are analysed in Ahrefs exact-URL mode, which is what makes UR per-page rather than per-domain; AMP and tracking variants are normalised to the canonical page first, because Ahrefs reports those as separate URLs with an empty link profile. Click a keyword to see the raw per-URL numbers.",
+      "Every figure in a row is the average of the SAME weakest competitors — two of them at a bounded depth, three across the whole SERP, listed under the bars and dotted in them. More than one, because a single weakest page is a coin flip; ranked by DR rather than per metric, because a per-metric minimum picks a different page in each column and lets an authority domain with an empty page profile define the “easiest” backlink target, which it is not. One page per domain: DR belongs to the site, so a site holding two slots would otherwise fill the cohort with itself. Only analysed pages are eligible, and an asterisk means the average rests on fewer pages than the cohort holds. URLs are analysed in Ahrefs exact-URL mode, which is what makes UR per-page rather than per-domain; AMP and tracking variants are normalised to the canonical page first, because Ahrefs reports those as separate URLs with an empty link profile. When a keyword spans several engines, devices or locations, a page is placed at its BEST slot. Click a keyword to see the raw per-URL numbers.",
   },
   jobForm: {
     mode: "Mode",
@@ -645,8 +690,16 @@ const messagesRu: Messages = {
   },
   analysis: {
     title: "Анализ выдачи",
-    subtitle: "Медианные метрики Ahrefs по всем URL в выдаче каждого ключевого слова",
+    subtitle: (depth: number, size: number, ranker: string) =>
+      depth === 0
+        ? `Порог входа по всей выдаче — среднее по ${size} самым слабым доменам по ${ranker}`
+        : `Порог входа в топ-${depth} — среднее по ${size} самым слабым доменам по ${ranker}`,
+    depthLabel: "Цель",
+    depthOption: (n: number) => `Топ-${n}`,
+    depthAll: "Вся",
     colKeyword: "Ключевое слово",
+    colShape: "Профиль выдачи",
+    colSoft: "Слабых позиций",
     colCoverage: "Проанализировано",
     colDifficulty: "Сложность выдачи",
     colComment: "Комментарий AI",
@@ -660,20 +713,60 @@ const messagesRu: Messages = {
     aiFailed: "ошибка AI",
     empty: "Анализа пока нет. Запустите задачу, чтобы собрать метрики Ahrefs.",
     units: (n: number) => `${n.toLocaleString()} юнитов Ahrefs`,
-    partialHint: "Часть URL в этой выдаче не удалось проанализировать",
-    cellHint: (mean: string, min: string, max: string) =>
-      `среднее ${mean} · мин ${min} · макс ${max}`,
-    weakSlots: (n: number) => `· ${n} слабых`,
-    weakHint: (field: string) =>
-      `Результаты с ${field === "url_rating" ? "UR" : "DR"} ниже 20 — реально вытесняемые позиции`,
+    partialHint: "Часть URL на этой глубине не удалось проанализировать",
+    cellHint: (metric: string, from: number, of: number, ranker: string, positions: string) =>
+      from < of
+        ? `Среднее ${metric} по ${positions} — ${of} самых слабых домена по ${ranker}. Метрику вернули только ${from} из них.`
+        : `Среднее ${metric} по ${positions} — ${of} самых слабых домена по ${ranker}`,
+    cohortLabel: (positions: string) => `слабейшие: ${positions}`,
+    cohortHint: (size: number, ranker: string) =>
+      `${size} самых слабых по ${ranker} домена на этой глубине, по одной странице с каждого — все числа в строке усреднены по ним`,
+    inCohort: "в расчёте",
+    bandCount: (band: string, n: number) => {
+      const forms: Record<string, [string, string, string]> = {
+        soft: ["слабая", "слабые", "слабых"],
+        propped: ["за счёт домена", "за счёт домена", "за счёт домена"],
+        moderate: ["средняя", "средние", "средних"],
+        strong: ["сильная", "сильные", "сильных"],
+        unknown: ["без данных", "без данных", "без данных"],
+      };
+      const f = forms[band];
+      return f ? `${n} ${pluralRu(n, f)}` : `${n} ${band}`;
+    },
+    softHint: (soft: number, total: number, breakdown: string) =>
+      `${soft} из ${total} позиций — слабые страницы на слабых доменах, то есть реальные цели. Полный расклад: ${breakdown}`,
+    coverageHint: (analysed: number, total: number) =>
+      `Ahrefs вернул метрики для ${analysed} из ${total} страниц на этой глубине`,
+    exportCsv: "Выгрузить таблицу",
+    exportHint: "Скачать эти строки в CSV на показанной глубине",
+    noneInDepth: "На этой глубине результатов нет",
+    bandLabels: {
+      soft: "слабая",
+      propped: "за счёт домена",
+      moderate: "средняя",
+      strong: "сильная",
+      unknown: "нет данных",
+    } as Record<string, string>,
+    bandHints: {
+      soft: "Слабая страница на слабом домене — реальная цель для вытеснения",
+      propped: "У самой страницы ссылок нет, её вытягивает сильный домен",
+      moderate: "У страницы есть какой-то ссылочный вес",
+      strong: "Действительно хорошо прокачанная страница",
+      unknown: "Не проанализировано",
+    } as Record<string, string>,
+    gapHint: (pos: number) =>
+      `#${pos} — органики здесь нет (позицию занял блок рекламы или колдунщик)`,
+    legendTitle: "Высота столбика — сила страницы · цвет —",
     rawTitle: "Сырые данные Ahrefs по каждому URL этой выдачи",
     rawDomainTitle: "Метрики уровня домена для сайтов выше",
     colDomain: "Домен",
+    colPos: "#",
+    alsoAt: (positions: string) => `также на ${positions}`,
     analyzedAs: "проанализирован как",
     notAnalysed: "не проанализирован",
     fetchFailed: "ошибка запроса",
     footnote:
-      "Основное число — медиана; наведите на ячейку, чтобы увидеть среднее / мин / макс. Медиана устойчива к одному очень сильному результату, но чтобы попасть в топ-10, нужно обойти самый слабый достижимый результат — поэтому смотрите и на счётчик «слабых». URL анализируются в режиме точного URL (exact), поэтому UR относится к странице, а не к домену; AMP- и трекинговые варианты предварительно приводятся к каноническому URL, поскольку Ahrefs считает их отдельными страницами с пустым ссылочным профилем. Кликните по ключевому слову, чтобы увидеть сырые данные по каждому URL.",
+      "Все числа в строке — среднее по ОДНИМ И ТЕМ ЖЕ самым слабым конкурентам: двум на ограниченной глубине и трём по всей выдаче. Они перечислены под столбиками и отмечены точкой. Больше одного, потому что одна самая слабая страница — это лотерея; по DR, а не по каждой метрике отдельно, потому что поколоночный минимум выбирает в каждом столбце свою страницу и позволяет авторитетному домену с пустым ссылочным профилем страницы задавать «самую лёгкую» планку по бэклинкам, которой он на деле не является. По одной странице с домена: DR принадлежит сайту, поэтому сайт, занявший два места, иначе занял бы собой весь расчёт. В расчёт попадают только проанализированные страницы, а звёздочка означает, что среднее посчитано по меньшему числу страниц, чем в наборе. URL анализируются в режиме точного URL (exact), поэтому UR относится к странице, а не к домену; AMP- и трекинговые варианты предварительно приводятся к каноническому URL, поскольку Ahrefs считает их отдельными страницами с пустым ссылочным профилем. Если ключевое слово снималось по нескольким движкам, устройствам или локациям, страница ставится на ЛУЧШУЮ из своих позиций. Кликните по ключевому слову, чтобы увидеть сырые данные по каждому URL.",
   },
   jobForm: {
     mode: "Режим",

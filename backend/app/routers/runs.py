@@ -35,11 +35,6 @@ def get_results(
     return q.order_by(Result.keyword, Result.engine, Result.device, Result.position).all()
 
 
-# A result at or below this UR/DR is treated as a "weak slot" — a realistically
-# displaceable position. 20 is a rule of thumb, not an Ahrefs constant.
-WEAK_THRESHOLD = 20
-
-
 def _host_of(url: str) -> str:
     from urllib.parse import urlsplit
     host = (urlsplit(url).hostname or "").lower()
@@ -64,25 +59,17 @@ def _domain_rows(pairs, by_domain: dict, fields: list[str]) -> list[dict]:
     return out
 
 
-def _median(values: list[float]) -> float | None:
-    """Median of the present values, or None when nothing was measurable.
-
-    Median rather than mean on purpose: a SERP routinely mixes one
-    Wikipedia-grade result with nine ordinary ones, and a mean would let that
-    single outlier dominate the difficulty read for the whole keyword.
-    """
-    vals = sorted(v for v in values if v is not None)
-    if not vals:
-        return None
-    mid = len(vals) // 2
-    if len(vals) % 2:
-        return float(vals[mid])
-    return (float(vals[mid - 1]) + float(vals[mid])) / 2.0
-
-
 @router.get("/{run_id}/analysis")
 def get_analysis(run_id: int, db: Session = Depends(get_db)):
-    """Per-keyword median Ahrefs metrics for an analyzer-mode run.
+    """Per-keyword SERP breakdown, position by position, for an analyzer run.
+
+    Deliberately NOT aggregated here. The question this view answers is "which
+    slot could I realistically take", and that is a per-position question: the
+    bar you must clear is set by the weakest competitors inside the depth you
+    are aiming for, not by any average of the whole SERP. So the API ships the
+    ladder — every URL with its SERP position, domain and metrics — and the UI
+    picks the cohort and averages it at whatever depth the user selects,
+    without a refetch.
 
     Returns the job's mode so the run page can decide which view to render
     without a second request for the job.
@@ -127,32 +114,51 @@ def get_analysis(run_id: int, db: Session = Depends(get_db)):
         .all()
     }
 
-    # Group result URLs per keyword. A keyword's SERP may span engines/devices/
-    # locations; we aggregate across the whole keyword, matching the "median of
-    # all results in one SERP" the table is meant to show.
-    per_keyword: dict[str, list[str]] = {}
-    for kw, url in (
-        db.query(Result.keyword, Result.url)
-        .filter(Result.run_id == run_id, Result.url.isnot(None))
+    # Group result URLs per keyword, carrying SERP position. Position is the
+    # ABSOLUTE slot on the page — every provider reports rank_absolute, not the
+    # organic-only rank — so a gap in the sequence means an ad or an AI block
+    # sat there. That is exactly what "top 5" should mean here: the five slots a
+    # searcher actually sees, not the first five organic rows.
+    per_keyword: dict[str, list[tuple[int, str]]] = {}
+    for kw, pos, url in (
+        db.query(Result.keyword, Result.position, Result.url)
+        .filter(
+            Result.run_id == run_id,
+            Result.url.isnot(None),
+            # Position is non-nullable by the model, but a row without one
+            # cannot be placed on the ladder at all — filter rather than
+            # invent a slot for it.
+            Result.position.isnot(None),
+        )
         .all()
     ):
-        per_keyword.setdefault(kw, []).append(url)
+        per_keyword.setdefault(kw, []).append((pos, url))
 
     rows = []
-    for kw, urls in per_keyword.items():
+    for kw, hits in per_keyword.items():
         # Map each SERP URL to the canonical form we actually asked Ahrefs
         # about, then dedupe on that — an AMP variant and its canonical are one
         # page. `pairs` keeps the original so the raw table can show both.
-        pairs: list[tuple[str, str]] = []
-        seen_c: set[str] = set()
-        for u in urls:
+        #
+        # A keyword's SERP may span engines, devices and locations, so the same
+        # page can occupy several positions. We sort by position first and keep
+        # the BEST one as the page's rank: if a doorway hits #2 in one city, it
+        # is a top-5 competitor, and averaging that away with its #9 elsewhere
+        # would hide the very thing this view exists to surface. The full spread
+        # travels alongside it so the UI can show where else it landed.
+        by_canonical: dict[str, dict] = {}
+        for pos, u in sorted(hits, key=lambda h: h[0]):
             if not u:
                 continue
             c = normalize_url(u)
-            if c in seen_c:
-                continue
-            seen_c.add(c)
-            pairs.append((u, c))
+            entry = by_canonical.get(c)
+            if entry is None:
+                by_canonical[c] = {"original": u, "canonical": c, "positions": [pos]}
+            elif pos not in entry["positions"]:
+                entry["positions"].append(pos)
+        pairs: list[tuple[str, str]] = [
+            (e["original"], e["canonical"]) for e in by_canonical.values()
+        ]
         # Runs made BEFORE normalisation stored metrics under the raw SERP URL,
         # so look up the canonical form first and fall back to the original.
         # Without this, every pre-existing analyzer run would suddenly read
@@ -160,46 +166,15 @@ def get_analysis(run_id: int, db: Session = Depends(get_db)):
         # metrics describe the AMP variant, and moving them onto the canonical
         # URL would relabel wrong data as right.
         uniq = [c if c in by_url else o for o, c in pairs]
-        medians: dict[str, float | None] = {}
-        means: dict[str, float | None] = {}
-        mins: dict[str, float | None] = {}
-        maxes: dict[str, float | None] = {}
-        for field in selected:
-            vals = [(by_url.get(u) or {}).get(field) for u in uniq if u in by_url]
-            present = [v for v in vals if v is not None]
-            medians[field] = _median(vals)
-            means[field] = (sum(present) / len(present)) if present else None
-            mins[field] = min(present) if present else None
-            maxes[field] = max(present) if present else None
-
-        # "Weak slots": how many results in this SERP look displaceable. Ranking
-        # top-10 means beating the WEAKEST result you can reach, not the median
-        # — a SERP whose median DR is 60 but which contains three DR<20 pages is
-        # far more winnable than the median alone suggests.
-        weak_field = "url_rating" if "url_rating" in selected else (
-            "domain_rating" if "domain_rating" in selected else None
-        )
-        weak_slots = None
-        if weak_field:
-            weak_slots = sum(
-                1 for u in uniq
-                if u in by_url
-                and ((by_url.get(u) or {}).get(weak_field) or 0) < WEAK_THRESHOLD
-            )
-
         analysed = sum(1 for u in uniq if u in by_url and u not in errored)
         rows.append({
             "keyword": kw,
             "urls_total": len(uniq),
             "urls_analysed": analysed,
-            "medians": medians,
-            "means": means,
-            "mins": mins,
-            "maxes": maxes,
-            "weak_slots": weak_slots,
-            "weak_field": weak_field,
-            # Raw per-URL detail, for manual verification of what Ahrefs
-            # actually returned. Ordered by SERP position.
+            # The ladder: one entry per distinct page in this keyword's SERP,
+            # ordered by position. This is both the raw evidence for manual
+            # verification and the input the UI reduces to the weakest-domain
+            # cohort at whatever depth is selected.
             "urls": [
                 {
                     # What ranked, and what we measured — shown separately so a
@@ -209,6 +184,16 @@ def get_analysis(run_id: int, db: Session = Depends(get_db)):
                     "url": original,
                     "analyzed_url": (key := canonical if canonical in by_url else original),
                     "normalized": original != key,
+                    # Best slot this page reached anywhere in the keyword's
+                    # SERPs; `positions` is every slot it held, so a page that
+                    # is #2 in one city and #9 in another reads as both.
+                    "position": min(by_canonical[canonical]["positions"]),
+                    "positions": sorted(by_canonical[canonical]["positions"]),
+                    # Same host normalisation the domain table uses, so "two
+                    # pages from one site" means the same thing in both places.
+                    # The UI needs it to keep one domain from occupying more
+                    # than one slot in the weakest-competitors cohort.
+                    "domain": _host_of(canonical),
                     "metrics": by_url.get(key) or {},
                     "error": (key in errored),
                     "analysed": key in by_url,
