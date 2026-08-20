@@ -75,8 +75,20 @@ export type AnalysisRow = {
   weak_slots: number | null;
   weak_field: string | null;
   urls: AnalysisUrl[];
-  /** Phase 2: AI difficulty verdict. Always null for now. */
+  /** AI verdict: "low" | "medium" | "hard" | "too hard", or null. */
   difficulty: string | null;
+  /** 1-3 sentence AI explanation of this SERP's nuances. */
+  comment: string | null;
+  /** Set when the AI call failed for this keyword. */
+  ai_error: string | null;
+};
+
+export type AIAnalysisSettings = {
+  prompt: string;
+  is_custom: boolean;
+  default: string;
+  provider: string | null;
+  available: string[];
 };
 
 export type RunAnalysis = {
@@ -211,6 +223,17 @@ export const api = {
     req<{ timezone: string }>("/settings/scheduler"),
 
   getAnalysis: (runId: number) => req<RunAnalysis>(`/runs/${runId}/analysis`),
+
+  // AI SERP-difficulty prompt + provider choice
+  getAIAnalysisSettings: () => req<AIAnalysisSettings>("/settings/ai-analysis"),
+  setAIPrompt: (prompt: string | null) =>
+    req<AIAnalysisSettings>("/settings/ai-analysis/prompt", {
+      method: "PUT", body: JSON.stringify({ prompt }),
+    }),
+  setAIAnalysisProvider: (provider: string | null) =>
+    req<{ provider: string | null }>("/settings/ai-analysis/provider", {
+      method: "PUT", body: JSON.stringify({ provider }),
+    }),
 
   // Ahrefs (analyzer mode)
   getAhrefs: () => req<AhrefsSettings>("/settings/ahrefs"),

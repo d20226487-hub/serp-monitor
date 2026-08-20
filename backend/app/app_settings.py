@@ -254,6 +254,44 @@ def ai_provider_status(provider: str) -> dict:
     return {"provider": provider, "fields": masked, "auth_mode": auth_mode}
 
 
+KEY_AI_ANALYSIS_PROVIDER = "ai_analysis_provider"
+
+
+def get_ai_analysis_provider() -> str | None:
+    """Which AI provider scores SERP difficulty, or None to skip AI entirely.
+
+    An explicit choice wins. With no choice saved we auto-pick the single
+    configured provider — the common case is exactly one — but stay None when
+    zero or both are configured, so we never silently spend on a provider the
+    user didn't nominate.
+    """
+    db = SessionLocal()
+    try:
+        chosen = _get(db, KEY_AI_ANALYSIS_PROVIDER)
+    finally:
+        db.close()
+    if chosen in AI_PROVIDER_FIELDS:
+        return chosen
+    if chosen == "off":
+        return None
+    configured = [
+        p for p in AI_PROVIDER_FIELDS
+        if any(get_ai_provider_config(p).get(f) for f in ("api_key", "service_account_json"))
+    ]
+    return configured[0] if len(configured) == 1 else None
+
+
+def set_ai_analysis_provider(value: str | None) -> None:
+    """Persist the choice. "off" disables AI scoring; None restores auto-pick."""
+    if value not in (None, "", "off", *AI_PROVIDER_FIELDS):
+        raise ValueError(f"unknown AI provider: {value}")
+    db = SessionLocal()
+    try:
+        _set(db, KEY_AI_ANALYSIS_PROVIDER, value or None)
+    finally:
+        db.close()
+
+
 def _sa_identity(sa_json: str) -> str:
     """client_email out of a service-account JSON, for display only."""
     try:

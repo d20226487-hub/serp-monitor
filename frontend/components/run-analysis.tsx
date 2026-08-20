@@ -28,6 +28,14 @@ const METRIC_LABELS: Record<string, string> = {
 
 type SortKey = string; // "keyword" | "coverage" | a metric id
 
+// Green through red — the verdict should be readable at a glance down a column.
+const DIFFICULTY_STYLE: Record<string, string> = {
+  low: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200",
+  medium: "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-200",
+  hard: "bg-orange-100 text-orange-800 dark:bg-orange-950/50 dark:text-orange-200",
+  "too hard": "bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-200",
+};
+
 function formatMetric(v: number | null | undefined): string {
   if (v == null) return "—";
   if (Number.isInteger(v)) return v.toLocaleString();
@@ -115,6 +123,9 @@ export function RunAnalysisTable({ analysis }: { analysis: RunAnalysis }) {
               <th className="px-3 py-2 font-medium text-neutral-500 text-right">
                 {t.analysis.colDifficulty}
               </th>
+              <th className="px-3 py-2 font-medium text-neutral-500">
+                {t.analysis.colComment}
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -135,8 +146,8 @@ function AnalysisTableRow({ row, metrics }: { row: AnalysisRow; metrics: string[
   const { t } = useT();
   const [open, setOpen] = useState(false);
   const partial = row.urls_analysed < row.urls_total;
-  // +3 = keyword, coverage, difficulty columns around the metric columns.
-  const span = metrics.length + 3;
+  // +4 = keyword, coverage, difficulty, comment around the metric columns.
+  const span = metrics.length + 4;
   return (
     <>
       <tr className="border-b dark:border-neutral-800">
@@ -182,12 +193,21 @@ function AnalysisTableRow({ row, metrics }: { row: AnalysisRow; metrics: string[
             </span>
           )}
         </td>
-        <td className="px-3 py-2 text-right">
+        <td className="px-3 py-2 text-right whitespace-nowrap">
           {row.difficulty ? (
-            <span className="text-xs font-medium">{row.difficulty}</span>
+            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${DIFFICULTY_STYLE[row.difficulty] ?? ""}`}>
+              {t.analysis.difficultyLabels[row.difficulty] ?? row.difficulty}
+            </span>
+          ) : row.ai_error ? (
+            <span className="text-xs text-red-600 dark:text-red-400" title={row.ai_error}>
+              {t.analysis.aiFailed}
+            </span>
           ) : (
             <span className="text-xs text-neutral-400">{t.analysis.difficultyPending}</span>
           )}
+        </td>
+        <td className="px-3 py-2 text-neutral-600 dark:text-neutral-300 min-w-[16rem]">
+          {row.comment || <span className="text-neutral-400">—</span>}
         </td>
       </tr>
       {open && (

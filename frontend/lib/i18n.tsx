@@ -112,7 +112,15 @@ const messagesEn = {
     colKeyword: "Keyword",
     colCoverage: "Analysed",
     colDifficulty: "SERP difficulty",
+    colComment: "AI comment",
     difficultyPending: "—",
+    difficultyLabels: {
+      low: "low",
+      medium: "medium",
+      hard: "hard",
+      "too hard": "too hard",
+    } as Record<string, string>,
+    aiFailed: "AI failed",
     empty: "No analysis yet. Run this job to collect Ahrefs metrics.",
     units: (n: number) => `${n.toLocaleString()} Ahrefs units`,
     partialHint: "Some URLs in this SERP could not be analysed",
@@ -368,6 +376,22 @@ const messagesEn = {
       deleteConfirm: "Delete this location?",
       copyUuleTitle: "Copy full UULE",
     },
+    aiAnalysis: {
+      title: "AI SERP difficulty",
+      help:
+        "The prompt used to judge each keyword. The model receives one united table per keyword — every ranking result with its Ahrefs metrics on the same row — and returns a difficulty plus a 1-3 sentence comment. Your edits are never overwritten by an update.",
+      customised: "customised",
+      usingDefault: "using default",
+      providerLabel: "Provider for scoring",
+      providerAuto: "Auto (the one configured provider)",
+      providerOff: "Off — collect metrics only",
+      promptLabel: "Prompt",
+      placeholders: "Available placeholders: {keyword} and {table}. Both are filled in at run time.",
+      reset: "Reset to default",
+      resetConfirm:
+        "Discard your customised prompt and go back to the built-in default?",
+      resetDone: "Reset to the built-in default.",
+    },
     ahrefs: {
       title: "Ahrefs",
       help:
@@ -611,7 +635,15 @@ const messagesRu: Messages = {
     colKeyword: "Ключевое слово",
     colCoverage: "Проанализировано",
     colDifficulty: "Сложность выдачи",
+    colComment: "Комментарий AI",
     difficultyPending: "—",
+    difficultyLabels: {
+      low: "низкая",
+      medium: "средняя",
+      hard: "высокая",
+      "too hard": "очень высокая",
+    } as Record<string, string>,
+    aiFailed: "ошибка AI",
     empty: "Анализа пока нет. Запустите задачу, чтобы собрать метрики Ahrefs.",
     units: (n: number) => `${n.toLocaleString()} юнитов Ahrefs`,
     partialHint: "Часть URL в этой выдаче не удалось проанализировать",
@@ -877,6 +909,22 @@ const messagesRu: Messages = {
       empty: "Локации не найдены.",
       deleteConfirm: "Удалить эту локацию?",
       copyUuleTitle: "Скопировать полный UULE",
+    },
+    aiAnalysis: {
+      title: "AI-оценка сложности выдачи",
+      help:
+        "Промпт для оценки каждого ключевого слова. Модель получает одну общую таблицу на ключевое слово — каждый результат выдачи вместе с его метриками Ahrefs в той же строке — и возвращает сложность и комментарий на 1-3 предложения. Ваши правки никогда не перезаписываются обновлением.",
+      customised: "изменён",
+      usingDefault: "по умолчанию",
+      providerLabel: "Провайдер для оценки",
+      providerAuto: "Авто (единственный настроенный провайдер)",
+      providerOff: "Выключено — только метрики",
+      promptLabel: "Промпт",
+      placeholders: "Доступные подстановки: {keyword} и {table}. Подставляются при запуске.",
+      reset: "Сбросить к значению по умолчанию",
+      resetConfirm:
+        "Отменить изменённый промпт и вернуться к встроенному по умолчанию?",
+      resetDone: "Сброшено к встроенному промпту.",
     },
     ahrefs: {
       title: "Ahrefs",

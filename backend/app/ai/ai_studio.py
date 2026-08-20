@@ -61,6 +61,12 @@ def build_gemini_body(prompt: str, params: GenerationParams | None) -> dict[str,
         # because the thinking knobs differ across Gemini generations.
         if params.thinking_budget is not None:
             gen_config["thinkingConfig"] = {"thinkingBudget": params.thinking_budget}
+        if params.response_schema is not None:
+            # Both fields are required together — a schema without the JSON mime
+            # type is ignored, and the mime type without a schema gives free-form
+            # JSON we'd still have to guess the shape of.
+            gen_config["responseMimeType"] = "application/json"
+            gen_config["responseSchema"] = params.response_schema
         if params.system:
             body["systemInstruction"] = {"parts": [{"text": params.system}]}
     if gen_config:

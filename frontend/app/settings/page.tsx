@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   api,
   AhrefsSettings,
+  AIAnalysisSettings,
   AIProviderConfigInput,
   AIProviderStatus,
   AITestResult,
@@ -139,6 +140,9 @@ export default function SettingsPage() {
 
       {/* AI providers */}
       <AIProvidersSection onError={setErr} />
+
+      {/* AI SERP-difficulty prompt */}
+      <AIAnalysisSection onError={setErr} />
 
       {/* Cost rates */}
       <RatesSection onError={setErr} />
@@ -328,6 +332,107 @@ function UuleCell({ canonicalName }: { canonicalName: string }) {
         {copied ? <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3 h-3" />}
       </button>
     </div>
+  );
+}
+
+
+/* ------------- AI SERP-difficulty prompt ------------- */
+
+function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void }) {
+  const { t } = useT();
+  const [data, setData] = useState<AIAnalysisSettings | null>(null);
+  const [draft, setDraft] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function reload() {
+    try {
+      const d = await api.getAIAnalysisSettings();
+      setData(d);
+      setDraft(null);
+    } catch (e: any) { onError(e?.message ?? "Failed to load AI analysis settings"); }
+  }
+  useEffect(() => { reload(); }, []);
+
+  async function save() {
+    if (draft == null) return;
+    setMsg(null); onError(null);
+    try { await api.setAIPrompt(draft); setMsg(t.common.saved); await reload(); }
+    catch (e: any) { onError(e?.message ?? "Save failed"); }
+  }
+
+  async function reset() {
+    // Explicit user action only — never wipe a tuned prompt on our own.
+    if (!confirm(t.settings.aiAnalysis.resetConfirm)) return;
+    setMsg(null);
+    try { await api.setAIPrompt(null); setMsg(t.settings.aiAnalysis.resetDone); await reload(); }
+    catch (e: any) { onError(e?.message ?? "Reset failed"); }
+  }
+
+  async function pickProvider(v: string) {
+    onError(null);
+    try { await api.setAIAnalysisProvider(v === "auto" ? null : v); await reload(); }
+    catch (e: any) { onError(e?.message ?? "Save failed"); }
+  }
+
+  if (!data) return null;
+  const value = draft ?? data.prompt;
+
+  return (
+    <section className="border rounded-md p-4 dark:border-neutral-700 space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="font-medium">{t.settings.aiAnalysis.title}</h2>
+        {data.is_custom ? (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/40 text-blue-800 dark:text-blue-200">
+            {t.settings.aiAnalysis.customised}
+          </span>
+        ) : (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">
+            {t.settings.aiAnalysis.usingDefault}
+          </span>
+        )}
+      </div>
+      <p className="text-xs text-neutral-500">{t.settings.aiAnalysis.help}</p>
+
+      <div className="space-y-1">
+        <label className="text-xs font-medium">{t.settings.aiAnalysis.providerLabel}</label>
+        <select
+          value={data.provider ?? "auto"}
+          onChange={e => pickProvider(e.target.value)}
+          className="w-full sm:w-72 px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700 text-sm"
+        >
+          <option value="auto">{t.settings.aiAnalysis.providerAuto}</option>
+          {data.available.map(p => (
+            <option key={p} value={p}>
+              {p === "ai_studio" ? "Google AI Studio" : "Google Vertex AI"}
+            </option>
+          ))}
+          <option value="off">{t.settings.aiAnalysis.providerOff}</option>
+        </select>
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-xs font-medium">{t.settings.aiAnalysis.promptLabel}</label>
+        <div className="text-[11px] text-neutral-500">{t.settings.aiAnalysis.placeholders}</div>
+        <textarea
+          rows={16}
+          value={value}
+          onChange={e => setDraft(e.target.value)}
+          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700 text-xs font-mono"
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          disabled={draft == null || draft === data.prompt}
+          onClick={save}
+          className="px-3 py-1.5 rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm disabled:opacity-50"
+        >{t.common.save}</button>
+        <button onClick={reset} disabled={!data.is_custom}
+          className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm disabled:opacity-50">
+          {t.settings.aiAnalysis.reset}
+        </button>
+        {msg && <span className="text-sm text-emerald-700 dark:text-emerald-300">{msg}</span>}
+      </div>
+    </section>
   );
 }
 

@@ -117,6 +117,10 @@ class GenerationParams:
     # Left unset by default so a model whose thinking API we haven't verified
     # is never sent a field it might reject.
     thinking_budget: int | None = None
+    # Gemini structured output. When set, the model is constrained to this JSON
+    # schema and responseMimeType is forced to application/json — which removes
+    # the "parse the model's prose" failure mode rather than mitigating it.
+    response_schema: dict | None = None
 
 
 @dataclass

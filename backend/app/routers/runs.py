@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import Job, JobRun, Result, RunUrlMetric
+from ..models import Job, JobRun, Result, RunKeywordAnalysis, RunUrlMetric
 from ..providers.ahrefs_batch import canonical_metrics
 from ..providers.url_normalize import normalize_url
 from ..schemas import JobRunOut, ResultOut
@@ -78,6 +78,17 @@ def get_analysis(run_id: int, db: Session = Depends(get_db)):
         by_url[m.url] = m.metrics or {}
         if m.error:
             errored.add(m.url)
+
+    ai = {
+        a.keyword: {
+            "difficulty": a.difficulty,
+            "comment": a.comment,
+            "error": a.error,
+        }
+        for a in db.query(RunKeywordAnalysis)
+        .filter(RunKeywordAnalysis.run_id == run_id)
+        .all()
+    }
 
     # Group result URLs per keyword. A keyword's SERP may span engines/devices/
     # locations; we aggregate across the whole keyword, matching the "median of
@@ -167,8 +178,9 @@ def get_analysis(run_id: int, db: Session = Depends(get_db)):
                 }
                 for original, canonical in pairs
             ],
-            # Placeholder for phase 2 — the AI difficulty verdict.
-            "difficulty": None,
+            "difficulty": (ai.get(kw) or {}).get("difficulty"),
+            "comment": (ai.get(kw) or {}).get("comment"),
+            "ai_error": (ai.get(kw) or {}).get("error"),
         })
     rows.sort(key=lambda r: r["keyword"].lower())
 

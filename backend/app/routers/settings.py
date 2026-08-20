@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ..ai import AIProviderConfigError, AIProviderError, get_ai_provider
+from ..ai.prompts import serp_difficulty_prompt_status, set_serp_difficulty_prompt
 from ..app_settings import (
     AI_PROVIDER_FIELDS,
     DEFAULT_RATES,
@@ -14,11 +15,13 @@ from ..app_settings import (
     clear_ai_provider_config,
     clear_provider_creds,
     get_ahrefs_api_key,
+    get_ai_analysis_provider,
     get_provider_creds,
     get_provider_rates,
     provider_status,
     serpapi_key_status,
     set_ahrefs_api_key,
+    set_ai_analysis_provider,
     set_ai_provider_config,
     set_provider_creds,
     set_provider_rates,
@@ -124,6 +127,42 @@ async def test_provider(provider: str):
         raise HTTPException(401, str(e))
     except ProviderError as e:
         raise HTTPException(502, str(e))
+
+
+# --- AI SERP-difficulty prompt + provider choice -------------------------------
+
+class PromptIn(BaseModel):
+    # None / "" resets to the built-in default rather than storing an empty
+    # prompt — matching the "never destructive" rule for user-tuned prompts.
+    prompt: str | None = None
+
+
+class AIAnalysisProviderIn(BaseModel):
+    provider: str | None = None  # "ai_studio" | "vertex" | "off" | null = auto
+
+
+@router.get("/ai-analysis")
+def get_ai_analysis_settings():
+    return {
+        **serp_difficulty_prompt_status(),
+        "provider": get_ai_analysis_provider(),
+        "available": list(AI_PROVIDER_FIELDS.keys()),
+    }
+
+
+@router.put("/ai-analysis/prompt")
+def update_prompt(payload: PromptIn):
+    set_serp_difficulty_prompt(payload.prompt)
+    return serp_difficulty_prompt_status()
+
+
+@router.put("/ai-analysis/provider")
+def update_ai_analysis_provider(payload: AIAnalysisProviderIn):
+    try:
+        set_ai_analysis_provider(payload.provider)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"provider": get_ai_analysis_provider()}
 
 
 # --- Ahrefs (analyzer mode) ----------------------------------------------------

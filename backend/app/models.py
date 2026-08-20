@@ -145,6 +145,28 @@ class RunUrlMetric(Base):
     fetched_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class RunKeywordAnalysis(Base):
+    """AI SERP-difficulty verdict for one keyword within one run."""
+    __tablename__ = "run_keyword_analysis"
+    __table_args__ = (
+        UniqueConstraint("run_id", "keyword", name="uq_run_keyword_analysis"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("job_runs.id", ondelete="CASCADE"), index=True
+    )
+    keyword: Mapped[str] = mapped_column(String(500), index=True)
+    # "low" | "medium" | "hard" | "too hard". NULL when the call failed.
+    difficulty: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    model: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class Result(Base):
     __tablename__ = "results"
 

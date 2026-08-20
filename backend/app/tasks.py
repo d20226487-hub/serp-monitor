@@ -13,7 +13,15 @@ from ._redact import redact
 from .app_settings import get_provider_rate
 from .config import settings
 from .db import SessionLocal
-from .models import Job, JobRun, Result, RunUrlMetric, SavedLocation, utcnow
+from .models import (
+    Job,
+    JobRun,
+    Result,
+    RunKeywordAnalysis,
+    RunUrlMetric,
+    SavedLocation,
+    utcnow,
+)
 from .providers import get_provider
 
 log = logging.getLogger(__name__)
@@ -230,6 +238,88 @@ async def _run_ahrefs_analysis(db: Session, run_id: int, job: Job) -> int:
     return total_units
 
 
+async def _run_ai_difficulty(db: Session, run_id: int, job: Job) -> None:
+    """Analyzer phase 3: one AI verdict per keyword.
+
+    Sends a single united table per keyword (SERP result + that URL's Ahrefs
+    metrics on the same row). Sequential: a run has a handful of keywords, and
+    serial calls keep us clear of per-minute quotas without a rate limiter.
+
+    Per-keyword failures are recorded on that keyword's row and never abort the
+    phase — one bad SERP shouldn't cost you the other nine verdicts.
+    """
+    from .app_settings import get_ai_analysis_provider
+    from .ai.serp_difficulty import build_serp_table, judge_keyword
+    from .providers.ahrefs_batch import canonical_metrics
+    from .providers.url_normalize import normalize_url
+
+    provider_code = get_ai_analysis_provider()
+    if not provider_code:
+        return  # no AI configured — metrics-only run, by design
+
+    metrics = canonical_metrics(getattr(job, "ahrefs_metrics", None))
+
+    # url -> metrics for this run.
+    by_url = {
+        m.url: (m.metrics or {})
+        for m in db.query(RunUrlMetric).filter(RunUrlMetric.run_id == run_id).all()
+    }
+
+    results = (
+        db.query(Result)
+        .filter(Result.run_id == run_id)
+        .order_by(Result.keyword, Result.position)
+        .all()
+    )
+    per_keyword: dict[str, list[Result]] = {}
+    for r in results:
+        per_keyword.setdefault(r.keyword, []).append(r)
+
+    for keyword, rows in per_keyword.items():
+        # Skip keywords already judged (resume-safe, and avoids paying twice).
+        exists = (
+            db.query(RunKeywordAnalysis)
+            .filter(
+                RunKeywordAnalysis.run_id == run_id,
+                RunKeywordAnalysis.keyword == keyword,
+                RunKeywordAnalysis.difficulty.isnot(None),
+            )
+            .first()
+        )
+        if exists:
+            continue
+
+        variants = {(r.engine, r.device, r.location) for r in rows}
+        table_rows = []
+        for r in rows:
+            canonical = normalize_url(r.url or "")
+            table_rows.append({
+                "position": r.position,
+                "url": r.url,
+                "title": r.title,
+                "description": r.description,
+                "engine": r.engine,
+                "device": r.device,
+                "location": r.location,
+                "metrics": by_url.get(canonical) or by_url.get(r.url or "") or {},
+            })
+        table = build_serp_table(table_rows, metrics, multi_variant=len(variants) > 1)
+
+        row = RunKeywordAnalysis(run_id=run_id, keyword=keyword)
+        try:
+            verdict = await judge_keyword(provider_code, keyword, table)
+            row.difficulty = verdict["difficulty"]
+            row.comment = verdict["comment"]
+            row.model = verdict["model"]
+            row.prompt_tokens = verdict["prompt_tokens"]
+            row.completion_tokens = verdict["completion_tokens"]
+        except Exception as e:  # noqa: BLE001 — recorded per keyword
+            log.warning("ai difficulty failed for %r: %s", keyword, e)
+            row.error = redact(str(e))[:500]
+        db.add(row)
+        db.commit()
+
+
 async def run_job_async(run_id: int) -> None:
     """Top-level entrypoint scheduled by the API/scheduler. Owns its own DB session."""
     db = SessionLocal()
@@ -303,6 +393,17 @@ async def run_job_async(run_id: int) -> None:
                 log.exception("ahrefs analysis failed for run %s", run.id)
                 if not run.error:
                     run.error = redact(f"Ahrefs analysis failed: {e}")
+            db.commit()
+
+            # AI difficulty scoring. Skipped silently when no AI provider is
+            # configured — the metrics table is useful on its own, and this
+            # phase costs tokens on every scheduled run.
+            try:
+                await _run_ai_difficulty(db, run.id, job)
+            except Exception as e:  # noqa: BLE001
+                log.exception("ai difficulty failed for run %s", run.id)
+                if not run.error:
+                    run.error = redact(f"AI difficulty failed: {e}")
             db.commit()
 
         # Record spend for this run. Providers that report real cost (DataForSEO)
