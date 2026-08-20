@@ -135,6 +135,39 @@ def clear_provider_creds(provider: str) -> None:
     set_provider_creds(provider, {f: None for f in PROVIDER_FIELDS.get(provider, [])})
 
 
+# --- Ahrefs (analyzer mode) ---------------------------------------------------
+#
+# Not a SERP provider and not an LLM — Ahrefs supplies the link metrics the
+# analyzer job mode scores SERPs with. Kept in its own namespace so it never
+# appears in the job form's Provider dropdown.
+KEY_AHREFS_API_KEY = "ahrefs_api_key"
+
+
+def get_ahrefs_api_key() -> str:
+    db = SessionLocal()
+    try:
+        return _get(db, KEY_AHREFS_API_KEY) or ""
+    finally:
+        db.close()
+
+
+def set_ahrefs_api_key(value: str | None) -> None:
+    db = SessionLocal()
+    try:
+        _set(db, KEY_AHREFS_API_KEY, (value or "").strip() or None)
+    finally:
+        db.close()
+
+
+def ahrefs_status() -> dict:
+    v = get_ahrefs_api_key()
+    return {
+        "configured": bool(v),
+        "last4": v[-4:] if v else "",
+        "length": len(v),
+    }
+
+
 # --- AI (LLM) provider settings ----------------------------------------------
 #
 # Kept in a separate namespace from the SERP providers above: these configure

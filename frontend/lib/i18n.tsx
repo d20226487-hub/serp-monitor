@@ -106,7 +106,33 @@ const messagesEn = {
       canceled: "canceled",
     },
   },
+  analysis: {
+    title: "SERP analysis",
+    subtitle: "Median Ahrefs metrics across every URL in each keyword's SERP",
+    colKeyword: "Keyword",
+    colCoverage: "Analysed",
+    colDifficulty: "SERP difficulty",
+    difficultyPending: "—",
+    empty: "No analysis yet. Run this job to collect Ahrefs metrics.",
+    units: (n: number) => `${n.toLocaleString()} Ahrefs units`,
+    partialHint: "Some URLs in this SERP could not be analysed",
+    footnote:
+      "Median, not average — one very strong result in a SERP would drag an average away from what the typical competitor looks like. URLs are analysed in Ahrefs exact-URL mode, which is what makes UR meaningful.",
+  },
   jobForm: {
+    mode: "Mode",
+    modeSerp: "1 · SERP monitoring",
+    modeSerpHelp: "Scrape SERPs and review domain / URL distribution.",
+    modeAnalyzer: "2 · SERP analyzer",
+    modeAnalyzerHelp:
+      "Scrape SERPs, then pull Ahrefs metrics for every result URL and show ranking difficulty per keyword.",
+    ahrefsMetrics: "Ahrefs metrics",
+    ahrefsMetricsHelp:
+      "Which metrics to pull for each result URL. Analysed in exact-URL mode, so UR is per page rather than per domain.",
+    ahrefsNoKey:
+      "⚠ No Ahrefs API key configured — analyzer runs will fail. Add one in Settings → Ahrefs.",
+    ahrefsUnitsEstimate: (urls: number, metrics: number, units: number) =>
+      `≈ ${urls.toLocaleString()} URLs × ${metrics} metric(s) ≈ ${units.toLocaleString()} Ahrefs units per run (duplicate URLs are fetched once, so the real figure is usually lower).`,
     name: "Name",
     namePlaceholder: "e.g. Brand monitoring — KZ/RU",
     keywords: "Keywords",
@@ -330,6 +356,17 @@ const messagesEn = {
       empty: "No locations match.",
       deleteConfirm: "Delete this location?",
       copyUuleTitle: "Copy full UULE",
+    },
+    ahrefs: {
+      title: "Ahrefs",
+      help:
+        "Powers the SERP analyzer mode: link metrics for every result URL, pulled via /batch-analysis in exact-URL mode. Get an API key from ahrefs.com/api.",
+      apiKey: "API key",
+      apiKeyPlaceholder: "Ahrefs API token",
+      clearConfirm: "Clear the stored Ahrefs API key?",
+      testOk: (units: number) => `✓ Works — test call billed ${units} unit(s)`,
+      footnote:
+        "Ahrefs has no free credential check, so Test runs one real single-target lookup (~1 unit). Analyzer runs bill roughly 1 unit per URL per selected metric; duplicate URLs within a run are fetched once.",
     },
     ai: {
       title: "AI providers",
@@ -557,7 +594,33 @@ const messagesRu: Messages = {
       canceled: "отменено",
     },
   },
+  analysis: {
+    title: "Анализ выдачи",
+    subtitle: "Медианные метрики Ahrefs по всем URL в выдаче каждого ключевого слова",
+    colKeyword: "Ключевое слово",
+    colCoverage: "Проанализировано",
+    colDifficulty: "Сложность выдачи",
+    difficultyPending: "—",
+    empty: "Анализа пока нет. Запустите задачу, чтобы собрать метрики Ahrefs.",
+    units: (n: number) => `${n.toLocaleString()} юнитов Ahrefs`,
+    partialHint: "Часть URL в этой выдаче не удалось проанализировать",
+    footnote:
+      "Медиана, а не среднее — один очень сильный результат в выдаче сместил бы среднее и исказил картину по типичному конкуренту. URL анализируются в режиме точного URL (exact), поэтому UR относится к странице, а не к домену.",
+  },
   jobForm: {
+    mode: "Режим",
+    modeSerp: "1 · Мониторинг выдачи",
+    modeSerpHelp: "Снимать выдачу и смотреть распределение доменов / URL.",
+    modeAnalyzer: "2 · Анализатор выдачи",
+    modeAnalyzerHelp:
+      "Снять выдачу, затем получить метрики Ahrefs для каждого URL и показать сложность ранжирования по каждому ключевому слову.",
+    ahrefsMetrics: "Метрики Ahrefs",
+    ahrefsMetricsHelp:
+      "Какие метрики запрашивать для каждого URL из выдачи. Анализ идёт в режиме точного URL, поэтому UR считается по странице, а не по домену.",
+    ahrefsNoKey:
+      "⚠ API-ключ Ahrefs не задан — запуски в режиме анализатора завершатся ошибкой. Добавьте ключ в «Настройки → Ahrefs».",
+    ahrefsUnitsEstimate: (urls: number, metrics: number, units: number) =>
+      `≈ ${urls.toLocaleString()} URL × ${metrics} метрик ≈ ${units.toLocaleString()} юнитов Ahrefs за прогон (дубликаты URL запрашиваются один раз, поэтому фактически обычно меньше).`,
     name: "Название",
     namePlaceholder: "напр. Мониторинг бренда — KZ/RU",
     keywords: "Ключевые слова",
@@ -792,6 +855,17 @@ const messagesRu: Messages = {
       empty: "Локации не найдены.",
       deleteConfirm: "Удалить эту локацию?",
       copyUuleTitle: "Скопировать полный UULE",
+    },
+    ahrefs: {
+      title: "Ahrefs",
+      help:
+        "Обеспечивает режим анализатора выдачи: ссылочные метрики для каждого URL из выдачи через /batch-analysis в режиме точного URL. API-ключ — на ahrefs.com/api.",
+      apiKey: "API-ключ",
+      apiKeyPlaceholder: "API-токен Ahrefs",
+      clearConfirm: "Очистить сохранённый API-ключ Ahrefs?",
+      testOk: (units: number) => `✓ Работает — тестовый запрос стоил ${units} юнит(ов)`,
+      footnote:
+        "У Ahrefs нет бесплатной проверки ключа, поэтому «Проверить» выполняет один реальный запрос по одному URL (~1 юнит). Прогоны анализатора тарифицируются примерно как 1 юнит за URL за каждую выбранную метрику; дубликаты URL внутри прогона запрашиваются один раз.",
     },
     ai: {
       title: "AI-провайдеры",

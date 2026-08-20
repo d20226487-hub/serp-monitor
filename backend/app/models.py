@@ -1,5 +1,14 @@
 from datetime import datetime, timezone
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -33,6 +42,18 @@ class Job(Base):
     # Provider that runs this job's queries: "serpapi" | "brightdata" | "oxylabs".
     provider: Mapped[str] = mapped_column(String(20), default="serpapi")
 
+    # Job mode:
+    #   "serp"     — the original behaviour: scrape SERPs, show domain/URL
+    #                distribution. Unchanged.
+    #   "analyzer" — scrape SERPs, then run Ahrefs /batch-analysis over every
+    #                unique result URL (mode=exact) and surface per-keyword
+    #                median metrics as a ranking-difficulty view.
+    mode: Mapped[str] = mapped_column(String(20), default="serp")
+    # Ahrefs batch-analysis field ids to request in analyzer mode. Empty falls
+    # back to ahrefs_batch.DEFAULT_METRICS. Each selected field bills ~1 unit
+    # per URL, so this list is the cost lever.
+    ahrefs_metrics: Mapped[list] = mapped_column(JSON, default=list)
+
     runs: Mapped[list["JobRun"]] = relationship(back_populates="job", cascade="all,delete-orphan")
 
 
@@ -59,6 +80,10 @@ class JobRun(Base):
     # changing a rate later must not silently rewrite past spend.
     cost: Mapped[float | None] = mapped_column(Float, nullable=True)
     cost_source: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # Ahrefs API units billed for this run's batch-analysis phase (analyzer
+    # mode only). Separate from `cost` — Ahrefs bills in units off a
+    # subscription quota, not dollars per call.
+    ahrefs_units: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     job: Mapped[Job] = relationship(back_populates="runs")
     results: Mapped[list["Result"]] = relationship(back_populates="run", cascade="all,delete-orphan")
@@ -93,6 +118,31 @@ class SavedLocation(Base):
     yandex_lr: Mapped[int | None] = mapped_column(Integer, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class RunUrlMetric(Base):
+    """Ahrefs metrics for one unique URL within one run (analyzer mode).
+
+    Deduped per (run_id, url): the same URL can appear in several keyword SERPs
+    in a run, and Ahrefs bills per target, so we fetch each URL once and join
+    back to `results` on the URL when aggregating per keyword.
+    """
+    __tablename__ = "run_url_metrics"
+    __table_args__ = (
+        UniqueConstraint("run_id", "url", name="uq_run_url_metrics_run_url"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("job_runs.id", ondelete="CASCADE"), index=True
+    )
+    url: Mapped[str] = mapped_column(Text, index=True)
+    # {field_id: value|None} exactly as returned by /batch-analysis. Stored raw
+    # so adding a metric to the UI later needs no re-fetch for existing runs.
+    metrics: Mapped[dict] = mapped_column(JSON, default=dict)
+    # Populated when this URL's chunk failed; metrics is then empty.
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class Result(Base):

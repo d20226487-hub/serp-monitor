@@ -13,7 +13,7 @@ from ._redact import redact
 from .app_settings import get_provider_rate
 from .config import settings
 from .db import SessionLocal
-from .models import Job, JobRun, Result, SavedLocation, utcnow
+from .models import Job, JobRun, Result, RunUrlMetric, SavedLocation, utcnow
 from .providers import get_provider
 
 log = logging.getLogger(__name__)
@@ -151,6 +151,77 @@ def _persist_results(db: Session, run_id: int, variant: dict, rows: list[dict]) 
     db.commit()
 
 
+async def _run_ahrefs_analysis(db: Session, run_id: int, job: Job) -> int:
+    """Analyzer mode phase 2: Ahrefs /batch-analysis over this run's URLs.
+
+    Deduplicates URLs first — the same page often ranks for several keywords in
+    one run and Ahrefs bills per target, so fetching each URL once is a direct
+    cost saving. Chunks are issued sequentially: a run's URL count is bounded by
+    keywords x top_n (hundreds, not the 100k Drop Sherlock has to handle), and
+    serial chunking keeps us well clear of Ahrefs' rate limits without needing
+    a token bucket.
+
+    Returns the total Ahrefs units billed.
+    """
+    import httpx
+
+    from .app_settings import get_ahrefs_api_key
+    from .providers.ahrefs_batch import (
+        BATCH_SIZE,
+        canonical_metrics,
+        fetch_batch_chunk,
+    )
+
+    api_key = get_ahrefs_api_key()
+    if not api_key:
+        raise RuntimeError(
+            "Ahrefs API key is not configured — set it in Settings → Ahrefs."
+        )
+
+    select = canonical_metrics(getattr(job, "ahrefs_metrics", None))
+
+    # Unique, non-empty URLs from this run, in a stable order.
+    rows = (
+        db.query(Result.url)
+        .filter(Result.run_id == run_id, Result.url.isnot(None))
+        .all()
+    )
+    seen: set[str] = set()
+    urls: list[str] = []
+    for (u,) in rows:
+        u = (u or "").strip()
+        if u and u not in seen:
+            seen.add(u)
+            urls.append(u)
+    if not urls:
+        return 0
+
+    total_units = 0
+    async with httpx.AsyncClient(timeout=60) as client:
+        for i in range(0, len(urls), BATCH_SIZE):
+            chunk = urls[i : i + BATCH_SIZE]
+            outcome = await fetch_batch_chunk(client, api_key, chunk, select)
+            total_units += outcome.cost_billed or 0
+            now = utcnow()
+            if outcome.error:
+                # Record the failure against every URL in the chunk so the UI
+                # can distinguish "not analysed" from "analysed, no data".
+                for u in chunk:
+                    db.add(RunUrlMetric(
+                        run_id=run_id, url=u, metrics={},
+                        error=outcome.error[:500], fetched_at=now,
+                    ))
+            else:
+                for u in chunk:
+                    db.add(RunUrlMetric(
+                        run_id=run_id, url=u,
+                        metrics=outcome.metrics_by_url.get(u) or {},
+                        error=None, fetched_at=now,
+                    ))
+            db.commit()
+    return total_units
+
+
 async def run_job_async(run_id: int) -> None:
     """Top-level entrypoint scheduled by the API/scheduler. Owns its own DB session."""
     db = SessionLocal()
@@ -210,6 +281,21 @@ async def run_job_async(run_id: int) -> None:
                     db.commit()
 
             await asyncio.gather(*(worker(v) for v in variants))
+
+        # Analyzer mode: enrich the SERP we just captured with Ahrefs metrics.
+        # Runs AFTER the scrape because it needs the result URLs. Failures here
+        # never fail the run — the SERP data is already saved and useful on its
+        # own; the error is recorded so the UI can explain the empty column.
+        if (getattr(job, "mode", None) or "serp") == "analyzer":
+            try:
+                units = await _run_ahrefs_analysis(db, run.id, job)
+                if units:
+                    run.ahrefs_units = units
+            except Exception as e:  # noqa: BLE001
+                log.exception("ahrefs analysis failed for run %s", run.id)
+                if not run.error:
+                    run.error = redact(f"Ahrefs analysis failed: {e}")
+            db.commit()
 
         # Record spend for this run. Providers that report real cost (DataForSEO)
         # win over the configured rate; everyone else gets queries_done × rate.

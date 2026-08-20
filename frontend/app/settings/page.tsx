@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   api,
+  AhrefsSettings,
   AIProviderConfigInput,
   AIProviderStatus,
   AITestResult,
@@ -132,6 +133,9 @@ export default function SettingsPage() {
 
       {/* Providers */}
       <ProvidersSection onError={setErr} />
+
+      {/* Ahrefs (analyzer mode) */}
+      <AhrefsSection onError={setErr} />
 
       {/* AI providers */}
       <AIProvidersSection onError={setErr} />
@@ -324,6 +328,99 @@ function UuleCell({ canonicalName }: { canonicalName: string }) {
         {copied ? <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3 h-3" />}
       </button>
     </div>
+  );
+}
+
+
+/* ------------- Ahrefs section (analyzer mode) ------------- */
+
+function AhrefsSection({ onError }: { onError: (msg: string | null) => void }) {
+  const { t } = useT();
+  const [data, setData] = useState<AhrefsSettings | null>(null);
+  const [draft, setDraft] = useState("");
+  const [msg, setMsg] = useState<string | null>(null);
+  const [testRes, setTestRes] = useState<{ units_billed?: number; sample_dr?: number | null } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function reload() {
+    try { setData(await api.getAhrefs()); }
+    catch (e: any) { onError(e?.message ?? "Failed to load Ahrefs settings"); }
+  }
+  useEffect(() => { reload(); }, []);
+
+  async function save() {
+    if (!draft.trim()) { onError("Nothing to save."); return; }
+    setMsg(null); onError(null); setTestRes(null);
+    try {
+      await api.setAhrefsKey(draft.trim());
+      setDraft("");
+      setMsg(t.common.saved);
+      await reload();
+    } catch (e: any) { onError(e?.message ?? "Save failed"); }
+  }
+
+  async function clear() {
+    if (!confirm(t.settings.ahrefs.clearConfirm)) return;
+    setTestRes(null);
+    await api.clearAhrefsKey();
+    setMsg(t.common.cleared);
+    await reload();
+  }
+
+  async function test() {
+    setMsg(null); onError(null); setBusy(true);
+    try { setTestRes(await api.testAhrefs()); }
+    catch (e: any) { onError(e?.message ?? "Test failed"); }
+    finally { setBusy(false); }
+  }
+
+  if (!data) return null;
+
+  return (
+    <section className="border rounded-md p-4 dark:border-neutral-700 space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="font-medium">{t.settings.ahrefs.title}</h2>
+        {data.configured ? (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200">{t.settings.providers.configured}</span>
+        ) : (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">{t.settings.providers.notSet}</span>
+        )}
+      </div>
+      <p className="text-xs text-neutral-500">{t.settings.ahrefs.help}</p>
+      <div className="space-y-1">
+        <label className="text-xs font-medium">{t.settings.ahrefs.apiKey}</label>
+        {data.configured && (
+          <div className="text-xs text-neutral-500">
+            {t.settings.providers.savedSecret(data.last4, data.length)}
+          </div>
+        )}
+        <input
+          type="password"
+          autoComplete="off"
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          placeholder={t.settings.ahrefs.apiKeyPlaceholder}
+          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700 text-sm"
+        />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button onClick={save}
+          className="px-3 py-1.5 rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm">{t.common.save}</button>
+        <button disabled={busy} onClick={test}
+          className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm disabled:opacity-50">
+          {busy ? t.settings.ai.testing : t.common.test}
+        </button>
+        <button onClick={clear}
+          className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm text-red-600 dark:text-red-400">{t.common.clear}</button>
+      </div>
+      {msg && <div className="text-xs text-emerald-700 dark:text-emerald-300">{msg}</div>}
+      {testRes && (
+        <div className="text-xs bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded px-3 py-2">
+          {t.settings.ahrefs.testOk(testRes.units_billed ?? 0)}
+        </div>
+      )}
+      <p className="text-[11px] text-neutral-500">{t.settings.ahrefs.footnote}</p>
+    </section>
   );
 }
 

@@ -72,6 +72,12 @@ def _migrate_sqlite_columns() -> None:
         # "—" for those rather than pretending they were free.
         ("job_runs", "cost", "FLOAT"),
         ("job_runs", "cost_source", "VARCHAR(16)"),
+        # Analyzer mode. Existing jobs default to "serp" so behaviour is
+        # unchanged for everything created before this.
+        ("jobs", "mode", "VARCHAR(20) NOT NULL DEFAULT 'serp'"),
+        ("jobs", "ahrefs_metrics", "JSON"),
+        # Ahrefs units actually billed for the run's batch-analysis phase.
+        ("job_runs", "ahrefs_units", "INTEGER"),
     ]
     with engine.begin() as conn:
         for table, column, ddl in additions:

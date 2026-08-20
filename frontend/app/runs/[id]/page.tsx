@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { api, JobRun, Result, SavedLocation } from "@/lib/api";
+import { api, JobRun, Result, RunAnalysis, SavedLocation } from "@/lib/api";
+import { RunAnalysisTable } from "@/components/run-analysis";
 import { buildBrowserUrl, variantLabel } from "@/lib/browser-urls";
 import { ExternalLink } from "lucide-react";
 import { useT } from "@/lib/i18n";
@@ -56,10 +57,14 @@ export default function RunPage() {
   // canonical_name → SavedLocation, used to look up yandex_lr when building
   // browser-equivalent URLs for the verify section.
   const [lrByCanonical, setLrByCanonical] = useState<Map<string, number>>(new Map());
+  // Null until loaded; `mode` inside tells us which view this run wants.
+  const [analysis, setAnalysis] = useState<RunAnalysis | null>(null);
 
   async function load() {
     setRun(await api.getRun(id));
     setResults(await api.getResults(id));
+    // Cheap even for serp-mode runs — returns mode + empty rows.
+    try { setAnalysis(await api.getAnalysis(id)); } catch { /* keep last */ }
   }
 
   useEffect(() => { load(); }, [id]);
@@ -238,7 +243,13 @@ export default function RunPage() {
         className="w-full px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700"
       />
 
-      <RunOverview results={results} runId={id} />
+      {/* Analyzer mode replaces the domain/URL distribution with the
+          per-keyword difficulty table — different question, different view. */}
+      {analysis?.mode === "analyzer" ? (
+        <RunAnalysisTable analysis={analysis} />
+      ) : (
+        <RunOverview results={results} runId={id} />
+      )}
 
       {verifyEntries.length > 0 && (
         <details className="border rounded-md dark:border-neutral-700 group">

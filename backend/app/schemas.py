@@ -22,6 +22,8 @@ class JobBase(BaseModel):
     cron: str | None = None
     schedule_enabled: bool = False
     provider: str = "serpapi"
+    mode: str = "serp"  # "serp" | "analyzer"
+    ahrefs_metrics: list[str] = Field(default_factory=list)
 
 
 class JobCreate(JobBase):
@@ -41,6 +43,8 @@ class JobUpdate(BaseModel):
     cron: str | None = None
     schedule_enabled: bool | None = None
     provider: str | None = None
+    mode: str | None = None
+    ahrefs_metrics: list[str] | None = None
 
 
 class JobOut(JobBase):

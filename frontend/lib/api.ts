@@ -33,8 +33,37 @@ export type Job = {
   cron: string | null;
   schedule_enabled: boolean;
   provider: string;
+  /** "serp" = SERP monitoring only. "analyzer" = + Ahrefs URL metrics. */
+  mode: "serp" | "analyzer";
+  /** Ahrefs batch-analysis field ids to request in analyzer mode. */
+  ahrefs_metrics: string[];
   created_at: string;
   updated_at: string;
+};
+
+export type AhrefsSettings = {
+  configured: boolean;
+  last4: string;
+  length: number;
+  metrics: { id: string; label: string }[];
+  default_metrics: string[];
+  batch_size: number;
+};
+
+export type AnalysisRow = {
+  keyword: string;
+  urls_total: number;
+  urls_analysed: number;
+  medians: Record<string, number | null>;
+  /** Phase 2: AI difficulty verdict. Always null for now. */
+  difficulty: string | null;
+};
+
+export type RunAnalysis = {
+  mode: "serp" | "analyzer";
+  metrics: string[];
+  rows: AnalysisRow[];
+  ahrefs_units: number | null;
 };
 
 export type JobRun = {
@@ -160,6 +189,20 @@ export const api = {
     req<ScheduleInfo>(`/jobs/${jobId}/schedule-info`),
   getSchedulerStatus: () =>
     req<{ timezone: string }>("/settings/scheduler"),
+
+  getAnalysis: (runId: number) => req<RunAnalysis>(`/runs/${runId}/analysis`),
+
+  // Ahrefs (analyzer mode)
+  getAhrefs: () => req<AhrefsSettings>("/settings/ahrefs"),
+  setAhrefsKey: (api_key: string) =>
+    req<AhrefsSettings>("/settings/ahrefs", {
+      method: "PUT", body: JSON.stringify({ api_key }),
+    }),
+  clearAhrefsKey: () => req("/settings/ahrefs", { method: "DELETE" }),
+  testAhrefs: () =>
+    req<{ ok: boolean; units_billed?: number; sample_dr?: number | null }>(
+      "/settings/ahrefs/test", { method: "POST" }
+    ),
 
   // AI providers (Gemini via Google AI Studio / Vertex AI)
   listAIProviders: () => req<AIProviderStatus[]>("/settings/ai-providers"),

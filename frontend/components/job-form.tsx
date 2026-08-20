@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, Job, LocationRef, ProviderRates, SavedLocation } from "@/lib/api";
+import { AhrefsSettings, api, Job, LocationRef, ProviderRates, SavedLocation } from "@/lib/api";
 import { MultiCombobox, Option } from "./multi-combobox";
 import { useT } from "@/lib/i18n";
 import { formatUsd, billingUnits } from "@/lib/cost";
@@ -48,6 +48,11 @@ export function JobForm({ initial, onSaved }: Props) {
   const [cron, setCron] = useState<string>(initial?.cron ?? "");
   const [scheduleEnabled, setScheduleEnabled] = useState<boolean>(initial?.schedule_enabled ?? false);
   const [provider, setProvider] = useState<string>(initial?.provider ?? "serpapi");
+  const [mode, setMode] = useState<"serp" | "analyzer">(initial?.mode ?? "serp");
+  const [ahrefsMetrics, setAhrefsMetrics] = useState<string[]>(
+    initial?.ahrefs_metrics ?? []
+  );
+  const [ahrefs, setAhrefs] = useState<AhrefsSettings | null>(null);
 
   const [langOpts, setLangOpts] = useState<Option<string>[]>([]);
   const [gdOpts, setGdOpts] = useState<Option<string>[]>([]);
@@ -68,6 +73,14 @@ export function JobForm({ initial, onSaved }: Props) {
       setGdOpts(rows.map(r => ({ value: r.domain, label: r.domain, sub: r.country }))));
     api.getSchedulerStatus().then(s => setSchedTz(s.timezone)).catch(() => {});
     api.getRates().then(setRates).catch(() => {});
+    api.getAhrefs().then(a => {
+      setAhrefs(a);
+      // Seed the metric picker with Ahrefs' defaults on a NEW job only —
+      // never overwrite what an existing job already chose.
+      setAhrefsMetrics(prev =>
+        prev.length ? prev : (initial ? [] : a.default_metrics)
+      );
+    }).catch(() => {});
     api.listSavedLocations().then(rows => {
       setSavedByCanonical(new Map(rows.map(r => [r.canonical_name, r])));
     }).catch(() => {});
@@ -106,6 +119,8 @@ export function JobForm({ initial, onSaved }: Props) {
     cron: cron.trim() || null,
     schedule_enabled: !!cron.trim() && scheduleEnabled,
     provider,
+    mode,
+    ahrefs_metrics: mode === "analyzer" ? ahrefsMetrics : [],
   });
 
   async function save(runAfter = false) {
@@ -165,6 +180,81 @@ export function JobForm({ initial, onSaved }: Props) {
         />
         <div className="text-xs text-neutral-500">{t.jobForm.keywordsCount(keywords.length)}</div>
       </div>
+
+      {/* Mode selector. Mode 1 is the original behaviour and stays the default;
+          mode 2 adds the Ahrefs enrichment phase after the scrape. */}
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium">{t.jobForm.mode}</label>
+        <div className="grid sm:grid-cols-2 gap-2">
+          {(["serp", "analyzer"] as const).map(m => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMode(m)}
+              aria-pressed={mode === m}
+              className={`text-left px-3 py-2 rounded-md border transition-colors ${
+                mode === m
+                  ? "border-neutral-900 dark:border-white bg-neutral-50 dark:bg-neutral-900"
+                  : "border-neutral-300 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-900/50"
+              }`}
+            >
+              <div className="text-sm font-medium">
+                {m === "serp" ? t.jobForm.modeSerp : t.jobForm.modeAnalyzer}
+              </div>
+              <div className="text-xs text-neutral-500 mt-0.5">
+                {m === "serp" ? t.jobForm.modeSerpHelp : t.jobForm.modeAnalyzerHelp}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {mode === "analyzer" && (
+        <div className="border rounded-md p-4 dark:border-neutral-700 space-y-3">
+          <div>
+            <div className="font-medium text-sm">{t.jobForm.ahrefsMetrics}</div>
+            <div className="text-xs text-neutral-500">{t.jobForm.ahrefsMetricsHelp}</div>
+          </div>
+          {ahrefs && !ahrefs.configured && (
+            <div className="text-xs text-amber-700 dark:text-amber-300 border-l-4 border-amber-400 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 rounded">
+              {t.jobForm.ahrefsNoKey}
+            </div>
+          )}
+          <div className="flex flex-wrap gap-2">
+            {(ahrefs?.metrics ?? []).map(m => {
+              const on = ahrefsMetrics.includes(m.id);
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() =>
+                    setAhrefsMetrics(prev =>
+                      prev.includes(m.id) ? prev.filter(x => x !== m.id) : [...prev, m.id]
+                    )
+                  }
+                  aria-pressed={on}
+                  className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
+                    on
+                      ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 border-neutral-900 dark:border-white"
+                      : "border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                  }`}
+                >
+                  {m.label}
+                </button>
+              );
+            })}
+          </div>
+          {/* Ahrefs bills ~1 unit per URL per selected metric, so make the
+              multiplier visible before the run rather than after the bill. */}
+          <div className="text-xs text-neutral-500">
+            {t.jobForm.ahrefsUnitsEstimate(
+              (estimate?.total ?? 0) * Math.max(1, topN) ,
+              ahrefsMetrics.length || 2,
+              (estimate?.total ?? 0) * Math.max(1, topN) * (ahrefsMetrics.length || 2)
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="space-y-1.5">
         <label className="text-sm font-medium">{t.jobForm.provider}</label>

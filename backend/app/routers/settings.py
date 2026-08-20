@@ -9,19 +9,28 @@ from ..app_settings import (
     AI_PROVIDER_FIELDS,
     DEFAULT_RATES,
     PROVIDER_FIELDS,
+    ahrefs_status,
     ai_provider_status,
     clear_ai_provider_config,
     clear_provider_creds,
+    get_ahrefs_api_key,
     get_provider_creds,
     get_provider_rates,
     provider_status,
     serpapi_key_status,
+    set_ahrefs_api_key,
     set_ai_provider_config,
     set_provider_creds,
     set_provider_rates,
     set_serpapi_key,
 )
 from ..providers import ProviderConfigError, ProviderError, get_provider
+from ..providers.ahrefs_batch import (
+    BATCH_METRICS,
+    BATCH_SIZE,
+    DEFAULT_METRICS,
+    verify_api_key,
+)
 from ..scheduler import scheduler_timezone
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -112,6 +121,52 @@ async def test_provider(provider: str):
     except ProviderConfigError as e:
         raise HTTPException(401, str(e))
     except ProviderError as e:
+        raise HTTPException(502, str(e))
+
+
+# --- Ahrefs (analyzer mode) ----------------------------------------------------
+
+class AhrefsKeyIn(BaseModel):
+    api_key: str
+
+
+@router.get("/ahrefs")
+def get_ahrefs():
+    """Key status plus the metric catalogue, so the job form can render the
+    picker without hardcoding Ahrefs field ids in the frontend."""
+    return {
+        **ahrefs_status(),
+        "metrics": [
+            {"id": k, "label": v} for k, v in BATCH_METRICS.items()
+        ],
+        "default_metrics": DEFAULT_METRICS,
+        "batch_size": BATCH_SIZE,
+    }
+
+
+@router.put("/ahrefs")
+def update_ahrefs(payload: AhrefsKeyIn):
+    if not payload.api_key.strip():
+        raise HTTPException(400, "api_key cannot be empty (use DELETE to clear)")
+    set_ahrefs_api_key(payload.api_key.strip())
+    return ahrefs_status()
+
+
+@router.delete("/ahrefs")
+def clear_ahrefs():
+    set_ahrefs_api_key(None)
+    return ahrefs_status()
+
+
+@router.post("/ahrefs/test")
+async def test_ahrefs():
+    """Verify the Ahrefs key. Costs ~1 unit — Ahrefs has no free auth probe."""
+    key = get_ahrefs_api_key()
+    if not key:
+        raise HTTPException(401, "Ahrefs API key is not configured")
+    try:
+        return await verify_api_key(key)
+    except Exception as e:  # noqa: BLE001
         raise HTTPException(502, str(e))
 
 
