@@ -342,6 +342,7 @@ function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void 
   const { t } = useT();
   const [data, setData] = useState<AIAnalysisSettings | null>(null);
   const [draft, setDraft] = useState<string | null>(null);
+  const [domainDraft, setDomainDraft] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   async function reload() {
@@ -349,6 +350,7 @@ function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void 
       const d = await api.getAIAnalysisSettings();
       setData(d);
       setDraft(null);
+      setDomainDraft(null);
     } catch (e: any) { onError(e?.message ?? "Failed to load AI analysis settings"); }
   }
   useEffect(() => { reload(); }, []);
@@ -358,6 +360,20 @@ function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void 
     setMsg(null); onError(null);
     try { await api.setAIPrompt(draft); setMsg(t.common.saved); await reload(); }
     catch (e: any) { onError(e?.message ?? "Save failed"); }
+  }
+
+  async function saveDomain() {
+    if (domainDraft == null) return;
+    setMsg(null); onError(null);
+    try { await api.setAIDomainPrompt(domainDraft); setMsg(t.common.saved); await reload(); }
+    catch (e: any) { onError(e?.message ?? "Save failed"); }
+  }
+
+  async function resetDomain() {
+    if (!confirm(t.settings.aiAnalysis.resetConfirm)) return;
+    setMsg(null);
+    try { await api.setAIDomainPrompt(null); setMsg(t.settings.aiAnalysis.resetDone); await reload(); }
+    catch (e: any) { onError(e?.message ?? "Reset failed"); }
   }
 
   async function reset() {
@@ -442,6 +458,47 @@ function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void 
           </span>
         )}
         {msg && <span className="text-sm text-emerald-700 dark:text-emerald-300">{msg}</span>}
+      </div>
+
+      {/* Domain-level guidance: its own prompt, because it only applies when a
+          job has domain metrics on, and the authority-vs-PBN judgement it
+          encodes is the part most worth tuning independently. */}
+      <div className="pt-4 border-t dark:border-neutral-800 space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="text-xs font-medium">{t.settings.aiAnalysis.domainTitle}</label>
+          {data.domain_is_custom && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/40 text-blue-800 dark:text-blue-200">
+              {t.settings.aiAnalysis.customised}
+            </span>
+          )}
+        </div>
+        <div className="text-[11px] text-neutral-500">{t.settings.aiAnalysis.domainHelp}</div>
+        <textarea
+          rows={14}
+          value={domainDraft ?? data.domain_prompt}
+          onChange={e => setDomainDraft(e.target.value)}
+          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700 text-xs font-mono"
+        />
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <button
+            disabled={domainDraft == null || domainDraft === data.domain_prompt}
+            onClick={saveDomain}
+            className="px-3 py-1.5 rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm disabled:opacity-50"
+          >{t.common.save}</button>
+          <button onClick={resetDomain} disabled={!data.domain_is_custom}
+            className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm disabled:opacity-50">
+            {t.settings.aiAnalysis.domainReset}
+          </button>
+          <button onClick={() => setDomainDraft(data.domain_default_ru)}
+            className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm">
+            {t.settings.aiAnalysis.domainLoadRu}
+          </button>
+          {domainDraft != null && domainDraft !== data.domain_prompt && (
+            <span className="text-xs text-amber-700 dark:text-amber-300">
+              {t.settings.aiAnalysis.unsaved}
+            </span>
+          )}
+        </div>
       </div>
     </section>
   );

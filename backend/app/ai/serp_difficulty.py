@@ -19,7 +19,7 @@ import logging
 
 from . import GenerationParams, get_ai_provider
 from .base import AIProviderError
-from .prompts import get_serp_difficulty_prompt
+from .prompts import get_domain_prompt, get_serp_difficulty_prompt
 
 log = logging.getLogger(__name__)
 
@@ -172,13 +172,16 @@ async def judge_keyword(
     # the new data. Appending keeps every saved prompt working.
     full_table = table
     if domain_table:
-        full_table = (
-            f"{table}\n\n"
-            "Domain-level metrics for the sites above (one row per distinct "
-            "domain — use these to tell a weak page on a STRONG site apart from "
-            "a weak page on a weak site):\n"
-            f"{domain_table}"
-        )
+        # The domain-section guidance is its own user-editable prompt, so the
+        # authority-vs-PBN judgement it encodes can be tuned without touching
+        # the main prompt. A {domain_table} placeholder inside it controls
+        # placement; otherwise the table is appended after the text.
+        guidance = get_domain_prompt()
+        if "{domain_table}" in guidance:
+            block = guidance.replace("{domain_table}", domain_table)
+        else:
+            block = guidance.rstrip() + "\n" + domain_table
+        full_table = table + "\n\n" + block
     try:
         prompt = prompt_template.format(keyword=keyword, table=full_table)
     except (KeyError, IndexError):

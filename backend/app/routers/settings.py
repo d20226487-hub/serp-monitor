@@ -5,7 +5,11 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ..ai import AIProviderConfigError, AIProviderError, get_ai_provider
-from ..ai.prompts import serp_difficulty_prompt_status, set_serp_difficulty_prompt
+from ..ai.prompts import (
+    serp_difficulty_prompt_status,
+    set_domain_prompt,
+    set_serp_difficulty_prompt,
+)
 from ..app_settings import (
     AI_PROVIDER_FIELDS,
     DEFAULT_RATES,
@@ -155,6 +159,13 @@ def get_ai_analysis_settings():
 @router.put("/ai-analysis/prompt")
 def update_prompt(payload: PromptIn):
     set_serp_difficulty_prompt(payload.prompt)
+    return serp_difficulty_prompt_status()
+
+
+@router.put("/ai-analysis/domain-prompt")
+def update_domain_prompt(payload: PromptIn):
+    """Guidance shown above the domain-level table. Empty resets to default."""
+    set_domain_prompt(payload.prompt)
     return serp_difficulty_prompt_status()
 
 

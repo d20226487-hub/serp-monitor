@@ -115,6 +115,103 @@ DEFAULT_SERP_DIFFICULTY_PROMPT_RU = """Ты SEO-аналитик. Оцени, н
 """
 
 
+KEY_SERP_DIFFICULTY_DOMAIN = "prompt__serp_difficulty_domain"
+
+# Guidance that introduces the DOMAIN-level table. Kept as its own editable
+# prompt because it is only used when domain enrichment is on, and because the
+# judgement it encodes (authority site vs PBN) is the part most worth tuning.
+# The domain table is appended after this text, unless the text itself contains
+# a {domain_table} placeholder — then it is substituted there instead.
+DEFAULT_DOMAIN_PROMPT = """A second table follows with DOMAIN-level metrics — one row per distinct site in
+the SERP above. Use it for the one thing page metrics cannot tell you: whether a
+weak-looking page sits on a STRONG site or a weak one. A page with UR 0 on a
+domain with thousands of referring domains is a parasite page on an established
+site, and behaves nothing like a standalone doorway with the same UR 0.
+
+The ORGANIC-KEYWORD columns are the clearest way to tell genuine authority sites
+apart from PBN / doorway networks:
+
+- A real site ranks for many organic keywords, spread across positions 1-3, 4-10
+  and 11-20, and has organic traffic to match. It attracts links because people
+  actually find and use it.
+- A PBN or doorway shows the opposite signature: a HIGH referring-domain count
+  combined with near-zero organic keywords and no organic traffic. Such a site
+  exists to pass links, not to rank, so it never accumulates real keyword
+  coverage no matter how many domains point at it.
+- Treat "many referring domains + almost no organic keywords" as a strong PBN
+  signal and say so in your comment. A competitor propped up by that kind of
+  network is far easier to out-rank than one with the same link count backed by
+  genuine keyword coverage.
+- Conversely, a modest referring-domain count alongside broad keyword coverage
+  (especially many keywords in positions 1-3) marks a genuinely authoritative
+  site that will be hard to displace.
+- When a site's domain figures match its page figures exactly, that site is
+  effectively a single page — another throwaway-domain tell.
+"""
+
+
+# Russian counterpart, offered by the same "load Russian version" action.
+DEFAULT_DOMAIN_PROMPT_RU = """Ниже идёт вторая таблица с метриками УРОВНЯ ДОМЕНА — по одной строке на каждый
+сайт из выдачи выше. Используй её для того, чего не показывают метрики страницы:
+сидит ли слабая на вид страница на СИЛЬНОМ сайте или на слабом. Страница с UR 0
+на домене с тысячами ссылающихся доменов — это паразитная страница на
+авторитетном сайте, и ведёт она себя совсем не так, как самостоятельный дорвей
+с тем же UR 0.
+
+Колонки по ОРГАНИЧЕСКИМ КЛЮЧЕВЫМ СЛОВАМ — самый надёжный способ отличить
+настоящие авторитетные сайты от PBN-сеток и дорвеев:
+
+- Настоящий сайт ранжируется по множеству органических запросов, распределённых
+  по позициям 1-3, 4-10 и 11-20, и имеет соответствующий органический трафик.
+  Он получает ссылки потому, что им реально пользуются.
+- У PBN или дорвея картина обратная: МНОГО ссылающихся доменов при почти нулевом
+  числе органических ключей и нулевом органическом трафике. Такой сайт создан
+  ради передачи ссылок, а не ради ранжирования, поэтому реальный охват запросов
+  у него не накапливается, сколько бы доменов на него ни ссылалось.
+- Считай сочетание «много ссылающихся доменов + почти нет органических ключей»
+  сильным признаком PBN и прямо пиши об этом в комментарии. Конкурента, который
+  держится на такой сетке, обойти намного проще, чем сайт с тем же числом ссылок
+  и реальным охватом запросов.
+- И наоборот: умеренное число ссылающихся доменов при широком охвате запросов
+  (особенно много ключей в позициях 1-3) означает по-настоящему авторитетный
+  сайт, вытеснить который будет тяжело.
+- Если доменные цифры сайта в точности совпадают с цифрами его страницы, сайт
+  фактически состоит из одной страницы — ещё один признак одноразового домена.
+"""
+
+
+def get_domain_prompt() -> str:
+    """Active domain-section guidance: user's saved version, else the default."""
+    db = SessionLocal()
+    try:
+        return _get(db, KEY_SERP_DIFFICULTY_DOMAIN) or DEFAULT_DOMAIN_PROMPT
+    finally:
+        db.close()
+
+
+def set_domain_prompt(value: str | None) -> None:
+    """Empty/None clears the row so the built-in default applies again."""
+    db = SessionLocal()
+    try:
+        _set(db, KEY_SERP_DIFFICULTY_DOMAIN, (value or "").strip() or None)
+    finally:
+        db.close()
+
+
+def domain_prompt_status() -> dict:
+    db = SessionLocal()
+    try:
+        custom = _get(db, KEY_SERP_DIFFICULTY_DOMAIN)
+    finally:
+        db.close()
+    return {
+        "domain_prompt": custom or DEFAULT_DOMAIN_PROMPT,
+        "domain_is_custom": bool(custom),
+        "domain_default": DEFAULT_DOMAIN_PROMPT,
+        "domain_default_ru": DEFAULT_DOMAIN_PROMPT_RU,
+    }
+
+
 def get_serp_difficulty_prompt() -> str:
     """The active prompt: the user's saved version, else the built-in default."""
     db = SessionLocal()
@@ -145,4 +242,5 @@ def serp_difficulty_prompt_status() -> dict:
         "is_custom": bool(custom),
         "default": DEFAULT_SERP_DIFFICULTY_PROMPT,
         "default_ru": DEFAULT_SERP_DIFFICULTY_PROMPT_RU,
+        **domain_prompt_status(),
     }

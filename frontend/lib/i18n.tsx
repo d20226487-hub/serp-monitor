@@ -397,6 +397,10 @@ const messagesEn = {
       placeholders: "Available placeholders: {keyword} and {table}. Both are filled in at run time. The prompt can be written in any language — only the free-text comment follows it; the difficulty value stays low/medium/hard/too hard and the UI translates it.",
       reset: "Reset to default",
       loadRu: "Load Russian version",
+      domainTitle: "Domain-level section",
+      domainHelp: "Guidance placed above the domain table. Only used when a job has domain metrics selected. Edit it to tune how the model separates real authority sites from PBN networks — the organic-keyword columns are the strongest tell. Optional {domain_table} placeholder controls where the table goes; otherwise it is appended.",
+      domainReset: "Reset domain section",
+      domainLoadRu: "Load Russian version",
       unsaved: "Unsaved — press Save to apply",
       resetConfirm:
         "Discard your customised prompt and go back to the built-in default?",
@@ -941,6 +945,10 @@ const messagesRu: Messages = {
       placeholders: "Доступные подстановки: {keyword} и {table}. Подставляются при запуске. Промпт можно писать на любом языке — от него зависит только текст комментария; значение сложности остаётся low/medium/hard/too hard, а интерфейс переводит его сам.",
       reset: "Сбросить к значению по умолчанию",
       loadRu: "Загрузить русскую версию",
+      domainTitle: "Блок метрик уровня домена",
+      domainHelp: "Текст, который ставится над таблицей доменов. Используется только если в задаче выбраны доменные метрики. Отредактируйте его, чтобы настроить, как модель отличает настоящие авторитетные сайты от PBN-сеток — колонки органических ключей здесь самый сильный признак. Необязательная подстановка {domain_table} задаёт место таблицы; иначе она добавляется снизу.",
+      domainReset: "Сбросить блок доменов",
+      domainLoadRu: "Загрузить русскую версию",
       unsaved: "Не сохранено — нажмите «Сохранить»",
       resetConfirm:
         "Отменить изменённый промпт и вернуться к встроенному по умолчанию?",

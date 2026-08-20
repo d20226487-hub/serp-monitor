@@ -93,6 +93,11 @@ export type AIAnalysisSettings = {
   is_custom: boolean;
   default: string;
   default_ru: string;
+  /** Guidance shown above the domain-level table (separately editable). */
+  domain_prompt: string;
+  domain_is_custom: boolean;
+  domain_default: string;
+  domain_default_ru: string;
   provider: string | null;
   available: string[];
 };
@@ -235,6 +240,10 @@ export const api = {
   getAIAnalysisSettings: () => req<AIAnalysisSettings>("/settings/ai-analysis"),
   setAIPrompt: (prompt: string | null) =>
     req<AIAnalysisSettings>("/settings/ai-analysis/prompt", {
+      method: "PUT", body: JSON.stringify({ prompt }),
+    }),
+  setAIDomainPrompt: (prompt: string | null) =>
+    req<AIAnalysisSettings>("/settings/ai-analysis/domain-prompt", {
       method: "PUT", body: JSON.stringify({ prompt }),
     }),
   setAIAnalysisProvider: (provider: string | null) =>
