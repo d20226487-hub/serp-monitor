@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { api, Job, LocationRef, ProviderRates, SavedLocation } from "@/lib/api";
 import { MultiCombobox, Option } from "./multi-combobox";
 import { useT } from "@/lib/i18n";
-import { formatUsd } from "@/lib/cost";
+import { formatUsd, billingUnits } from "@/lib/cost";
 
 type Props = {
   initial?: Job;
@@ -342,13 +342,22 @@ export function JobForm({ initial, onSaved }: Props) {
           <div>
             <div className="text-sm font-medium mb-1">{t.jobForm.estimateCostTitle}</div>
             <div className="text-2xl font-semibold">
-              {formatUsd((estimate?.total ?? 0) * (rates?.rates[provider] ?? 0))}
+              {formatUsd(
+                (estimate?.total ?? 0) * billingUnits(provider, topN) * (rates?.rates[provider] ?? 0)
+              )}
             </div>
             <div className="text-xs text-neutral-500 mt-1">
               {t.jobForm.estimateRate(formatUsd(rates?.rates[provider] ?? 0))}
               {" · "}
               <a href="/settings" className="underline">{t.jobForm.estimateEditRate}</a>
             </div>
+            {/* DataForSEO bills per 10 results, so a deep top_n multiplies the
+                bill. Spell it out — otherwise the number looks wrong. */}
+            {billingUnits(provider, topN) > 1 && (
+              <div className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                {t.jobForm.estimateDepthNote(billingUnits(provider, topN), topN)}
+              </div>
+            )}
           </div>
         </div>
         <div className="text-xs text-neutral-500 mt-3">

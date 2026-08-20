@@ -158,6 +158,8 @@ const messagesEn = {
     estimateCostTitle: "Estimated cost per run",
     estimateRate: (rate: string) => `at ${rate}/search`,
     estimateEditRate: "edit rate",
+    estimateDepthNote: (units: number, topN: number) =>
+      `⚠ DataForSEO bills per 10 results — Top N ${topN} counts as ${units} SERPs per search (${units}× the price). Lower Top N to 10 to pay the base rate.`,
     saveCreate: "Create job",
     saveChanges: "Save changes",
     saveAndRunCreate: "Create & run now",
@@ -575,6 +577,8 @@ const messagesRu: Messages = {
     estimateCostTitle: "Расчётная стоимость прогона",
     estimateRate: (rate: string) => `по ${rate} за запрос`,
     estimateEditRate: "изменить ставку",
+    estimateDepthNote: (units: number, topN: number) =>
+      `⚠ DataForSEO тарифицирует за каждые 10 результатов — Топ N ${topN} считается как ${units} SERP на запрос (цена ×${units}). Поставьте Топ N = 10, чтобы платить базовую ставку.`,
     saveCreate: "Создать задачу",
     saveChanges: "Сохранить изменения",
     saveAndRunCreate: "Создать и запустить",
