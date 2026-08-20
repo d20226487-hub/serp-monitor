@@ -92,6 +92,7 @@ export type AIAnalysisSettings = {
   prompt: string;
   is_custom: boolean;
   default: string;
+  default_ru: string;
   provider: string | null;
   available: string[];
 };

@@ -394,8 +394,10 @@ const messagesEn = {
       providerAuto: "Auto (the one configured provider)",
       providerOff: "Off — collect metrics only",
       promptLabel: "Prompt",
-      placeholders: "Available placeholders: {keyword} and {table}. Both are filled in at run time.",
+      placeholders: "Available placeholders: {keyword} and {table}. Both are filled in at run time. The prompt can be written in any language — only the free-text comment follows it; the difficulty value stays low/medium/hard/too hard and the UI translates it.",
       reset: "Reset to default",
+      loadRu: "Load Russian version",
+      unsaved: "Unsaved — press Save to apply",
       resetConfirm:
         "Discard your customised prompt and go back to the built-in default?",
       resetDone: "Reset to the built-in default.",
@@ -936,8 +938,10 @@ const messagesRu: Messages = {
       providerAuto: "Авто (единственный настроенный провайдер)",
       providerOff: "Выключено — только метрики",
       promptLabel: "Промпт",
-      placeholders: "Доступные подстановки: {keyword} и {table}. Подставляются при запуске.",
+      placeholders: "Доступные подстановки: {keyword} и {table}. Подставляются при запуске. Промпт можно писать на любом языке — от него зависит только текст комментария; значение сложности остаётся low/medium/hard/too hard, а интерфейс переводит его сам.",
       reset: "Сбросить к значению по умолчанию",
+      loadRu: "Загрузить русскую версию",
+      unsaved: "Не сохранено — нажмите «Сохранить»",
       resetConfirm:
         "Отменить изменённый промпт и вернуться к встроенному по умолчанию?",
       resetDone: "Сброшено к встроенному промпту.",

@@ -430,6 +430,17 @@ function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void 
           className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm disabled:opacity-50">
           {t.settings.aiAnalysis.reset}
         </button>
+        {/* Loads the RU text into the editor as an UNSAVED draft — the user
+            reviews and presses Save. Never writes over a saved prompt by itself. */}
+        <button onClick={() => setDraft(data.default_ru)}
+          className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm">
+          {t.settings.aiAnalysis.loadRu}
+        </button>
+        {draft != null && draft !== data.prompt && (
+          <span className="text-xs text-amber-700 dark:text-amber-300">
+            {t.settings.aiAnalysis.unsaved}
+          </span>
+        )}
         {msg && <span className="text-sm text-emerald-700 dark:text-emerald-300">{msg}</span>}
       </div>
     </section>

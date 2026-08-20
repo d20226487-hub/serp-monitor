@@ -29,6 +29,14 @@ in position order, with its Ahrefs link metrics for that exact URL:
   counts of the top-10 pages. Weight it heavily.
 - A dash (-) means Ahrefs returned no data for that field.
 
+If a second table of DOMAIN-level metrics follows the SERP, it has one row per
+distinct site in that SERP. Use it for the one thing page metrics cannot tell
+you: whether a weak-looking page sits on a STRONG site or a weak one. A page
+with UR 0 on a domain with thousands of referring domains is a parasite page on
+an established site and behaves nothing like a standalone doorway with the same
+UR 0. When a site's domain figures match its page figures, that site is
+effectively a single page — itself a strong signal of a throwaway domain.
+
 How to judge:
 - Ranking top 10 means displacing the WEAKEST result you can reach, not beating
   the average. A SERP with several low-authority pages is winnable even if one
@@ -51,6 +59,58 @@ Return exactly two things:
 Keyword: {keyword}
 
 SERP:
+{table}
+"""
+
+
+# Ready-made Russian variant. Offered as a "load" action in Settings, never
+# applied automatically — the user's saved row always wins. Only the free-text
+# `comment` follows the prompt language: `difficulty` is pinned to the English
+# enum by responseSchema and the UI translates those labels itself.
+DEFAULT_SERP_DIFFICULTY_PROMPT_RU = """Ты SEO-аналитик. Оцени, насколько сложно попасть в ТОП-10 по ключевому слову.
+
+Тебе дана текущая выдача по этому запросу. Каждая строка — один результат
+в порядке позиций, с метриками Ahrefs для этого точного URL:
+
+- UR (URL Rating) — авторитет конкретной страницы. Шкала логарифмическая,
+  поэтому страница с парой десятков слабых ссылок вполне может показывать 0.
+- DR (Domain Rating) — авторитет всего домена.
+- Ref domains — число уникальных ссылающихся доменов. Это ближайший аналог
+  собственного Keyword Difficulty у Ahrefs, который считается именно по числу
+  ссылающихся доменов у страниц из топ-10. Учитывай этот сигнал сильнее всего.
+- Прочерк (-) означает, что Ahrefs не вернул данных по этому полю.
+
+Если после выдачи идёт вторая таблица с метриками УРОВНЯ ДОМЕНА, в ней одна
+строка на каждый сайт из выдачи. Используй её для того, чего не показывают
+метрики страницы: сидит ли слабая на вид страница на СИЛЬНОМ сайте или на
+слабом. Страница с UR 0 на домене с тысячами ссылающихся доменов — это
+паразитная страница на авторитетном сайте, и ведёт она себя совсем не так, как
+самостоятельный дорвей с тем же UR 0. Если доменные цифры сайта совпадают с
+цифрами его страницы, значит сайт фактически состоит из одной страницы — сам по
+себе сильный признак одноразового домена.
+
+Как оценивать:
+- Чтобы попасть в топ-10, нужно вытеснить САМЫЙ СЛАБЫЙ достижимый результат,
+  а не обойти средний. Выдача с несколькими низкоавторитетными страницами
+  проходима, даже если сверху стоят один-два гиганта.
+- Смотри на ФОРМУ выдачи, а не только на средние: сколько там слабых мест и
+  сгруппированы ли они внизу.
+- Учитывай, КАКИЕ страницы ранжируются (официальные сайты брендов, партнёрки,
+  форумы, новости, дорвеи/PBN). Выдача из тонких партнёрских страниц проще, чем
+  из устоявшихся брендов с теми же цифрами.
+- Низкие DR/UR в сочетании с большим числом ссылающихся доменов часто означают
+  спам-сетку или PBN — прямо так и напиши, если это видно.
+
+Верни ровно две вещи:
+1. difficulty — одно из: low, medium, hard, too hard (именно этими словами)
+2. comment — 1-3 предложения ПО-РУССКИ о нюансах ИМЕННО ЭТОЙ выдачи: что делает
+   её простой или сложной и где возможность или препятствие. Конкретно, со
+   ссылкой на то, что реально видно. Без общих советов и без пересказа цифр,
+   которые пользователь и так видит в таблице.
+
+Ключевое слово: {keyword}
+
+Выдача:
 {table}
 """
 
@@ -84,4 +144,5 @@ def serp_difficulty_prompt_status() -> dict:
         "prompt": custom or DEFAULT_SERP_DIFFICULTY_PROMPT,
         "is_custom": bool(custom),
         "default": DEFAULT_SERP_DIFFICULTY_PROMPT,
+        "default_ru": DEFAULT_SERP_DIFFICULTY_PROMPT_RU,
     }
