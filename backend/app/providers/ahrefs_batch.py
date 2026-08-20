@@ -59,6 +59,18 @@ URL_ONLY_METRICS = frozenset({"url_rating"})
 DEFAULT_METRICS: list[str] = ["url_rating", "domain_rating"]
 DEFAULT_DOMAIN_METRICS: list[str] = ["refdomains_dofollow", "org_keywords"]
 
+# Ahrefs mode for the DOMAIN-level pass.
+#
+# MUST be "subdomains", not "domain". "domain" scopes to the bare apex only, and
+# most real sites serve their content from www or another subdomain — measured:
+#   liga.net  mode=domain      ->     9 organic keywords,      0 in top 3
+#   liga.net  mode=subdomains  -> 51,345 organic keywords, 13,196 in top 3
+# The second matches what the Ahrefs UI shows (its Batch Analysis defaults to
+# Subdomains). Since we also normalise www. away when deriving the host, using
+# "domain" measured an almost-empty apex and reported real sites as having no
+# organic presence — inverting the authority-vs-PBN signal this pass exists for.
+DOMAIN_MODE = "subdomains"
+
 # Ahrefs caps `targets` at 100 per call (OpenAPI maxItems).
 BATCH_SIZE = 100
 

@@ -178,6 +178,7 @@ async def _run_ahrefs_analysis(db: Session, run_id: int, job: Job) -> int:
     from .app_settings import get_ahrefs_api_key
     from .providers.ahrefs_batch import (
         BATCH_SIZE,
+        DOMAIN_MODE,
         canonical_domain_metrics,
         canonical_metrics,
         fetch_batch_chunk,
@@ -265,7 +266,7 @@ async def _run_ahrefs_analysis(db: Session, run_id: int, job: Job) -> int:
             for i in range(0, len(domains), BATCH_SIZE):
                 chunk = domains[i : i + BATCH_SIZE]
                 outcome = await fetch_batch_chunk(
-                    client, api_key, chunk, domain_select, mode="domain"
+                    client, api_key, chunk, domain_select, mode=DOMAIN_MODE
                 )
                 total_units += outcome.cost_billed or 0
                 now = utcnow()
