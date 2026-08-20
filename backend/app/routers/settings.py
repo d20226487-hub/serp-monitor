@@ -54,6 +54,7 @@ class ProviderCredsIn(BaseModel):
     zone_raw: str | None = None
     username: str | None = None
     password: str | None = None
+    login: str | None = None  # DataForSEO
 
 
 @router.get("/providers")
@@ -94,7 +95,7 @@ def clear_provider(provider: str):
 @router.post("/providers/{provider}/test")
 async def test_provider(provider: str):
     """Validate creds against the upstream. Bright Data and Oxylabs cost ~1
-    search credit; SerpAPI's account endpoint is free."""
+    search credit; SerpAPI's and DataForSEO's account endpoints are free."""
     if provider not in PROVIDER_FIELDS:
         raise HTTPException(404, "unknown provider")
     try:

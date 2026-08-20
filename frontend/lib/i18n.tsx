@@ -115,7 +115,9 @@ const messagesEn = {
     providerHelpPrefix: "Configure provider credentials in ",
     providerHelpLink: "Settings",
     providerHelpSuffix:
-      " first. Each provider differs slightly: SerpAPI accepts canonical_name locations; Bright Data & Oxylabs only honor country / yandex_lr.",
+      " first. Each provider differs slightly: SerpAPI and DataForSEO accept canonical_name locations; Bright Data & Oxylabs only honor country / yandex_lr.",
+    dataforseoNoYandex:
+      "⚠ DataForSEO has no Yandex endpoint — their SERP API covers Google, Bing, Yahoo, Baidu, Naver and Seznam only. Yandex searches in this job will fail. Use SerpAPI, Bright Data or Oxylabs for Yandex, or remove Yandex from Engines and keep DataForSEO for Google.",
     engines: "Engines",
     enginesPlaceholder: "Pick engines…",
     devices: "Devices",
@@ -349,6 +351,11 @@ const messagesEn = {
           {" "}Searches left: <strong>{n}</strong>.
         </>
       ),
+      balance: (n: number) => (
+        <>
+          {" "}Balance: <strong>${n}</strong>.
+        </>
+      ),
       clearConfirm: (provider: string) =>
         `Clear all stored credentials for ${provider}?`,
       meta: {
@@ -376,6 +383,12 @@ const messagesEn = {
           help: "SERP Scraper API at realtime.oxylabs.io. Use the username and password from your Oxylabs SERP Scraper sub-account.",
           username: { label: "Username", placeholder: "Oxylabs SERP username" },
           password: { label: "Password", placeholder: "Oxylabs password" },
+        },
+        dataforseo: {
+          help:
+            "Google only — DataForSEO has no Yandex endpoint. Live mode (~$0.002 per search, results in a few seconds). Credentials come from app.dataforseo.com/api-access; the API password is auto-generated and is NOT your account password. Testing is free (checks your balance without spending credit).",
+          login: { label: "Login (email)", placeholder: "you@example.com" },
+          password: { label: "API password", placeholder: "Auto-generated API password" },
         },
       },
     },
@@ -498,7 +511,9 @@ const messagesRu: Messages = {
     providerHelpPrefix: "Сначала укажите учётные данные провайдеров в разделе ",
     providerHelpLink: "Настройки",
     providerHelpSuffix:
-      ". Провайдеры немного отличаются: SerpAPI принимает локации в формате canonical_name; Bright Data и Oxylabs учитывают только страну / yandex_lr.",
+      ". Провайдеры немного отличаются: SerpAPI и DataForSEO принимают локации в формате canonical_name; Bright Data и Oxylabs учитывают только страну / yandex_lr.",
+    dataforseoNoYandex:
+      "⚠ У DataForSEO нет эндпоинта для Яндекса — их SERP API поддерживает только Google, Bing, Yahoo, Baidu, Naver и Seznam. Запросы к Яндексу в этой задаче завершатся ошибкой. Используйте SerpAPI, Bright Data или Oxylabs для Яндекса, либо уберите Яндекс из поисковиков и оставьте DataForSEO для Google.",
     engines: "Поисковики",
     enginesPlaceholder: "Выберите поисковики…",
     devices: "Устройства",
@@ -742,6 +757,11 @@ const messagesRu: Messages = {
           {" "}Осталось запросов: <strong>{n}</strong>.
         </>
       ),
+      balance: (n: number) => (
+        <>
+          {" "}Баланс: <strong>${n}</strong>.
+        </>
+      ),
       clearConfirm: (provider: string) =>
         `Очистить все сохранённые учётные данные для ${provider}?`,
       meta: {
@@ -772,6 +792,12 @@ const messagesRu: Messages = {
             placeholder: "Имя пользователя Oxylabs SERP",
           },
           password: { label: "Пароль", placeholder: "Пароль Oxylabs" },
+        },
+        dataforseo: {
+          help:
+            "Только Google — у DataForSEO нет эндпоинта для Яндекса. Режим Live (~$0.002 за запрос, результат за несколько секунд). Учётные данные — на app.dataforseo.com/api-access; API-пароль генерируется автоматически и НЕ совпадает с паролем от аккаунта. Проверка бесплатна (запрашивает баланс, не тратя кредиты).",
+          login: { label: "Логин (email)", placeholder: "you@example.com" },
+          password: { label: "API-пароль", placeholder: "Сгенерированный API-пароль" },
         },
       },
     },

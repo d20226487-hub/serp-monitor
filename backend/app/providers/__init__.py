@@ -4,11 +4,14 @@ from .base import SerpProvider, ProviderError, ProviderConfigError
 from .serpapi import SerpAPIProvider
 from .brightdata import BrightDataProvider
 from .oxylabs import OxylabsProvider
+from .dataforseo import DataForSEOProvider
 
 PROVIDERS: dict[str, type[SerpProvider]] = {
     "serpapi": SerpAPIProvider,
     "brightdata": BrightDataProvider,
     "oxylabs": OxylabsProvider,
+    # Google-only: DataForSEO's SERP API has no Yandex endpoint.
+    "dataforseo": DataForSEOProvider,
 }
 
 

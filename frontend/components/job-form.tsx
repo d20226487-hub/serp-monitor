@@ -172,12 +172,20 @@ export function JobForm({ initial, onSaved }: Props) {
           <option value="serpapi">SerpAPI</option>
           <option value="brightdata">Bright Data</option>
           <option value="oxylabs">Oxylabs</option>
+          <option value="dataforseo">DataForSEO</option>
         </select>
         <p className="text-xs text-neutral-500">
           {t.jobForm.providerHelpPrefix}
           <a href="/settings" className="underline">{t.jobForm.providerHelpLink}</a>
           {t.jobForm.providerHelpSuffix}
         </p>
+        {/* DataForSEO has no Yandex endpoint at all — warn at build time rather
+            than letting the run fail per-variant with a ProviderConfigError. */}
+        {provider === "dataforseo" && engines.includes("yandex") && (
+          <div className="text-xs text-amber-700 dark:text-amber-300 border-l-4 border-amber-400 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 rounded">
+            {t.jobForm.dataforseoNoYandex}
+          </div>
+        )}
       </div>
 
       <div className="grid sm:grid-cols-2 gap-4">
@@ -375,11 +383,20 @@ function googleOutcome(provider: string, loc: LocationRef, _saved?: SavedLocatio
   if (provider === "oxylabs" && cn) {
     return { granularity: "city", via: "geo_location=", detail: `${cn} (best-effort match)` };
   }
+  if (provider === "dataforseo" && cn) {
+    // DataForSEO's location_name uses the same Google Ads canonical format as
+    // SerpAPI, so our saved canonical_name passes straight through.
+    return { granularity: "city", via: "location_name=", detail: cn };
+  }
   if (cc) return { granularity: "country", via: "gl=", detail: cc };
   return { granularity: "none", via: "—" };
 }
 
-function yandexOutcome(_provider: string, loc: LocationRef, saved?: SavedLocation): GeoOutcome {
+function yandexOutcome(provider: string, loc: LocationRef, saved?: SavedLocation): GeoOutcome {
+  // DataForSEO has no Yandex endpoint — nothing gets sent at all.
+  if (provider === "dataforseo") {
+    return { granularity: "none", via: "unsupported" };
+  }
   const lr = saved?.yandex_lr;
   const cc = loc.country_code?.toUpperCase();
   if (lr != null) {
@@ -459,7 +476,9 @@ function EffectiveTargetingPanel({
                   <div className="text-xs text-neutral-500 italic">{t.jobForm.targeting.noEngines}</div>
                 )}
               </div>
-              {showYandex && !saved?.yandex_lr && (
+              {/* Skip the lr hint for DataForSEO — Yandex won't run there at
+                  all, so telling the user to add a region ID would mislead. */}
+              {showYandex && provider !== "dataforseo" && !saved?.yandex_lr && (
                 <div className="text-[11px] text-amber-700 dark:text-amber-300 mt-1">
                   {t.jobForm.targeting.noLrWarning}
                 </div>

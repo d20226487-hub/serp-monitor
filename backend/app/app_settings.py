@@ -17,6 +17,8 @@ KEY_BRIGHTDATA_ZONE = "brightdata_zone"
 KEY_BRIGHTDATA_ZONE_RAW = "brightdata_zone_raw"
 KEY_OXYLABS_USERNAME = "oxylabs_username"
 KEY_OXYLABS_PASSWORD = "oxylabs_password"
+KEY_DATAFORSEO_LOGIN = "dataforseo_login"
+KEY_DATAFORSEO_PASSWORD = "dataforseo_password"
 
 
 def _get(db: Session, key: str) -> str | None:
@@ -78,6 +80,9 @@ PROVIDER_FIELDS: dict[str, list[str]] = {
     # which Bright Data won't parse to JSON on most plans).
     "brightdata": ["token", "zone", "zone_raw"],
     "oxylabs": ["username", "password"],
+    # DataForSEO uses HTTP Basic auth. The API password is auto-generated in
+    # their dashboard and differs from the account password.
+    "dataforseo": ["login", "password"],
 }
 
 _FIELD_TO_KEY: dict[tuple[str, str], str] = {
@@ -87,6 +92,8 @@ _FIELD_TO_KEY: dict[tuple[str, str], str] = {
     ("brightdata", "zone_raw"): KEY_BRIGHTDATA_ZONE_RAW,
     ("oxylabs", "username"): KEY_OXYLABS_USERNAME,
     ("oxylabs", "password"): KEY_OXYLABS_PASSWORD,
+    ("dataforseo", "login"): KEY_DATAFORSEO_LOGIN,
+    ("dataforseo", "password"): KEY_DATAFORSEO_PASSWORD,
 }
 
 

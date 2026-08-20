@@ -217,6 +217,47 @@ export default function DocsPage() {
           </ul>
         </div>
 
+        <h3 className={H3}>DataForSEO</h3>
+        <div className={CALLOUT_WARN}>
+          <strong>Только Google.</strong> У DataForSEO <strong>нет</strong> эндпоинта для
+          Яндекса — их SERP API покрывает Google, Bing, YouTube, Yahoo, Baidu, Naver и
+          Seznam. Если в задаче выбран DataForSEO и Яндекс, запросы к Яндексу завершатся
+          понятной ошибкой, а Google в той же задаче отработает нормально. Форма задачи
+          предупредит об этом заранее.
+        </div>
+        <ul className={UL}>
+          <li>
+            Учётные данные: <strong>Логин (email)</strong> и <strong>API-пароль</strong> со
+            страницы <code className={CODE}>app.dataforseo.com/api-access</code>.{" "}
+            <strong>API-пароль генерируется автоматически и НЕ совпадает с паролем от
+            аккаунта</strong> — частая причина ошибки авторизации.
+          </li>
+          <li>
+            Кнопка <strong>Проверить</strong> здесь <strong>бесплатна</strong>: она
+            обращается к <code className={CODE}>/v3/appendix/user_data</code> и показывает
+            баланс, не тратя кредиты (в отличие от Bright Data и Oxylabs, где проверка
+            стоит ~1 запрос).
+          </li>
+          <li>
+            Режим <strong>Live</strong>: ~<code className={CODE}>$0.002</code> за запрос,
+            результат за несколько секунд. У DataForSEO есть более дешёвая очередь задач
+            (<code className={CODE}>$0.0006</code>), но она требует схемы
+            POST → опрос → GET с задержкой ~5 минут; это отложено на будущее.
+          </li>
+          <li>
+            <strong>Локации работают «из коробки»:</strong> поле{" "}
+            <code className={CODE}>location_name</code> у DataForSEO использует тот же
+            формат Google Ads (<code className={CODE}>Город,Регион,Страна</code>), что и{" "}
+            <code className={CODE}>canonical_name</code> у SerpAPI. Все сохранённые локации
+            подходят без изменений.
+          </li>
+          <li>
+            <strong>Локация обязательна.</strong> В отличие от SerpAPI, у DataForSEO нет
+            режима «без гео»: если в задаче не выбрана локация и страну не удаётся
+            определить, запрос завершится понятной ошибкой.
+          </li>
+        </ul>
+
         <h3 className={H3}>Сравнительная таблица — что honor'ит каждый провайдер</h3>
         <div className="overflow-x-auto">
           <table className={TABLE}>
@@ -226,6 +267,7 @@ export default function DocsPage() {
                 <th className={TH}>SerpAPI</th>
                 <th className={TH}>Bright Data</th>
                 <th className={TH}>Oxylabs</th>
+                <th className={TH}>DataForSEO</th>
               </tr>
             </thead>
             <tbody>
@@ -234,36 +276,49 @@ export default function DocsPage() {
                 <td className={TD}>✓</td>
                 <td className={TD}>✓</td>
                 <td className={TD}>✓ через <code className={CODE}>geo_location</code></td>
+                <td className={TD}>✓ через <code className={CODE}>location_name</code></td>
               </tr>
               <tr>
                 <td className={TD}>Google город</td>
                 <td className={TD}><code className={CODE}>location=&lt;canonical&gt;</code></td>
                 <td className={TD}>сгенерированный <code className={CODE}>uule=</code></td>
                 <td className={TD}><code className={CODE}>geo_location=&lt;canonical&gt;</code> (best-effort)</td>
+                <td className={TD}><code className={CODE}>location_name=&lt;canonical&gt;</code></td>
               </tr>
               <tr>
                 <td className={TD}>Google устройство</td>
                 <td className={TD}><code className={CODE}>device=mobile/desktop</code></td>
                 <td className={TD}><code className={CODE}>brd_mobile=0/1</code></td>
                 <td className={TD}><code className={CODE}>user_agent_type</code></td>
+                <td className={TD}><code className={CODE}>device=mobile/desktop</code></td>
               </tr>
               <tr>
                 <td className={TD}>Yandex страна</td>
                 <td className={TD}><code className={CODE}>yandex_domain=</code></td>
                 <td className={TD}><code className={CODE}>yandex_domain=</code></td>
                 <td className={TD}><code className={CODE}>yandex_domain=</code></td>
+                <td className={TD}>— не поддерживается</td>
               </tr>
               <tr>
                 <td className={TD}>Yandex город</td>
                 <td className={TD}><code className={CODE}>lr=&lt;id&gt;</code></td>
                 <td className={TD}><code className={CODE}>lr=&lt;id&gt;</code> через raw zone</td>
                 <td className={TD}><code className={CODE}>lr=&lt;id&gt;</code> в URL + <code className={CODE}>geo_location: КОД</code> в теле</td>
+                <td className={TD}>— не поддерживается</td>
               </tr>
               <tr>
                 <td className={TD}>Yandex устройство</td>
                 <td className={TD}>только desktop</td>
                 <td className={TD}><code className={CODE}>brd_mobile=0/1</code></td>
                 <td className={TD}><code className={CODE}>user_agent_type</code></td>
+                <td className={TD}>— не поддерживается</td>
+              </tr>
+              <tr>
+                <td className={TD}>Бесплатная проверка ключа</td>
+                <td className={TD}>✓ <code className={CODE}>/account</code></td>
+                <td className={TD}>— стоит ~1 запрос</td>
+                <td className={TD}>— стоит ~1 запрос</td>
+                <td className={TD}>✓ <code className={CODE}>/appendix/user_data</code></td>
               </tr>
             </tbody>
           </table>

@@ -153,6 +153,7 @@ export type ProviderCredsInput = {
   zone_raw?: string;
   username?: string;
   password?: string;
+  login?: string; // DataForSEO
 };
 
 export type ScheduleInfo = {

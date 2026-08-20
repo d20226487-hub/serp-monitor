@@ -320,7 +320,7 @@ function UuleCell({ canonicalName }: { canonicalName: string }) {
 
 /* ------------- Provider credentials section ------------- */
 
-type ProviderId = "serpapi" | "brightdata" | "oxylabs";
+type ProviderId = "serpapi" | "brightdata" | "oxylabs" | "dataforseo";
 
 type ProviderFieldKey = keyof ProviderCredsInput;
 
@@ -358,6 +358,15 @@ function useProviderMeta(): ProviderMeta[] {
       fields: [
         { key: "username", label: m.oxylabs.username.label, placeholder: m.oxylabs.username.placeholder },
         { key: "password", label: m.oxylabs.password.label, secret: true, placeholder: m.oxylabs.password.placeholder },
+      ],
+    },
+    {
+      id: "dataforseo",
+      name: "DataForSEO",
+      help: m.dataforseo.help,
+      fields: [
+        { key: "login", label: m.dataforseo.login.label, placeholder: m.dataforseo.login.placeholder },
+        { key: "password", label: m.dataforseo.password.label, secret: true, placeholder: m.dataforseo.password.placeholder },
       ],
     },
   ];
@@ -476,6 +485,7 @@ function ProvidersSection({ onError }: { onError: (msg: string | null) => void }
                   {t.settings.providers.worksOk(meta.name)}
                   {testRes.plan && t.settings.providers.plan(testRes.plan)}
                   {testRes.searches_left != null && t.settings.providers.searchesLeft(testRes.searches_left)}
+                  {testRes.balance != null && t.settings.providers.balance(testRes.balance)}
                 </div>
               )}
             </div>
