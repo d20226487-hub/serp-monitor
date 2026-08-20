@@ -133,30 +133,117 @@ export function RunAnalysisTable({ analysis }: { analysis: RunAnalysis }) {
 
 function AnalysisTableRow({ row, metrics }: { row: AnalysisRow; metrics: string[] }) {
   const { t } = useT();
+  const [open, setOpen] = useState(false);
   const partial = row.urls_analysed < row.urls_total;
+  // +3 = keyword, coverage, difficulty columns around the metric columns.
+  const span = metrics.length + 3;
   return (
-    <tr className="border-b last:border-b-0 dark:border-neutral-800">
-      <td className="px-3 py-2 font-medium break-all">{row.keyword}</td>
-      {metrics.map(m => (
-        <td key={m} className="px-3 py-2 text-right font-mono tabular-nums">
-          {formatMetric(row.medians[m])}
+    <>
+      <tr className="border-b dark:border-neutral-800">
+        <td className="px-3 py-2 font-medium break-all">
+          {/* Toggles the raw per-URL rows — the manual check on what Ahrefs
+              actually returned for this keyword's SERP. */}
+          <button
+            type="button"
+            onClick={() => setOpen(o => !o)}
+            className="inline-flex items-center gap-1.5 text-left hover:underline"
+            aria-expanded={open}
+          >
+            <span className={`text-neutral-400 transition-transform ${open ? "rotate-90" : ""}`}>▶</span>
+            {row.keyword}
+          </button>
         </td>
-      ))}
-      <td
-        className={`px-3 py-2 text-right font-mono tabular-nums ${
-          partial ? "text-amber-700 dark:text-amber-300" : "text-neutral-500"
-        }`}
-        title={partial ? t.analysis.partialHint : undefined}
-      >
-        {row.urls_analysed}/{row.urls_total}
-      </td>
-      <td className="px-3 py-2 text-right">
-        {row.difficulty ? (
-          <span className="text-xs font-medium">{row.difficulty}</span>
-        ) : (
-          <span className="text-xs text-neutral-400">{t.analysis.difficultyPending}</span>
-        )}
-      </td>
-    </tr>
+        {metrics.map(m => (
+          <td
+            key={m}
+            className="px-3 py-2 text-right font-mono tabular-nums"
+            title={t.analysis.cellHint(
+              formatMetric(row.means[m]),
+              formatMetric(row.mins[m]),
+              formatMetric(row.maxes[m])
+            )}
+          >
+            {formatMetric(row.medians[m])}
+          </td>
+        ))}
+        <td
+          className={`px-3 py-2 text-right font-mono tabular-nums ${
+            partial ? "text-amber-700 dark:text-amber-300" : "text-neutral-500"
+          }`}
+          title={partial ? t.analysis.partialHint : undefined}
+        >
+          {row.urls_analysed}/{row.urls_total}
+          {row.weak_slots != null && (
+            <span
+              className="ml-2 text-emerald-700 dark:text-emerald-300"
+              title={t.analysis.weakHint(row.weak_field ?? "")}
+            >
+              {t.analysis.weakSlots(row.weak_slots)}
+            </span>
+          )}
+        </td>
+        <td className="px-3 py-2 text-right">
+          {row.difficulty ? (
+            <span className="text-xs font-medium">{row.difficulty}</span>
+          ) : (
+            <span className="text-xs text-neutral-400">{t.analysis.difficultyPending}</span>
+          )}
+        </td>
+      </tr>
+      {open && (
+        <tr className="border-b dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/40">
+          <td colSpan={span} className="px-3 py-2">
+            <div className="text-[11px] text-neutral-500 mb-1">{t.analysis.rawTitle}</div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-left text-neutral-500">
+                    <th className="px-2 py-1 font-medium">#</th>
+                    <th className="px-2 py-1 font-medium">URL</th>
+                    {metrics.map(m => (
+                      <th key={m} className="px-2 py-1 font-medium text-right">
+                        {METRIC_LABELS[m] ?? m}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {row.urls.map((u, i) => (
+                    <tr key={u.url} className="border-t dark:border-neutral-800">
+                      <td className="px-2 py-1 text-neutral-400 font-mono">{i + 1}</td>
+                      <td className="px-2 py-1">
+                        <a
+                          href={u.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-blue-700 dark:text-blue-300 hover:underline break-all font-mono"
+                        >
+                          {u.url}
+                        </a>
+                        {!u.analysed && (
+                          <span className="ml-2 text-amber-700 dark:text-amber-300">
+                            {t.analysis.notAnalysed}
+                          </span>
+                        )}
+                        {u.error && (
+                          <span className="ml-2 text-red-600 dark:text-red-400">
+                            {t.analysis.fetchFailed}
+                          </span>
+                        )}
+                      </td>
+                      {metrics.map(m => (
+                        <td key={m} className="px-2 py-1 text-right font-mono tabular-nums">
+                          {formatMetric(u.metrics[m])}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }

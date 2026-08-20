@@ -116,8 +116,16 @@ const messagesEn = {
     empty: "No analysis yet. Run this job to collect Ahrefs metrics.",
     units: (n: number) => `${n.toLocaleString()} Ahrefs units`,
     partialHint: "Some URLs in this SERP could not be analysed",
+    cellHint: (mean: string, min: string, max: string) =>
+      `avg ${mean} · min ${min} · max ${max}`,
+    weakSlots: (n: number) => `· ${n} weak`,
+    weakHint: (field: string) =>
+      `Results with ${field === "url_rating" ? "UR" : "DR"} under 20 — the realistically displaceable slots`,
+    rawTitle: "Raw Ahrefs data for every URL in this SERP",
+    notAnalysed: "not analysed",
+    fetchFailed: "fetch failed",
     footnote:
-      "Median, not average — one very strong result in a SERP would drag an average away from what the typical competitor looks like. URLs are analysed in Ahrefs exact-URL mode, which is what makes UR meaningful.",
+      "Headline figure is the median; hover a cell for average / min / max. Median resists a single very strong result skewing the picture, but ranking top-10 means beating the weakest reachable result — so watch the “weak” count too. URLs are analysed in Ahrefs exact-URL mode, which is what makes UR per-page rather than per-domain. Click a keyword to see the raw per-URL numbers.",
   },
   jobForm: {
     mode: "Mode",
@@ -131,8 +139,10 @@ const messagesEn = {
       "Which metrics to pull for each result URL. Analysed in exact-URL mode, so UR is per page rather than per domain.",
     ahrefsNoKey:
       "⚠ No Ahrefs API key configured — analyzer runs will fail. Add one in Settings → Ahrefs.",
-    ahrefsUnitsEstimate: (urls: number, metrics: number, units: number) =>
-      `≈ ${urls.toLocaleString()} URLs × ${metrics} metric(s) ≈ ${units.toLocaleString()} Ahrefs units per run (duplicate URLs are fetched once, so the real figure is usually lower).`,
+    ahrefsUnitsEstimate: (urls: number, perUrl: number, units: number) =>
+      `≈ ${urls.toLocaleString()} URLs × ${perUrl} units each ≈ ${units.toLocaleString()} Ahrefs units per run. Upper bound — duplicate URLs are fetched once and cached lookups bill less.`,
+    ahrefsUnderFloor: (base: number) =>
+      `Every request costs at least ${base} units, and this run is under that floor — additional metrics here are effectively free.`,
     name: "Name",
     namePlaceholder: "e.g. Brand monitoring — KZ/RU",
     keywords: "Keywords",
@@ -604,8 +614,16 @@ const messagesRu: Messages = {
     empty: "Анализа пока нет. Запустите задачу, чтобы собрать метрики Ahrefs.",
     units: (n: number) => `${n.toLocaleString()} юнитов Ahrefs`,
     partialHint: "Часть URL в этой выдаче не удалось проанализировать",
+    cellHint: (mean: string, min: string, max: string) =>
+      `среднее ${mean} · мин ${min} · макс ${max}`,
+    weakSlots: (n: number) => `· ${n} слабых`,
+    weakHint: (field: string) =>
+      `Результаты с ${field === "url_rating" ? "UR" : "DR"} ниже 20 — реально вытесняемые позиции`,
+    rawTitle: "Сырые данные Ahrefs по каждому URL этой выдачи",
+    notAnalysed: "не проанализирован",
+    fetchFailed: "ошибка запроса",
     footnote:
-      "Медиана, а не среднее — один очень сильный результат в выдаче сместил бы среднее и исказил картину по типичному конкуренту. URL анализируются в режиме точного URL (exact), поэтому UR относится к странице, а не к домену.",
+      "Основное число — медиана; наведите на ячейку, чтобы увидеть среднее / мин / макс. Медиана устойчива к одному очень сильному результату, но чтобы попасть в топ-10, нужно обойти самый слабый достижимый результат — поэтому смотрите и на счётчик «слабых». URL анализируются в режиме точного URL (exact), поэтому UR относится к странице, а не к домену. Кликните по ключевому слову, чтобы увидеть сырые данные по каждому URL.",
   },
   jobForm: {
     mode: "Режим",
@@ -619,8 +637,10 @@ const messagesRu: Messages = {
       "Какие метрики запрашивать для каждого URL из выдачи. Анализ идёт в режиме точного URL, поэтому UR считается по странице, а не по домену.",
     ahrefsNoKey:
       "⚠ API-ключ Ahrefs не задан — запуски в режиме анализатора завершатся ошибкой. Добавьте ключ в «Настройки → Ahrefs».",
-    ahrefsUnitsEstimate: (urls: number, metrics: number, units: number) =>
-      `≈ ${urls.toLocaleString()} URL × ${metrics} метрик ≈ ${units.toLocaleString()} юнитов Ahrefs за прогон (дубликаты URL запрашиваются один раз, поэтому фактически обычно меньше).`,
+    ahrefsUnitsEstimate: (urls: number, perUrl: number, units: number) =>
+      `≈ ${urls.toLocaleString()} URL × ${perUrl} юнитов каждый ≈ ${units.toLocaleString()} юнитов Ahrefs за прогон. Это верхняя оценка — дубликаты URL запрашиваются один раз, а кэшированные ответы стоят дешевле.`,
+    ahrefsUnderFloor: (base: number) =>
+      `Любой запрос стоит минимум ${base} юнитов, а этот прогон в этот минимум укладывается — дополнительные метрики здесь фактически бесплатны.`,
     name: "Название",
     namePlaceholder: "напр. Мониторинг бренда — KZ/RU",
     keywords: "Ключевые слова",

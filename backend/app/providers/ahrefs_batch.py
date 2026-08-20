@@ -63,13 +63,56 @@ def canonical_metrics(requested: list[str] | None) -> list[str]:
     return out or list(DEFAULT_METRICS)
 
 
-def estimate_units(url_count: int, metric_count: int) -> int:
-    """Rough Ahrefs API unit cost: ~1 unit per target per selected field.
+# Per-field unit cost. Ahrefs prices columns differently: most cost 1 unit per
+# row, but organic-search metrics are far more expensive. Values below were
+# derived empirically (2026-08-20) and match observed billing exactly — a run of
+# 6 URLs x [url_rating, domain_rating, backlinks_dofollow, refdomains_dofollow,
+# org_keywords, org_traffic] billed 114 units == 6 x 19.
+FIELD_UNIT_COST: dict[str, int] = {
+    "url_rating": 1,
+    "domain_rating": 1,
+    "backlinks": 1,
+    "backlinks_dofollow": 1,
+    "refdomains": 1,
+    "refdomains_dofollow": 1,
+    "ahrefs_rank": 1,
+    "org_keywords": 5,
+    "org_traffic": 10,
+}
 
-    Approximate on purpose — Ahrefs returns the authoritative figure in the
-    `x-api-units-cost-total-actual` response header, which the runner records.
+# Every request costs at least this, regardless of how little you ask for.
+# Measured: a 1-target/1-field call reports x-api-units-cost-total = 50, and a
+# 3-target/3-field call bills 50. Billing behaves as max(floor, data cost) —
+# NOT floor + data — since the 6x19=114 run billed exactly 114, not 164.
+BASE_REQUEST_UNITS = 50
+
+
+def per_url_units(metrics: list[str]) -> int:
+    """Unit cost of one URL for the given field selection."""
+    return sum(FIELD_UNIT_COST.get(m, 1) for m in metrics)
+
+
+def estimate_units(url_count: int, metrics: list[str]) -> int:
+    """Estimated Ahrefs units for a whole analyzer run.
+
+    Model: per request, billed = max(BASE_REQUEST_UNITS, rows x per-row cost);
+    a run is ceil(urls / BATCH_SIZE) requests. Ahrefs may bill LESS when it
+    serves cached data (observed: repeat lookups bill 0), so treat this as an
+    upper bound. The authoritative figure comes back in
+    `x-api-units-cost-total-actual`, which the runner records per run.
     """
-    return max(0, url_count) * max(0, metric_count)
+    urls = max(0, url_count)
+    if not urls or not metrics:
+        return 0
+    per_row = per_url_units(metrics)
+    chunks = (urls + BATCH_SIZE - 1) // BATCH_SIZE
+    total = 0
+    remaining = urls
+    for _ in range(chunks):
+        rows = min(remaining, BATCH_SIZE)
+        remaining -= rows
+        total += max(BASE_REQUEST_UNITS, rows * per_row)
+    return total
 
 
 @dataclass

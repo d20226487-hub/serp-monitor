@@ -32,6 +32,11 @@ def get_results(
     return q.order_by(Result.keyword, Result.engine, Result.device, Result.position).all()
 
 
+# A result at or below this UR/DR is treated as a "weak slot" — a realistically
+# displaceable position. 20 is a rule of thumb, not an Ahrefs constant.
+WEAK_THRESHOLD = 20
+
+
 def _median(values: list[float]) -> float | None:
     """Median of the present values, or None when nothing was measurable.
 
@@ -88,16 +93,54 @@ def get_analysis(run_id: int, db: Session = Depends(get_db)):
     for kw, urls in per_keyword.items():
         uniq = list(dict.fromkeys(u for u in urls if u))
         medians: dict[str, float | None] = {}
+        means: dict[str, float | None] = {}
+        mins: dict[str, float | None] = {}
+        maxes: dict[str, float | None] = {}
         for field in selected:
-            medians[field] = _median(
-                [(by_url.get(u) or {}).get(field) for u in uniq if u in by_url]
+            vals = [(by_url.get(u) or {}).get(field) for u in uniq if u in by_url]
+            present = [v for v in vals if v is not None]
+            medians[field] = _median(vals)
+            means[field] = (sum(present) / len(present)) if present else None
+            mins[field] = min(present) if present else None
+            maxes[field] = max(present) if present else None
+
+        # "Weak slots": how many results in this SERP look displaceable. Ranking
+        # top-10 means beating the WEAKEST result you can reach, not the median
+        # — a SERP whose median DR is 60 but which contains three DR<20 pages is
+        # far more winnable than the median alone suggests.
+        weak_field = "url_rating" if "url_rating" in selected else (
+            "domain_rating" if "domain_rating" in selected else None
+        )
+        weak_slots = None
+        if weak_field:
+            weak_slots = sum(
+                1 for u in uniq
+                if u in by_url
+                and ((by_url.get(u) or {}).get(weak_field) or 0) < WEAK_THRESHOLD
             )
+
         analysed = sum(1 for u in uniq if u in by_url and u not in errored)
         rows.append({
             "keyword": kw,
             "urls_total": len(uniq),
             "urls_analysed": analysed,
             "medians": medians,
+            "means": means,
+            "mins": mins,
+            "maxes": maxes,
+            "weak_slots": weak_slots,
+            "weak_field": weak_field,
+            # Raw per-URL detail, for manual verification of what Ahrefs
+            # actually returned. Ordered by SERP position.
+            "urls": [
+                {
+                    "url": u,
+                    "metrics": by_url.get(u) or {},
+                    "error": (u in errored),
+                    "analysed": u in by_url,
+                }
+                for u in uniq
+            ],
             # Placeholder for phase 2 — the AI difficulty verdict.
             "difficulty": None,
         })

@@ -26,9 +26,11 @@ from ..app_settings import (
 )
 from ..providers import ProviderConfigError, ProviderError, get_provider
 from ..providers.ahrefs_batch import (
+    BASE_REQUEST_UNITS,
     BATCH_METRICS,
     BATCH_SIZE,
     DEFAULT_METRICS,
+    FIELD_UNIT_COST,
     verify_api_key,
 )
 from ..scheduler import scheduler_timezone
@@ -137,10 +139,12 @@ def get_ahrefs():
     return {
         **ahrefs_status(),
         "metrics": [
-            {"id": k, "label": v} for k, v in BATCH_METRICS.items()
+            {"id": k, "label": v, "units": FIELD_UNIT_COST.get(k, 1)}
+            for k, v in BATCH_METRICS.items()
         ],
         "default_metrics": DEFAULT_METRICS,
         "batch_size": BATCH_SIZE,
+        "base_request_units": BASE_REQUEST_UNITS,
     }
 
 

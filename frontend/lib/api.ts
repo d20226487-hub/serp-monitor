@@ -45,9 +45,18 @@ export type AhrefsSettings = {
   configured: boolean;
   last4: string;
   length: number;
-  metrics: { id: string; label: string }[];
+  /** `units` is the per-row unit cost of that field. */
+  metrics: { id: string; label: string; units: number }[];
   default_metrics: string[];
   batch_size: number;
+  base_request_units: number;
+};
+
+export type AnalysisUrl = {
+  url: string;
+  metrics: Record<string, number | null>;
+  error: boolean;
+  analysed: boolean;
 };
 
 export type AnalysisRow = {
@@ -55,6 +64,13 @@ export type AnalysisRow = {
   urls_total: number;
   urls_analysed: number;
   medians: Record<string, number | null>;
+  means: Record<string, number | null>;
+  mins: Record<string, number | null>;
+  maxes: Record<string, number | null>;
+  /** Results below the weak threshold — realistically displaceable slots. */
+  weak_slots: number | null;
+  weak_field: string | null;
+  urls: AnalysisUrl[];
   /** Phase 2: AI difficulty verdict. Always null for now. */
   difficulty: string | null;
 };

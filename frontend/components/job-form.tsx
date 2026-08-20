@@ -106,6 +106,26 @@ export function JobForm({ initial, onSaved }: Props) {
     void eng;
   }, [keywords, engines, devices, locations, languages, googleDomains]);
 
+  // Ahrefs cost model, mirroring backend providers/ahrefs_batch.estimate_units:
+  // billed = max(base, rows x sum(field costs)) per <=100-URL request.
+  // Upper bound — duplicate URLs are fetched once and cached lookups bill less.
+  const { ahrefsUrlCount, perUrlUnits, ahrefsUnits } = useMemo(() => {
+    const chosen = ahrefsMetrics.length ? ahrefsMetrics : (ahrefs?.default_metrics ?? []);
+    const unitOf = new Map((ahrefs?.metrics ?? []).map(m => [m.id, m.units]));
+    const perUrl = chosen.reduce((n, id) => n + (unitOf.get(id) ?? 1), 0);
+    const urls = (estimate?.total ?? 0) * Math.max(1, topN);
+    const base = ahrefs?.base_request_units ?? 50;
+    const size = ahrefs?.batch_size ?? 100;
+    let total = 0;
+    let remaining = urls;
+    while (remaining > 0) {
+      const rows = Math.min(remaining, size);
+      remaining -= rows;
+      total += Math.max(base, rows * perUrl);
+    }
+    return { ahrefsUrlCount: urls, perUrlUnits: perUrl, ahrefsUnits: total };
+  }, [ahrefsMetrics, ahrefs, estimate, topN]);
+
   const buildPayload = (): Partial<Job> => ({
     name: name.trim(),
     keywords,
@@ -240,19 +260,26 @@ export function JobForm({ initial, onSaved }: Props) {
                   }`}
                 >
                   {m.label}
+                  {/* Field prices differ ~10x, so show them inline: picking
+                      org_traffic is a very different decision from picking DR. */}
+                  <span className={`ml-1.5 ${on ? "opacity-60" : "text-neutral-400"}`}>
+                    {m.units}u
+                  </span>
                 </button>
               );
             })}
           </div>
-          {/* Ahrefs bills ~1 unit per URL per selected metric, so make the
-              multiplier visible before the run rather than after the bill. */}
           <div className="text-xs text-neutral-500">
-            {t.jobForm.ahrefsUnitsEstimate(
-              (estimate?.total ?? 0) * Math.max(1, topN) ,
-              ahrefsMetrics.length || 2,
-              (estimate?.total ?? 0) * Math.max(1, topN) * (ahrefsMetrics.length || 2)
-            )}
+            {t.jobForm.ahrefsUnitsEstimate(ahrefsUrlCount, perUrlUnits, ahrefsUnits)}
           </div>
+          {/* Below the floor, extra metrics are literally free — worth saying,
+              since the opposite (paying 10u for a field returning zeros) is the
+              trap this whole estimate exists to prevent. */}
+          {ahrefsUrlCount > 0 && ahrefsUnits === (ahrefs?.base_request_units ?? 50) && (
+            <div className="text-xs text-emerald-700 dark:text-emerald-300">
+              {t.jobForm.ahrefsUnderFloor(ahrefs?.base_request_units ?? 50)}
+            </div>
+          )}
         </div>
       )}
 
