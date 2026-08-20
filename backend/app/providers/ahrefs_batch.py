@@ -63,11 +63,16 @@ def canonical_metrics(requested: list[str] | None) -> list[str]:
     return out or list(DEFAULT_METRICS)
 
 
-# Per-field unit cost. Ahrefs prices columns differently: most cost 1 unit per
-# row, but organic-search metrics are far more expensive. Values below were
-# derived empirically (2026-08-20) and match observed billing exactly — a run of
-# 6 URLs x [url_rating, domain_rating, backlinks_dofollow, refdomains_dofollow,
-# org_keywords, org_traffic] billed 114 units == 6 x 19.
+# Per-field unit cost. Ahrefs prices columns differently: link metrics are cheap,
+# org_traffic is dramatically not. Derived empirically and consistent with TWO
+# independent observations:
+#   6 rows x [url_rating, domain_rating, backlinks_dofollow, refdomains_dofollow,
+#             org_keywords, org_traffic]              -> 114 == 6 x 19
+#   4 rows x [url_rating, domain_rating, refdomains,
+#             backlinks, org_traffic]                 ->  72 == 4 x 18
+# The second observation is what pins org_traffic: dropping org_keywords cost
+# only 1 unit/row, so the expensive field is org_traffic alone (14), not a
+# 10/5 split across the two as first assumed.
 FIELD_UNIT_COST: dict[str, int] = {
     "url_rating": 1,
     "domain_rating": 1,
@@ -76,8 +81,8 @@ FIELD_UNIT_COST: dict[str, int] = {
     "refdomains": 1,
     "refdomains_dofollow": 1,
     "ahrefs_rank": 1,
-    "org_keywords": 5,
-    "org_traffic": 10,
+    "org_keywords": 1,
+    "org_traffic": 14,
 }
 
 # Every request costs at least this, regardless of how little you ask for.
