@@ -68,6 +68,10 @@ def _migrate_sqlite_columns() -> None:
         # (table, column_name, ddl)
         ("saved_locations", "yandex_lr", "INTEGER"),
         ("jobs", "provider", "VARCHAR(20) NOT NULL DEFAULT 'serpapi'"),
+        # Per-run spend. NULL on runs that predate cost tracking — the UI shows
+        # "—" for those rather than pretending they were free.
+        ("job_runs", "cost", "FLOAT"),
+        ("job_runs", "cost_source", "VARCHAR(16)"),
     ]
     with engine.begin() as conn:
         for table, column, ddl in additions:

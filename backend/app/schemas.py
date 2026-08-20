@@ -62,6 +62,8 @@ class JobRunOut(BaseModel):
     queries_failed: int
     error: str | None
     triggered_by: str
+    cost: float | None = None
+    cost_source: str | None = None  # "actual" | "estimate" | None (pre-tracking)
 
 
 class ResultOut(BaseModel):

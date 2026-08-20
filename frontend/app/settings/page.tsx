@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   api,
   ProviderCredsInput,
+  ProviderRates,
   ProviderStatus,
   SavedLocation,
   SavedLocationInput,
@@ -128,6 +129,9 @@ export default function SettingsPage() {
 
       {/* Providers */}
       <ProvidersSection onError={setErr} />
+
+      {/* Cost rates */}
+      <RatesSection onError={setErr} />
 
       {/* Add one */}
       <section className="border rounded-md p-4 dark:border-neutral-700 space-y-3">
@@ -314,6 +318,86 @@ function UuleCell({ canonicalName }: { canonicalName: string }) {
         {copied ? <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3 h-3" />}
       </button>
     </div>
+  );
+}
+
+
+/* ------------- Cost rates section ------------- */
+
+const RATE_PROVIDER_NAMES: Record<string, string> = {
+  serpapi: "SerpAPI",
+  brightdata: "Bright Data",
+  oxylabs: "Oxylabs",
+  dataforseo: "DataForSEO",
+};
+
+function RatesSection({ onError }: { onError: (msg: string | null) => void }) {
+  const { t } = useT();
+  const [data, setData] = useState<ProviderRates | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api.getRates().then(setData).catch((e) => onError(e?.message ?? "Failed to load rates"));
+  }, []);
+
+  async function save() {
+    setBusy(true); setMsg(null); onError(null);
+    try {
+      // Only send fields the user actually touched; "" resets to the default.
+      const next = await api.setRates(drafts);
+      setData(next);
+      setDrafts({});
+      setMsg(t.common.saved);
+    } catch (e: any) {
+      onError(e?.message ?? "Save failed");
+    } finally { setBusy(false); }
+  }
+
+  if (!data) return null;
+
+  return (
+    <section className="border rounded-md p-4 dark:border-neutral-700 space-y-3">
+      <h2 className="font-medium">{t.settings.rates.title}</h2>
+      <p className="text-xs text-neutral-500">{t.settings.rates.help}</p>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {Object.keys(data.defaults).map((p) => {
+          const current = data.rates[p];
+          const isDefault = current === data.defaults[p];
+          return (
+            <div key={p} className="space-y-1">
+              <label className="text-xs font-medium">{RATE_PROVIDER_NAMES[p] ?? p}</label>
+              <div className="flex items-center gap-1">
+                <span className="text-neutral-500 text-sm">$</span>
+                <input
+                  type="number"
+                  step="0.0001"
+                  min="0"
+                  value={drafts[p] ?? String(current ?? "")}
+                  onChange={(e) => setDrafts({ ...drafts, [p]: e.target.value })}
+                  className="w-full px-2 py-1.5 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700 text-sm font-mono"
+                />
+              </div>
+              <div className="text-[11px] text-neutral-500">
+                {isDefault
+                  ? t.settings.rates.usingDefault
+                  : t.settings.rates.defaultIs(String(data.defaults[p]))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex items-center gap-3">
+        <button
+          disabled={busy || Object.keys(drafts).length === 0}
+          onClick={save}
+          className="px-4 py-2 rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm disabled:opacity-50"
+        >{t.common.save}</button>
+        {msg && <span className="text-sm text-emerald-700 dark:text-emerald-300">{msg}</span>}
+      </div>
+      <p className="text-[11px] text-neutral-500">{t.settings.rates.footnote}</p>
+    </section>
   );
 }
 

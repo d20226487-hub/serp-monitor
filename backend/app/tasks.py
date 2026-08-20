@@ -10,6 +10,7 @@ from typing import Iterable
 from sqlalchemy.orm import Session
 
 from ._redact import redact
+from .app_settings import get_provider_rate
 from .config import settings
 from .db import SessionLocal
 from .models import Job, JobRun, Result, SavedLocation, utcnow
@@ -209,6 +210,17 @@ async def run_job_async(run_id: int) -> None:
                     db.commit()
 
             await asyncio.gather(*(worker(v) for v in variants))
+
+        # Record spend for this run. Providers that report real cost (DataForSEO)
+        # win over the configured rate; everyone else gets queries_done × rate.
+        # We store the resulting number rather than computing it at read time so
+        # that editing a rate later can't silently rewrite historical spend.
+        if getattr(provider, "reports_cost", False):
+            run.cost = round(provider.reported_cost, 6)
+            run.cost_source = "actual"
+        else:
+            run.cost = round(run.queries_done * get_provider_rate(provider_name), 6)
+            run.cost_source = "estimate"
 
         run.status = "done" if run.queries_failed == 0 else (
             "failed" if run.queries_done == 0 else "done"

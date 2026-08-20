@@ -122,6 +122,9 @@ def _parse_organic(payload: dict, top_n: int) -> list[ResultRow]:
 
 class DataForSEOProvider(SerpProvider):
     name = "dataforseo"
+    # DataForSEO returns the exact charge on every response, so runs get real
+    # spend recorded rather than an estimate from the configured rate.
+    reports_cost = True
 
     def __init__(self, **kw):
         super().__init__(**kw)
@@ -165,6 +168,23 @@ class DataForSEOProvider(SerpProvider):
             )
         return payload
 
+    def _accumulate_cost(self, payload: dict) -> None:
+        """Add this response's charge to the running total.
+
+        DataForSEO reports `cost` on the envelope AND on each task. We prefer
+        the task-level figure (what this specific search cost) and fall back to
+        the envelope. Never raises — a cost-accounting hiccup must not fail an
+        otherwise successful search.
+        """
+        try:
+            tasks = payload.get("tasks") or []
+            task_cost = (tasks[0] or {}).get("cost") if tasks else None
+            cost = task_cost if task_cost is not None else payload.get("cost")
+            if isinstance(cost, (int, float)):
+                self.reported_cost += float(cost)
+        except Exception:  # noqa: BLE001 - accounting is best-effort
+            pass
+
     async def _post(self, url: str, body: list[dict]) -> dict:
         last: Exception | None = None
         for attempt in range(3):
@@ -186,7 +206,9 @@ class DataForSEOProvider(SerpProvider):
                         f"upstream {r.status_code}", request=r.request, response=r
                     )
                 r.raise_for_status()
-                return self._check_status(r.json())
+                payload = self._check_status(r.json())
+                self._accumulate_cost(payload)
+                return payload
             except (ProviderConfigError, ProviderError):
                 raise  # our own permanent failures — never retry
             except (httpx.HTTPError, httpx.TimeoutException) as e:

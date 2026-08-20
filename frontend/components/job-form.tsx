@@ -1,9 +1,10 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, Job, LocationRef, SavedLocation } from "@/lib/api";
+import { api, Job, LocationRef, ProviderRates, SavedLocation } from "@/lib/api";
 import { MultiCombobox, Option } from "./multi-combobox";
 import { useT } from "@/lib/i18n";
+import { formatUsd } from "@/lib/cost";
 
 type Props = {
   initial?: Job;
@@ -57,6 +58,8 @@ export function JobForm({ initial, onSaved }: Props) {
   // Used by the "Effective targeting" panel to look up yandex_lr / target_type
   // for locations the user has selected (LocationRef alone doesn't carry yandex_lr).
   const [savedByCanonical, setSavedByCanonical] = useState<Map<string, SavedLocation>>(new Map());
+  // Per-provider $/search, used for the live cost estimate below the form.
+  const [rates, setRates] = useState<ProviderRates | null>(null);
 
   useEffect(() => {
     api.listLanguages().then(rows =>
@@ -64,6 +67,7 @@ export function JobForm({ initial, onSaved }: Props) {
     api.listGoogleDomains().then(rows =>
       setGdOpts(rows.map(r => ({ value: r.domain, label: r.domain, sub: r.country }))));
     api.getSchedulerStatus().then(s => setSchedTz(s.timezone)).catch(() => {});
+    api.getRates().then(setRates).catch(() => {});
     api.listSavedLocations().then(rows => {
       setSavedByCanonical(new Map(rows.map(r => [r.canonical_name, r])));
     }).catch(() => {});
@@ -327,12 +331,27 @@ export function JobForm({ initial, onSaved }: Props) {
       </div>
 
       <div className="border rounded-md p-4 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900/50">
-        <div className="text-sm font-medium mb-1">{t.jobForm.estimateTitle}</div>
-        <div className="text-2xl font-semibold">{estimate?.total ?? 0}</div>
-        <div className="text-xs text-neutral-500 mt-1">
-          {t.jobForm.estimateBreakdown(estimate?.breakdown.google ?? 0, estimate?.breakdown.yandex ?? 0)}
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div>
+            <div className="text-sm font-medium mb-1">{t.jobForm.estimateTitle}</div>
+            <div className="text-2xl font-semibold">{estimate?.total ?? 0}</div>
+            <div className="text-xs text-neutral-500 mt-1">
+              {t.jobForm.estimateBreakdown(estimate?.breakdown.google ?? 0, estimate?.breakdown.yandex ?? 0)}
+            </div>
+          </div>
+          <div>
+            <div className="text-sm font-medium mb-1">{t.jobForm.estimateCostTitle}</div>
+            <div className="text-2xl font-semibold">
+              {formatUsd((estimate?.total ?? 0) * (rates?.rates[provider] ?? 0))}
+            </div>
+            <div className="text-xs text-neutral-500 mt-1">
+              {t.jobForm.estimateRate(formatUsd(rates?.rates[provider] ?? 0))}
+              {" · "}
+              <a href="/settings" className="underline">{t.jobForm.estimateEditRate}</a>
+            </div>
+          </div>
         </div>
-        <div className="text-xs text-neutral-500 mt-1">
+        <div className="text-xs text-neutral-500 mt-3">
           {t.jobForm.estimateApprox}
         </div>
       </div>

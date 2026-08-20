@@ -48,6 +48,15 @@ export type JobRun = {
   queries_failed: number;
   error: string | null;
   triggered_by: "manual" | "schedule";
+  /** USD spent on this run. null on runs that predate cost tracking. */
+  cost: number | null;
+  /** "actual" = reported by the provider, "estimate" = queries × configured rate. */
+  cost_source: "actual" | "estimate" | null;
+};
+
+export type ProviderRates = {
+  rates: Record<string, number>;
+  defaults: Record<string, number>;
 };
 
 export type Result = {
@@ -125,6 +134,13 @@ export const api = {
     req<ScheduleInfo>(`/jobs/${jobId}/schedule-info`),
   getSchedulerStatus: () =>
     req<{ timezone: string }>("/settings/scheduler"),
+
+  // Per-provider cost rates ($/search)
+  getRates: () => req<ProviderRates>("/settings/rates"),
+  setRates: (rates: Record<string, number | string | null>) =>
+    req<ProviderRates>("/settings/rates", {
+      method: "PUT", body: JSON.stringify({ rates }),
+    }),
 
   // Provider credentials (Bright Data, Oxylabs, SerpAPI)
   listProviderStatuses: () =>

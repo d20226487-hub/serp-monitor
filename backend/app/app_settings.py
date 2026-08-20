@@ -135,6 +135,62 @@ def clear_provider_creds(provider: str) -> None:
     set_provider_creds(provider, {f: None for f in PROVIDER_FIELDS.get(provider, [])})
 
 
+# --- Per-provider cost rates (USD per search) --------------------------------
+#
+# Rates are plan-specific — SerpAPI's per-search price in particular swings a
+# lot by tier — so these are user-editable in Settings. The defaults below are
+# reasonable list prices, NOT a promise about the user's actual bill.
+_RATE_KEY_PREFIX = "rate_"
+
+DEFAULT_RATES: dict[str, float] = {
+    "serpapi": 0.010,      # ~$50 / 5,000 searches on common tiers
+    "brightdata": 0.0015,  # SERP API list price ~$1.50 / 1,000
+    "oxylabs": 0.002,      # ~$2 / 1,000 on entry tiers
+    "dataforseo": 0.002,   # Live mode list price
+}
+
+
+def get_provider_rates() -> dict[str, float]:
+    """Effective $/search per provider: DB override if set, else the default."""
+    db = SessionLocal()
+    try:
+        out: dict[str, float] = {}
+        for provider, default in DEFAULT_RATES.items():
+            raw = _get(db, f"{_RATE_KEY_PREFIX}{provider}")
+            try:
+                # Guard against a malformed stored value silently zeroing costs.
+                out[provider] = float(raw) if raw is not None else default
+            except (TypeError, ValueError):
+                out[provider] = default
+        return out
+    finally:
+        db.close()
+
+
+def get_provider_rate(provider: str) -> float:
+    return get_provider_rates().get(provider, 0.0)
+
+
+def set_provider_rates(values: dict[str, float | str | None]) -> None:
+    """Persist rate overrides. Passing None/"" for a provider resets it to the
+    built-in default (we delete the row rather than storing 0)."""
+    db = SessionLocal()
+    try:
+        for provider, v in values.items():
+            if provider not in DEFAULT_RATES:
+                continue
+            key = f"{_RATE_KEY_PREFIX}{provider}"
+            if v is None or (isinstance(v, str) and not v.strip()):
+                _set(db, key, None)
+                continue
+            rate = float(v)
+            if rate < 0:
+                raise ValueError(f"rate for {provider} must be >= 0")
+            _set(db, key, str(rate))
+    finally:
+        db.close()
+
+
 def provider_status(provider: str) -> dict:
     """Masked status — never echo full secrets back to the UI."""
     fields = PROVIDER_FIELDS.get(provider, [])

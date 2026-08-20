@@ -6,6 +6,7 @@ import { buildBrowserUrl, variantLabel } from "@/lib/browser-urls";
 import { ExternalLink } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import { RunOverview } from "@/components/run-overview";
+import { formatUsd } from "@/lib/cost";
 
 // One color per axis. Keyword wins the header; engine/device/location/language
 // each get a distinctly-colored chip in the variant bar so you can scan a long
@@ -196,6 +197,17 @@ export default function RunPage() {
         <span className="text-xs text-neutral-500">
           {new Date(run.started_at).toLocaleString()} · {statusLabels[run.status] ?? run.status} · {t.run.headerStats(run.queries_done, run.queries_total)}
           {run.queries_failed > 0 && <span className="text-red-600 dark:text-red-400"> · {t.run.failed(run.queries_failed)}</span>}
+          {run.cost != null && (
+            <>
+              {" · "}
+              <span title={run.cost_source === "actual" ? t.cost.actualHint : t.cost.estimateHint}>
+                {formatUsd(run.cost)}
+                {run.cost_source === "estimate" && (
+                  <span className="text-neutral-400"> ({t.cost.estimated})</span>
+                )}
+              </span>
+            </>
+          )}
         </span>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <label className="text-sm">{t.run.exportTop}

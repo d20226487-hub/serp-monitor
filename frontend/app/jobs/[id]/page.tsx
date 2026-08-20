@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { api, Job, JobRun, ScheduleInfo } from "@/lib/api";
 import { JobForm } from "@/components/job-form";
 import { useT } from "@/lib/i18n";
+import { formatUsd, sumCost, hasAnyCost } from "@/lib/cost";
 
 export default function JobPage() {
   const { t } = useT();
@@ -78,7 +79,16 @@ export default function JobPage() {
         <ScheduleField job={job} info={schedInfo} />
       </div>
 
-      <h2 className="text-lg font-semibold pt-4">{t.jobs.runs}</h2>
+      <div className="flex flex-wrap items-baseline gap-3 pt-4">
+        <h2 className="text-lg font-semibold">{t.jobs.runs}</h2>
+        {/* Lifetime spend across every run of this job. Hidden entirely when no
+            run has a recorded cost, so legacy runs don't read as "$0 spent". */}
+        {hasAnyCost(runs) && (
+          <span className="text-sm text-neutral-500">
+            {t.jobs.totalCost(formatUsd(sumCost(runs)), runs.filter(r => r.cost != null).length)}
+          </span>
+        )}
+      </div>
       <div className="space-y-2">
         {runs.length === 0 && <div className="text-sm text-neutral-500">{t.jobs.noRuns}</div>}
         {runs.map(r => (
@@ -91,6 +101,12 @@ export default function JobPage() {
               {" "}{t.jobs.runEntry.progress(r.queries_done, r.queries_total)}
               {r.queries_failed > 0 && <span className="text-red-600 dark:text-red-400"> · {t.jobs.runEntry.failed(r.queries_failed)}</span>}
               {" · "}{r.triggered_by}
+              {r.cost != null && (
+                <span title={r.cost_source === "actual" ? t.cost.actualHint : t.cost.estimateHint}>
+                  {" · "}{formatUsd(r.cost)}
+                  {r.cost_source === "estimate" && <span className="text-neutral-400">*</span>}
+                </span>
+              )}
             </div>
             <Link href={`/runs/${r.id}`} className="text-sm px-2 py-1 rounded border dark:border-neutral-700">{t.common.open}</Link>
           </div>

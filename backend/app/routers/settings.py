@@ -5,12 +5,15 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ..app_settings import (
+    DEFAULT_RATES,
     PROVIDER_FIELDS,
     clear_provider_creds,
     get_provider_creds,
+    get_provider_rates,
     provider_status,
     serpapi_key_status,
     set_provider_creds,
+    set_provider_rates,
     set_serpapi_key,
 )
 from ..providers import ProviderConfigError, ProviderError, get_provider
@@ -105,6 +108,33 @@ async def test_provider(provider: str):
         raise HTTPException(401, str(e))
     except ProviderError as e:
         raise HTTPException(502, str(e))
+
+
+# --- Cost rates ---------------------------------------------------------------
+
+class RatesIn(BaseModel):
+    # Per-provider USD/search. Omit a provider to leave it unchanged; send null
+    # or "" to reset it back to the built-in default.
+    rates: dict[str, float | str | None]
+
+
+@router.get("/rates")
+def get_rates():
+    """Effective $/search per provider, plus the built-in defaults so the UI can
+    show what a field would fall back to."""
+    return {"rates": get_provider_rates(), "defaults": DEFAULT_RATES}
+
+
+@router.put("/rates")
+def update_rates(payload: RatesIn):
+    unknown = [p for p in payload.rates if p not in DEFAULT_RATES]
+    if unknown:
+        raise HTTPException(400, f"unknown provider(s): {', '.join(unknown)}")
+    try:
+        set_provider_rates(payload.rates)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"rates": get_provider_rates(), "defaults": DEFAULT_RATES}
 
 
 # --- Scheduler ---------------------------------------------------------------

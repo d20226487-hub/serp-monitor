@@ -42,9 +42,18 @@ class SerpProvider(ABC):
 
     name: str = "abstract"
 
+    #: True when the upstream reports real per-request cost, so the job runner
+    #: can record actual spend instead of estimating from a configured rate.
+    #: Only DataForSEO does today; SerpAPI/Bright Data/Oxylabs return no price.
+    reports_cost: bool = False
+
     def __init__(self, *, concurrency: int | None = None, timeout: float = 60.0):
         self._sem = asyncio.Semaphore(concurrency or settings.serpapi_concurrency)
         self._timeout = timeout
+        #: Running total (USD) accumulated across every call this instance makes.
+        #: One provider instance serves one job run, so this ends up being the
+        #: run's true cost. Incremented only by providers with reports_cost=True.
+        self.reported_cost: float = 0.0
 
     async def __aenter__(self) -> "SerpProvider":
         return self

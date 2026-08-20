@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -49,6 +49,16 @@ class JobRun(Base):
     queries_failed: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     triggered_by: Mapped[str] = mapped_column(String(20), default="manual")  # manual|schedule
+
+    # Money spent on this run, in USD.
+    #   cost_source="actual"   → reported by the provider itself (DataForSEO)
+    #   cost_source="estimate" → queries_done × the per-provider rate configured
+    #                            in Settings (SerpAPI/Bright Data/Oxylabs don't
+    #                            report per-request cost)
+    # Stored at run time so historical runs keep the rate that applied then —
+    # changing a rate later must not silently rewrite past spend.
+    cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cost_source: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     job: Mapped[Job] = relationship(back_populates="runs")
     results: Mapped[list["Result"]] = relationship(back_populates="run", cascade="all,delete-orphan")

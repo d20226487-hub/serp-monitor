@@ -84,6 +84,8 @@ const messagesEn = {
     autoFallback: "auto",
     runs: "Runs",
     noRuns: "No runs yet.",
+    totalCost: (total: string, n: number) =>
+      `${total} total across ${n} run${n === 1 ? "" : "s"}`,
     runEntry: {
       runLabel: (id: number) => `Run #${id}`,
       progress: (done: number, total: number) => `${done}/${total} done`,
@@ -150,9 +152,12 @@ const messagesEn = {
       daily09And21: "Daily 09:00 + 21:00",
       weekdays08: "Weekdays 08:00",
     },
-    estimateTitle: "Estimated SerpAPI calls per run",
+    estimateTitle: "Estimated calls per run",
     estimateBreakdown: (g: number, y: number) => `Google: ${g} · Yandex: ${y}`,
     estimateApprox: "(Approximate — backend dedupes identical variants.)",
+    estimateCostTitle: "Estimated cost per run",
+    estimateRate: (rate: string) => `at ${rate}/search`,
+    estimateEditRate: "edit rate",
     saveCreate: "Create job",
     saveChanges: "Save changes",
     saveAndRunCreate: "Create & run now",
@@ -324,6 +329,15 @@ const messagesEn = {
       deleteConfirm: "Delete this location?",
       copyUuleTitle: "Copy full UULE",
     },
+    rates: {
+      title: "Cost rates",
+      help:
+        "What you pay per search, per provider. Used for the cost estimate on the job form and for run costs where the provider doesn't report a real figure. Rates depend on your plan — set your actual ones here.",
+      usingDefault: "using default",
+      defaultIs: (v: string) => `default: $${v}`,
+      footnote:
+        "DataForSEO reports its real cost per request, so its runs record actual spend and ignore this rate. SerpAPI, Bright Data and Oxylabs don't return a price, so their runs are estimated from the rate above. Clear a field to restore its default.",
+    },
     providers: {
       title: "Providers",
       configured: "configured",
@@ -397,6 +411,11 @@ const messagesEn = {
     searching: "Searching…",
     noMatches: "No matches.",
   },
+  cost: {
+    estimated: "est.",
+    actualHint: "Actual cost reported by the provider",
+    estimateHint: "Estimated: queries × the rate configured in Settings",
+  },
 };
 
 type Messages = typeof messagesEn;
@@ -468,6 +487,8 @@ const messagesRu: Messages = {
     autoFallback: "авто",
     runs: "Запуски",
     noRuns: "Запусков пока нет.",
+    totalCost: (total: string, n: number) =>
+      `${total} всего за ${n} ${pluralRu(n, ["запуск", "запуска", "запусков"])}`,
     runEntry: {
       runLabel: (id: number) => `Запуск №${id}`,
       progress: (done: number, total: number) =>
@@ -547,10 +568,13 @@ const messagesRu: Messages = {
       daily09And21: "Ежедневно 09:00 + 21:00",
       weekdays08: "Будни 08:00",
     },
-    estimateTitle: "Расчётное число запросов SerpAPI за один прогон",
+    estimateTitle: "Расчётное число запросов за прогон",
     estimateBreakdown: (g: number, y: number) => `Google: ${g} · Yandex: ${y}`,
     estimateApprox:
       "(Приблизительно — бэкенд удаляет дубликаты вариантов.)",
+    estimateCostTitle: "Расчётная стоимость прогона",
+    estimateRate: (rate: string) => `по ${rate} за запрос`,
+    estimateEditRate: "изменить ставку",
     saveCreate: "Создать задачу",
     saveChanges: "Сохранить изменения",
     saveAndRunCreate: "Создать и запустить",
@@ -730,6 +754,15 @@ const messagesRu: Messages = {
       deleteConfirm: "Удалить эту локацию?",
       copyUuleTitle: "Скопировать полный UULE",
     },
+    rates: {
+      title: "Стоимость запросов",
+      help:
+        "Сколько вы платите за один запрос у каждого провайдера. Используется для расчёта стоимости в форме задачи и для прогонов, где провайдер не возвращает реальную цену. Ставки зависят от вашего тарифа — укажите свои.",
+      usingDefault: "значение по умолчанию",
+      defaultIs: (v: string) => `по умолчанию: $${v}`,
+      footnote:
+        "DataForSEO возвращает реальную стоимость каждого запроса, поэтому его прогоны записывают фактические траты и эту ставку игнорируют. SerpAPI, Bright Data и Oxylabs цену не возвращают — их прогоны считаются по ставке выше. Очистите поле, чтобы вернуть значение по умолчанию.",
+    },
     providers: {
       title: "Провайдеры",
       configured: "настроено",
@@ -805,6 +838,11 @@ const messagesRu: Messages = {
   combobox: {
     searching: "Поиск…",
     noMatches: "Ничего не найдено.",
+  },
+  cost: {
+    estimated: "оц.",
+    actualHint: "Фактическая стоимость, полученная от провайдера",
+    estimateHint: "Оценка: количество запросов × ставка из «Настроек»",
   },
 };
 
