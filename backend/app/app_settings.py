@@ -135,6 +135,102 @@ def clear_provider_creds(provider: str) -> None:
     set_provider_creds(provider, {f: None for f in PROVIDER_FIELDS.get(provider, [])})
 
 
+# --- AI (LLM) provider settings ----------------------------------------------
+#
+# Kept in a separate namespace from the SERP providers above: these configure
+# Gemini access, not search scraping, and must never appear in the job form's
+# Provider dropdown. Keys are prefixed `ai_` in the same AppSetting table.
+AI_PROVIDER_FIELDS: dict[str, list[str]] = {
+    "ai_studio": ["api_key", "model"],
+    # Vertex takes EITHER service_account_json (+ project_id, location) for the
+    # production path, OR api_key alone for Vertex Express.
+    "vertex": ["api_key", "service_account_json", "project_id", "location", "model"],
+}
+
+# Fields masked in status responses. `service_account_json` contains a private
+# key, so it is never echoed back — not even partially.
+_AI_SECRET_FIELDS = frozenset({"api_key", "service_account_json"})
+
+
+def _ai_key(provider: str, field: str) -> str:
+    return f"ai_{provider}_{field}"
+
+
+def get_ai_provider_config(provider: str) -> dict[str, str]:
+    """Raw config for one AI provider. DB-only — no env fallback."""
+    fields = AI_PROVIDER_FIELDS.get(provider, [])
+    out: dict[str, str] = {}
+    db = SessionLocal()
+    try:
+        for f in fields:
+            val = _get(db, _ai_key(provider, f))
+            if val:
+                out[f] = val
+    finally:
+        db.close()
+    return out
+
+
+def set_ai_provider_config(provider: str, values: dict[str, str | None]) -> None:
+    fields = AI_PROVIDER_FIELDS.get(provider)
+    if not fields:
+        raise ValueError(f"unknown AI provider: {provider}")
+    db = SessionLocal()
+    try:
+        for f in fields:
+            if f in values:
+                v = values[f]
+                _set(
+                    db,
+                    _ai_key(provider, f),
+                    v.strip() if isinstance(v, str) and v.strip() else None,
+                )
+    finally:
+        db.close()
+
+
+def clear_ai_provider_config(provider: str) -> None:
+    set_ai_provider_config(provider, {f: None for f in AI_PROVIDER_FIELDS.get(provider, [])})
+
+
+def ai_provider_status(provider: str) -> dict:
+    """Masked status — never echo a secret back to the UI."""
+    fields = AI_PROVIDER_FIELDS.get(provider, [])
+    cfg = get_ai_provider_config(provider)
+    masked: dict[str, dict] = {}
+    for f in fields:
+        v = cfg.get(f, "")
+        if not v:
+            masked[f] = {"configured": False}
+        elif f == "service_account_json":
+            # Show the identity, never the key material — it's the one thing
+            # that makes a pasted blob verifiable at a glance.
+            masked[f] = {"configured": True, "value": _sa_identity(v), "length": len(v)}
+        elif f in _AI_SECRET_FIELDS:
+            masked[f] = {"configured": True, "last4": v[-4:], "length": len(v)}
+        else:
+            masked[f] = {"configured": True, "value": v}
+    # Which auth mode Vertex will actually use, so the UI can say so plainly
+    # rather than making the user infer it from which fields are filled.
+    auth_mode = None
+    if provider == "vertex":
+        if cfg.get("service_account_json"):
+            auth_mode = "service_account"
+        elif cfg.get("api_key"):
+            auth_mode = "express"
+    return {"provider": provider, "fields": masked, "auth_mode": auth_mode}
+
+
+def _sa_identity(sa_json: str) -> str:
+    """client_email out of a service-account JSON, for display only."""
+    try:
+        import json as _json
+        info = _json.loads(sa_json)
+        return info.get("client_email") or "(no client_email)"
+    except Exception:  # noqa: BLE001 — display helper must never raise
+        return "(unparseable JSON)"
+
+
 # --- Per-provider cost rates (USD per search) --------------------------------
 #
 # Rates are plan-specific — SerpAPI's per-search price in particular swings a

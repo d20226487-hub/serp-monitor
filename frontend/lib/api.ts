@@ -59,6 +59,32 @@ export type ProviderRates = {
   defaults: Record<string, number>;
 };
 
+export type AIProviderStatus = {
+  provider: string;
+  fields: Record<
+    string,
+    { configured: boolean; last4?: string; length?: number; value?: string }
+  >;
+  /** Vertex only: which auth mode the stored config will actually use. */
+  auth_mode: "service_account" | "express" | null;
+};
+
+export type AIProviderConfigInput = {
+  api_key?: string;
+  service_account_json?: string;
+  project_id?: string;
+  location?: string;
+  model?: string;
+};
+
+export type AITestResult = {
+  ok: boolean;
+  model?: string;
+  text?: string;
+  prompt_tokens?: number | null;
+  completion_tokens?: number | null;
+};
+
 export type Result = {
   id: number;
   keyword: string;
@@ -134,6 +160,17 @@ export const api = {
     req<ScheduleInfo>(`/jobs/${jobId}/schedule-info`),
   getSchedulerStatus: () =>
     req<{ timezone: string }>("/settings/scheduler"),
+
+  // AI providers (Gemini via Google AI Studio / Vertex AI)
+  listAIProviders: () => req<AIProviderStatus[]>("/settings/ai-providers"),
+  setAIProviderConfig: (provider: string, body: AIProviderConfigInput) =>
+    req<AIProviderStatus>(`/settings/ai-providers/${provider}`, {
+      method: "PUT", body: JSON.stringify(body),
+    }),
+  clearAIProviderConfig: (provider: string) =>
+    req<AIProviderStatus>(`/settings/ai-providers/${provider}`, { method: "DELETE" }),
+  testAIProvider: (provider: string) =>
+    req<AITestResult>(`/settings/ai-providers/${provider}/test`, { method: "POST" }),
 
   // Per-provider cost rates ($/search)
   getRates: () => req<ProviderRates>("/settings/rates"),

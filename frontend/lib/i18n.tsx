@@ -331,6 +331,41 @@ const messagesEn = {
       deleteConfirm: "Delete this location?",
       copyUuleTitle: "Copy full UULE",
     },
+    ai: {
+      title: "AI providers",
+      help:
+        "Gemini access for upcoming AI features. Nothing uses these yet — configure and test them now so the plumbing is proven before the first feature lands.",
+      authServiceAccount: "service account",
+      authExpress: "Express (API key)",
+      testing: "Testing…",
+      testOk: (model: string) => `✓ Works — model ${model}`,
+      testTokens: (p: number, c: number) => `${p} prompt + ${c} output tokens`,
+      testNote:
+        "Neither Google API offers a free credential check, so Test runs a real one-word generation — a few tokens. Output tokens include Gemini's thinking tokens, which are billed at the output rate.",
+      clearConfirm: (provider: string) =>
+        `Clear all stored settings for ${provider}?`,
+      meta: {
+        common: {
+          model: { label: "Default model" },
+        },
+        ai_studio: {
+          help:
+            "Simplest setup: one API key from aistudio.google.com/apikey. Good for testing and low volume; quotas are per-key and generous on the free tier.",
+          api_key: { label: "API key", placeholder: "AIza…" },
+        },
+        vertex: {
+          help:
+            "Two ways in. Service-account JSON + project + location is the production path with real quota. Vertex Express (API key alone) is quicker to set up but tightly rate-limited. If both are filled, the service account wins. Gemini models only.",
+          service_account_json: {
+            label: "Service-account JSON",
+            placeholder: '{"type":"service_account","project_id":"…","private_key":"…"}',
+          },
+          project_id: { label: "Project ID" },
+          location: { label: "Location (region)" },
+          api_key: { label: "Express API key (alternative)", placeholder: "AIza…" },
+        },
+      },
+    },
     rates: {
       title: "Cost rates",
       help:
@@ -757,6 +792,41 @@ const messagesRu: Messages = {
       empty: "Локации не найдены.",
       deleteConfirm: "Удалить эту локацию?",
       copyUuleTitle: "Скопировать полный UULE",
+    },
+    ai: {
+      title: "AI-провайдеры",
+      help:
+        "Доступ к Gemini для будущих AI-функций. Пока ничего их не использует — настройте и проверьте сейчас, чтобы интеграция была готова к первой функции.",
+      authServiceAccount: "сервисный аккаунт",
+      authExpress: "Express (API-ключ)",
+      testing: "Проверка…",
+      testOk: (model: string) => `✓ Работает — модель ${model}`,
+      testTokens: (p: number, c: number) => `${p} токенов запроса + ${c} токенов ответа`,
+      testNote:
+        "Ни один из Google API не даёт бесплатной проверки ключа, поэтому «Проверить» выполняет реальную генерацию из одного слова — несколько токенов. В токены ответа входят «мыслительные» токены Gemini, которые тарифицируются по ставке вывода.",
+      clearConfirm: (provider: string) =>
+        `Очистить все сохранённые настройки для ${provider}?`,
+      meta: {
+        common: {
+          model: { label: "Модель по умолчанию" },
+        },
+        ai_studio: {
+          help:
+            "Самый простой вариант: один API-ключ с aistudio.google.com/apikey. Подходит для тестов и небольших объёмов; квоты привязаны к ключу, на бесплатном тарифе щедрые.",
+          api_key: { label: "API-ключ", placeholder: "AIza…" },
+        },
+        vertex: {
+          help:
+            "Два способа подключения. JSON сервисного аккаунта + проект + регион — рабочий вариант с полной квотой. Vertex Express (только API-ключ) настраивается быстрее, но жёстко ограничен по лимитам. Если заполнено и то и другое, приоритет у сервисного аккаунта. Только модели Gemini.",
+          service_account_json: {
+            label: "JSON сервисного аккаунта",
+            placeholder: '{"type":"service_account","project_id":"…","private_key":"…"}',
+          },
+          project_id: { label: "ID проекта" },
+          location: { label: "Регион (location)" },
+          api_key: { label: "Express API-ключ (альтернатива)", placeholder: "AIza…" },
+        },
+      },
     },
     rates: {
       title: "Стоимость запросов",

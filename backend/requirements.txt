@@ -7,3 +7,9 @@ httpx==0.28.1
 apscheduler==3.10.4
 python-multipart==0.0.20
 selectolax==0.3.27
+# Vertex AI service-account auth. Imported lazily inside app/ai/vertex.py, so
+# AI Studio and Vertex Express (API key) keep working without it.
+google-auth==2.36.0
+# google-auth's transport.requests.Request is the only token-refresh path it
+# ships; not used anywhere else (Gemini itself is called via httpx).
+requests==2.32.3

@@ -14,8 +14,12 @@ import re
 
 # Match `api_key=…`, `token=…`, `password=…`, etc. as URL query params or
 # form fields. Captures the param name so we can preserve it in the output.
+# NOTE on bare `key=`: Google AI Studio authenticates with `?key=<API_KEY>` in
+# the URL, so an httpx error string would leak the key the same way SerpAPI's
+# `api_key=` did. `\b` prevents false hits on words ending in "key"
+# (e.g. "monkey=") since both sides are word characters there.
 _QUERY_SECRET_RE = re.compile(
-    r"\b(api[_-]?key|access[_-]?token|api[_-]?token|token|password|secret)=([^&\s'\"<>]+)",
+    r"\b(api[_-]?key|access[_-]?token|api[_-]?token|token|password|secret|key)=([^&\s'\"<>]+)",
     re.IGNORECASE,
 )
 

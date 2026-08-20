@@ -4,14 +4,19 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from ..ai import AIProviderConfigError, AIProviderError, get_ai_provider
 from ..app_settings import (
+    AI_PROVIDER_FIELDS,
     DEFAULT_RATES,
     PROVIDER_FIELDS,
+    ai_provider_status,
+    clear_ai_provider_config,
     clear_provider_creds,
     get_provider_creds,
     get_provider_rates,
     provider_status,
     serpapi_key_status,
+    set_ai_provider_config,
     set_provider_creds,
     set_provider_rates,
     set_serpapi_key,
@@ -107,6 +112,62 @@ async def test_provider(provider: str):
     except ProviderConfigError as e:
         raise HTTPException(401, str(e))
     except ProviderError as e:
+        raise HTTPException(502, str(e))
+
+
+# --- AI providers (Gemini via AI Studio / Vertex) ------------------------------
+
+class AIProviderConfigIn(BaseModel):
+    # Permissive; only fields valid for the chosen provider are stored.
+    api_key: str | None = None
+    service_account_json: str | None = None
+    project_id: str | None = None
+    location: str | None = None
+    model: str | None = None
+
+
+@router.get("/ai-providers")
+def list_ai_providers():
+    return [ai_provider_status(p) for p in AI_PROVIDER_FIELDS.keys()]
+
+
+@router.put("/ai-providers/{provider}")
+def update_ai_provider(provider: str, payload: AIProviderConfigIn):
+    if provider not in AI_PROVIDER_FIELDS:
+        raise HTTPException(404, "unknown AI provider")
+    raw = payload.model_dump(exclude_unset=True)
+    valid = {k: v for k, v in raw.items() if k in AI_PROVIDER_FIELDS[provider]}
+    if not valid:
+        raise HTTPException(
+            400,
+            f"no valid fields for {provider}; expected one of {AI_PROVIDER_FIELDS[provider]}",
+        )
+    set_ai_provider_config(provider, valid)
+    return ai_provider_status(provider)
+
+
+@router.delete("/ai-providers/{provider}")
+def clear_ai_provider(provider: str):
+    if provider not in AI_PROVIDER_FIELDS:
+        raise HTTPException(404, "unknown AI provider")
+    clear_ai_provider_config(provider)
+    return ai_provider_status(provider)
+
+
+@router.post("/ai-providers/{provider}/test")
+async def test_ai_provider(provider: str):
+    """Verify credentials with a tiny real generation.
+
+    Neither Google API exposes a free account/balance probe, so unlike the SERP
+    providers this genuinely calls the model — a few tokens' worth.
+    """
+    if provider not in AI_PROVIDER_FIELDS:
+        raise HTTPException(404, "unknown AI provider")
+    try:
+        return await get_ai_provider(provider).test_credentials()
+    except AIProviderConfigError as e:
+        raise HTTPException(401, str(e))
+    except AIProviderError as e:
         raise HTTPException(502, str(e))
 
 

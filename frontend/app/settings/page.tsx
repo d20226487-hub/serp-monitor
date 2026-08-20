@@ -2,6 +2,9 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   api,
+  AIProviderConfigInput,
+  AIProviderStatus,
+  AITestResult,
   ProviderCredsInput,
   ProviderRates,
   ProviderStatus,
@@ -129,6 +132,9 @@ export default function SettingsPage() {
 
       {/* Providers */}
       <ProvidersSection onError={setErr} />
+
+      {/* AI providers */}
+      <AIProvidersSection onError={setErr} />
 
       {/* Cost rates */}
       <RatesSection onError={setErr} />
@@ -318,6 +324,197 @@ function UuleCell({ canonicalName }: { canonicalName: string }) {
         {copied ? <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3 h-3" />}
       </button>
     </div>
+  );
+}
+
+
+/* ------------- AI providers section ------------- */
+
+type AIFieldSpec = {
+  key: keyof AIProviderConfigInput;
+  label: string;
+  placeholder?: string;
+  secret?: boolean;
+  multiline?: boolean;
+};
+
+function useAIProviderMeta(): { id: string; name: string; help: string; fields: AIFieldSpec[] }[] {
+  const { t } = useT();
+  const m = t.settings.ai.meta;
+  return [
+    {
+      id: "ai_studio",
+      name: "Google AI Studio",
+      help: m.ai_studio.help,
+      fields: [
+        { key: "api_key", label: m.ai_studio.api_key.label, secret: true, placeholder: m.ai_studio.api_key.placeholder },
+        { key: "model", label: m.common.model.label, placeholder: "gemini-2.5-flash" },
+      ],
+    },
+    {
+      id: "vertex",
+      name: "Google Vertex AI",
+      help: m.vertex.help,
+      fields: [
+        { key: "service_account_json", label: m.vertex.service_account_json.label, secret: true, multiline: true, placeholder: m.vertex.service_account_json.placeholder },
+        { key: "project_id", label: m.vertex.project_id.label, placeholder: "my-gcp-project" },
+        { key: "location", label: m.vertex.location.label, placeholder: "us-central1" },
+        { key: "api_key", label: m.vertex.api_key.label, secret: true, placeholder: m.vertex.api_key.placeholder },
+        { key: "model", label: m.common.model.label, placeholder: "gemini-2.5-flash" },
+      ],
+    },
+  ];
+}
+
+function AIProvidersSection({ onError }: { onError: (msg: string | null) => void }) {
+  const { t } = useT();
+  const META = useAIProviderMeta();
+  const [statuses, setStatuses] = useState<AIProviderStatus[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, AIProviderConfigInput>>({});
+  const [msgs, setMsgs] = useState<Record<string, string>>({});
+  const [tests, setTests] = useState<Record<string, AITestResult | null>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function reload() {
+    try { setStatuses(await api.listAIProviders()); }
+    catch (e: any) { onError(e?.message ?? "Failed to load AI providers"); }
+  }
+  useEffect(() => { reload(); }, []);
+
+  function setDraft(p: string, key: keyof AIProviderConfigInput, value: string) {
+    setDrafts(prev => ({ ...prev, [p]: { ...(prev[p] || {}), [key]: value } }));
+  }
+
+  async function save(p: string) {
+    onError(null);
+    setMsgs(m => ({ ...m, [p]: "" }));
+    setTests(s => ({ ...s, [p]: null }));
+    const draft = drafts[p] || {};
+    if (Object.keys(draft).length === 0) { onError("Nothing to save."); return; }
+    try {
+      await api.setAIProviderConfig(p, draft);
+      setDrafts(prev => ({ ...prev, [p]: {} }));
+      setMsgs(m => ({ ...m, [p]: t.common.saved }));
+      await reload();
+    } catch (e: any) { onError(e?.message ?? "Save failed"); }
+  }
+
+  async function clear(p: string) {
+    if (!confirm(t.settings.ai.clearConfirm(p))) return;
+    setTests(s => ({ ...s, [p]: null }));
+    await api.clearAIProviderConfig(p);
+    setMsgs(m => ({ ...m, [p]: t.common.cleared }));
+    await reload();
+  }
+
+  async function test(p: string) {
+    onError(null);
+    setMsgs(m => ({ ...m, [p]: "" }));
+    setBusy(p);
+    try {
+      const res = await api.testAIProvider(p);
+      setTests(s => ({ ...s, [p]: res }));
+    } catch (e: any) { onError(e?.message ?? "Test failed"); }
+    finally { setBusy(null); }
+  }
+
+  return (
+    <section className="space-y-3">
+      <h2 className="font-medium">{t.settings.ai.title}</h2>
+      <p className="text-xs text-neutral-500">{t.settings.ai.help}</p>
+      <div className="grid lg:grid-cols-2 gap-4">
+        {META.map(meta => {
+          const status = statuses.find(s => s.provider === meta.id);
+          const draft = drafts[meta.id] || {};
+          const testRes = tests[meta.id];
+          const msg = msgs[meta.id];
+          const anyConfigured = Object.values(status?.fields ?? {}).some(f => f.configured);
+          return (
+            <div key={meta.id} className="border rounded-md p-4 dark:border-neutral-700 space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="font-medium">{meta.name}</h3>
+                {anyConfigured ? (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200">{t.settings.providers.configured}</span>
+                ) : (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">{t.settings.providers.notSet}</span>
+                )}
+                {/* Vertex accepts two auth modes; spell out which one the
+                    stored config will actually use. */}
+                {status?.auth_mode && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/40 text-blue-800 dark:text-blue-200">
+                    {status.auth_mode === "service_account"
+                      ? t.settings.ai.authServiceAccount
+                      : t.settings.ai.authExpress}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-neutral-500">{meta.help}</p>
+
+              {meta.fields.map(f => {
+                const cur = status?.fields?.[f.key];
+                return (
+                  <div key={f.key} className="space-y-1">
+                    <label className="text-xs font-medium">{f.label}</label>
+                    {cur?.configured && (
+                      <div className="text-xs text-neutral-500 break-all">
+                        {cur.last4
+                          ? t.settings.providers.savedSecret(cur.last4, cur.length ?? 0)
+                          : cur.value
+                            ? t.settings.providers.savedPlain(cur.value)
+                            : t.settings.providers.savedNoDetail}
+                      </div>
+                    )}
+                    {f.multiline ? (
+                      <textarea
+                        rows={4}
+                        autoComplete="off"
+                        value={draft[f.key] ?? ""}
+                        onChange={e => setDraft(meta.id, f.key, e.target.value)}
+                        placeholder={f.placeholder}
+                        className="w-full px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700 text-xs font-mono"
+                      />
+                    ) : (
+                      <input
+                        type={f.secret ? "password" : "text"}
+                        autoComplete="off"
+                        value={draft[f.key] ?? ""}
+                        onChange={e => setDraft(meta.id, f.key, e.target.value)}
+                        placeholder={f.placeholder}
+                        className="w-full px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700 text-sm"
+                      />
+                    )}
+                  </div>
+                );
+              })}
+
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button onClick={() => save(meta.id)}
+                  className="px-3 py-1.5 rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm">{t.common.save}</button>
+                <button disabled={busy === meta.id} onClick={() => test(meta.id)}
+                  className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm disabled:opacity-50">
+                  {busy === meta.id ? t.settings.ai.testing : t.common.test}
+                </button>
+                <button onClick={() => clear(meta.id)}
+                  className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm text-red-600 dark:text-red-400">{t.common.clear}</button>
+              </div>
+              {msg && <div className="text-xs text-emerald-700 dark:text-emerald-300">{msg}</div>}
+              {testRes && (
+                <div className="text-xs bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded px-3 py-2 space-y-0.5">
+                  <div>{t.settings.ai.testOk(testRes.model ?? "")}</div>
+                  {testRes.text && <div className="font-mono">“{testRes.text}”</div>}
+                  {(testRes.prompt_tokens != null || testRes.completion_tokens != null) && (
+                    <div className="text-neutral-500">
+                      {t.settings.ai.testTokens(testRes.prompt_tokens ?? 0, testRes.completion_tokens ?? 0)}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-[11px] text-neutral-500">{t.settings.ai.testNote}</p>
+    </section>
   );
 }
 
