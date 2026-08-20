@@ -38,14 +38,26 @@ BATCH_METRICS: dict[str, str] = {
     "backlinks_dofollow": "Backlinks (follow)",
     "refdomains": "Ref domains",
     "refdomains_dofollow": "Ref domains (follow)",
+    "refdomains_nofollow": "Ref domains (nofollow)",
+    "refips_subnets": "Ref IP subnets",
     "org_traffic": "Organic traffic",
     "org_keywords": "Organic keywords",
+    "org_keywords_1_3": "Organic keywords 1-3",
+    "org_keywords_4_10": "Organic keywords 4-10",
+    "org_keywords_11_20": "Organic keywords 11-20",
     "ahrefs_rank": "Ahrefs Rank",
 }
 
-# Sensible default when a job doesn't specify: the two ranking-difficulty
-# signals the whole feature exists for.
+# url_rating is only populated in exact/URL mode, so it's pointless (and still
+# billable) on a domain target. Everything else is valid in both modes.
+URL_ONLY_METRICS = frozenset({"url_rating"})
+
+# Defaults when a job doesn't specify.
+#   URL level: the two page-strength signals the feature exists for (2 units).
+#   Domain level: how much weight sits behind the page — the parasite-page vs
+#   standalone-doorway distinction that page metrics alone cannot make.
 DEFAULT_METRICS: list[str] = ["url_rating", "domain_rating"]
+DEFAULT_DOMAIN_METRICS: list[str] = ["refdomains_dofollow", "org_keywords"]
 
 # Ahrefs caps `targets` at 100 per call (OpenAPI maxItems).
 BATCH_SIZE = 100
@@ -63,26 +75,43 @@ def canonical_metrics(requested: list[str] | None) -> list[str]:
     return out or list(DEFAULT_METRICS)
 
 
-# Per-field unit cost. Ahrefs prices columns differently: link metrics are cheap,
-# org_traffic is dramatically not. Derived empirically and consistent with TWO
-# independent observations:
+def canonical_domain_metrics(requested: list[str] | None) -> list[str]:
+    """Same, for the domain-level pass. Drops url_rating — Ahrefs returns it
+    empty outside exact mode, so paying for it on a domain target is waste.
+    An explicit empty list means "domain enrichment off"; None means default.
+    """
+    if requested is None:
+        return list(DEFAULT_DOMAIN_METRICS)
+    wanted = set(requested) - URL_ONLY_METRICS
+    return [m for m in BATCH_METRICS if m in wanted]
+
+
+# Per-field unit cost. Ahrefs bills most columns at 1 unit per row but puts
+# some on 5- and 10-unit tiers. The referring-domain family costs 5 (confirmed
+# by the user against the Ahrefs dashboard) and org_traffic costs 10, which is
+# consistent with BOTH billing observations:
 #   6 rows x [url_rating, domain_rating, backlinks_dofollow, refdomains_dofollow,
-#             org_keywords, org_traffic]              -> 114 == 6 x 19
-#   4 rows x [url_rating, domain_rating, refdomains,
-#             backlinks, org_traffic]                 ->  72 == 4 x 18
-# The second observation is what pins org_traffic: dropping org_keywords cost
-# only 1 unit/row, so the expensive field is org_traffic alone (14), not a
-# 10/5 split across the two as first assumed.
+#             org_keywords, org_traffic]  -> 114 == 6 x 19 == 6 x (1+1+1+5+1+10)
+#   4 rows x [url_rating, domain_rating, refdomains, backlinks, org_traffic]
+#                                        ->  72 ==  4 x 18 == 4 x (1+1+5+1+10)
+# refips_subnets is grouped with the refdomains family (same class of data);
+# that one is inferred rather than measured, and inferring HIGH is the safe
+# direction for a cost estimate.
 FIELD_UNIT_COST: dict[str, int] = {
     "url_rating": 1,
     "domain_rating": 1,
     "backlinks": 1,
     "backlinks_dofollow": 1,
-    "refdomains": 1,
-    "refdomains_dofollow": 1,
-    "ahrefs_rank": 1,
+    "refdomains": 5,
+    "refdomains_dofollow": 5,
+    "refdomains_nofollow": 5,
+    "refips_subnets": 5,
+    "org_traffic": 10,
     "org_keywords": 1,
-    "org_traffic": 14,
+    "org_keywords_1_3": 1,
+    "org_keywords_4_10": 1,
+    "org_keywords_11_20": 1,
+    "ahrefs_rank": 1,
 }
 
 # Every request costs at least this, regardless of how little you ask for.
@@ -151,13 +180,22 @@ async def fetch_batch_chunk(
     *,
     country: str | None = None,
     timeout: float = 60.0,
+    mode: str = "exact",
 ) -> ChunkOutcome:
-    """POST one chunk (<=100 URLs). Pure I/O — no DB. Never raises: transport,
-    HTTP and shape errors all come back on `ChunkOutcome.error`."""
+    """POST one chunk (<=100 targets). Pure I/O — no DB. Never raises: transport,
+    HTTP and shape errors all come back on `ChunkOutcome.error`.
+
+    `mode` is per-target in the API, so exact and domain targets CAN share one
+    request. We don't, because `select` is per-REQUEST: mixing modes would force
+    the union of both field sets onto every target. With different URL/domain
+    selections two requests bill less, even paying the 50-unit floor twice —
+    e.g. 100 URLs x 2 fields + 35 domains x 2 other fields is 270 units split,
+    vs 540 combined.
+    """
     payload: dict = {
         # mode=exact is what makes url_rating meaningful; protocol=both lets
         # Ahrefs match the target whether it indexed http or https.
-        "targets": [{"url": u, "mode": "exact", "protocol": "both"} for u in urls],
+        "targets": [{"url": u, "mode": mode, "protocol": "both"} for u in urls],
         "select": list(select),
     }
     if country:

@@ -24,6 +24,7 @@ class JobBase(BaseModel):
     provider: str = "serpapi"
     mode: str = "serp"  # "serp" | "analyzer"
     ahrefs_metrics: list[str] = Field(default_factory=list)
+    ahrefs_domain_metrics: list[str] = Field(default_factory=list)
 
 
 class JobCreate(JobBase):
@@ -45,6 +46,7 @@ class JobUpdate(BaseModel):
     provider: str | None = None
     mode: str | None = None
     ahrefs_metrics: list[str] | None = None
+    ahrefs_domain_metrics: list[str] | None = None
 
 
 class JobOut(JobBase):
@@ -58,7 +60,8 @@ class JobOut(JobBase):
     # the entire list response). Coerce to the empty list instead — a missing
     # value here genuinely means "nothing selected".
     @field_validator("keywords", "engines", "devices", "locations", "languages",
-                     "google_domains", "scrape_fields", "ahrefs_metrics", mode="before")
+                     "google_domains", "scrape_fields", "ahrefs_metrics",
+                     "ahrefs_domain_metrics", mode="before")
     @classmethod
     def _none_to_empty_list(cls, v):
         return [] if v is None else v

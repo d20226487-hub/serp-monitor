@@ -35,6 +35,11 @@ _METRIC_HEADERS = {
     "refdomains_dofollow": "RefDomains(f)",
     "org_traffic": "OrgTraffic",
     "org_keywords": "OrgKeywords",
+    "org_keywords_1_3": "OrgKw 1-3",
+    "org_keywords_4_10": "OrgKw 4-10",
+    "org_keywords_11_20": "OrgKw 11-20",
+    "refdomains_nofollow": "RefDomains(nf)",
+    "refips_subnets": "RefIPSubnets",
     "ahrefs_rank": "AhrefsRank",
 }
 
@@ -103,6 +108,26 @@ def build_serp_table(rows: list[dict], metrics: list[str], *, multi_variant: boo
     return "\n".join(lines)
 
 
+def build_domain_table(domains: list[dict], metrics: list[str]) -> str:
+    """Separate table for domain-level metrics.
+
+    Separate rather than merged into the SERP table because the relationship is
+    1:many — one domain backs several result URLs — so merging would repeat the
+    same domain figures on every row and imply they were per-page.
+    """
+    if not metrics or not domains:
+        return ""
+    headers = ["Domain"] + [_METRIC_HEADERS.get(m, m) for m in metrics]
+    lines = ["| " + " | ".join(headers) + " |",
+             "|" + "|".join("---" for _ in headers) + "|"]
+    for d in domains:
+        m = d.get("metrics") or {}
+        lines.append(
+            "| " + " | ".join([_clip(d.get("domain"), 60)] + [_fmt(m.get(f)) for f in metrics]) + " |"
+        )
+    return "\n".join(lines)
+
+
 # Gemini structured output: forcing a schema removes the "parse the model's
 # prose" failure mode entirely.
 RESPONSE_SCHEMA = {
@@ -137,17 +162,30 @@ async def judge_keyword(
     keyword: str,
     table: str,
     *,
+    domain_table: str = "",
     model: str | None = None,
 ) -> dict:
     """One AI verdict for one keyword. Raises AIProviderError on failure."""
     prompt_template = get_serp_difficulty_prompt()
+    # Appended rather than a {domain_table} placeholder: a user who saved a
+    # custom prompt before domain metrics existed would otherwise silently lose
+    # the new data. Appending keeps every saved prompt working.
+    full_table = table
+    if domain_table:
+        full_table = (
+            f"{table}\n\n"
+            "Domain-level metrics for the sites above (one row per distinct "
+            "domain — use these to tell a weak page on a STRONG site apart from "
+            "a weak page on a weak site):\n"
+            f"{domain_table}"
+        )
     try:
-        prompt = prompt_template.format(keyword=keyword, table=table)
+        prompt = prompt_template.format(keyword=keyword, table=full_table)
     except (KeyError, IndexError):
         # A user-edited prompt with a stray brace shouldn't kill the run —
         # fall back to appending the data so the call still has context.
         log.warning("serp_difficulty prompt has bad placeholders; appending data")
-        prompt = f"{prompt_template}\n\nKeyword: {keyword}\n\nSERP:\n{table}"
+        prompt = f"{prompt_template}\n\nKeyword: {keyword}\n\nSERP:\n{full_table}"
 
     provider = get_ai_provider(provider_code)
     result = await provider.generate(

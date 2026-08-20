@@ -23,6 +23,11 @@ const METRIC_LABELS: Record<string, string> = {
   refdomains_dofollow: "Ref domains (follow)",
   org_traffic: "Org. traffic",
   org_keywords: "Org. keywords",
+  org_keywords_1_3: "Org. kw 1-3",
+  org_keywords_4_10: "Org. kw 4-10",
+  org_keywords_11_20: "Org. kw 11-20",
+  refdomains_nofollow: "Ref domains (nofollow)",
+  refips_subnets: "Ref IP subnets",
   ahrefs_rank: "Ahrefs Rank",
 };
 
@@ -41,6 +46,40 @@ function formatMetric(v: number | null | undefined): string {
   if (Number.isInteger(v)) return v.toLocaleString();
   // DR/UR come back fractional; one decimal is enough to compare SERPs.
   return v.toFixed(1);
+}
+
+function DomainSubTable({ row, metrics }: { row: AnalysisRow; metrics: string[] }) {
+  const { t } = useT();
+  if (!metrics.length || !row.domains?.length) return null;
+  return (
+    <div className="mt-3">
+      <div className="text-[11px] text-neutral-500 mb-1">{t.analysis.rawDomainTitle}</div>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-left text-neutral-500">
+            <th className="px-2 py-1 font-medium">{t.analysis.colDomain}</th>
+            {metrics.map(m => (
+              <th key={m} className="px-2 py-1 font-medium text-right">
+                {METRIC_LABELS[m] ?? m}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {row.domains.map(d => (
+            <tr key={d.domain} className="border-t dark:border-neutral-800">
+              <td className="px-2 py-1 font-mono break-all">{d.domain}</td>
+              {metrics.map(m => (
+                <td key={m} className="px-2 py-1 text-right font-mono tabular-nums">
+                  {formatMetric(d.metrics[m])}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 export function RunAnalysisTable({ analysis }: { analysis: RunAnalysis }) {
@@ -130,7 +169,12 @@ export function RunAnalysisTable({ analysis }: { analysis: RunAnalysis }) {
           </thead>
           <tbody>
             {sorted.map(row => (
-              <AnalysisTableRow key={row.keyword} row={row} metrics={analysis.metrics} />
+              <AnalysisTableRow
+                key={row.keyword}
+                row={row}
+                metrics={analysis.metrics}
+                domainMetrics={analysis.domain_metrics}
+              />
             ))}
           </tbody>
         </table>
@@ -142,7 +186,9 @@ export function RunAnalysisTable({ analysis }: { analysis: RunAnalysis }) {
   );
 }
 
-function AnalysisTableRow({ row, metrics }: { row: AnalysisRow; metrics: string[] }) {
+function AnalysisTableRow({
+  row, metrics, domainMetrics,
+}: { row: AnalysisRow; metrics: string[]; domainMetrics: string[] }) {
   const { t } = useT();
   const [open, setOpen] = useState(false);
   const partial = row.urls_analysed < row.urls_total;
@@ -269,6 +315,7 @@ function AnalysisTableRow({ row, metrics }: { row: AnalysisRow; metrics: string[
                 </tbody>
               </table>
             </div>
+            <DomainSubTable row={row} metrics={domainMetrics} />
           </td>
         </tr>
       )}

@@ -53,6 +53,9 @@ class Job(Base):
     # back to ahrefs_batch.DEFAULT_METRICS. Each selected field bills ~1 unit
     # per URL, so this list is the cost lever.
     ahrefs_metrics: Mapped[list] = mapped_column(JSON, default=list)
+    # Domain-level field selection, chosen independently of the URL-level one.
+    # Empty list = domain enrichment disabled for this job.
+    ahrefs_domain_metrics: Mapped[list] = mapped_column(JSON, default=list)
 
     runs: Mapped[list["JobRun"]] = relationship(back_populates="job", cascade="all,delete-orphan")
 
@@ -141,6 +144,28 @@ class RunUrlMetric(Base):
     # so adding a metric to the UI later needs no re-fetch for existing runs.
     metrics: Mapped[dict] = mapped_column(JSON, default=dict)
     # Populated when this URL's chunk failed; metrics is then empty.
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class RunDomainMetric(Base):
+    """Ahrefs domain-level metrics for one domain within one run.
+
+    Separate from RunUrlMetric because the relationship is 1:many — one domain
+    backs many result URLs — and because the two are fetched with different
+    field sets in different Ahrefs modes.
+    """
+    __tablename__ = "run_domain_metrics"
+    __table_args__ = (
+        UniqueConstraint("run_id", "domain", name="uq_run_domain_metrics"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("job_runs.id", ondelete="CASCADE"), index=True
+    )
+    domain: Mapped[str] = mapped_column(String(255), index=True)
+    metrics: Mapped[dict] = mapped_column(JSON, default=dict)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     fetched_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 

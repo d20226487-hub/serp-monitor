@@ -32,8 +32,10 @@ from ..providers.ahrefs_batch import (
     BASE_REQUEST_UNITS,
     BATCH_METRICS,
     BATCH_SIZE,
+    DEFAULT_DOMAIN_METRICS,
     DEFAULT_METRICS,
     FIELD_UNIT_COST,
+    URL_ONLY_METRICS,
     verify_api_key,
 )
 from ..scheduler import scheduler_timezone
@@ -182,6 +184,8 @@ def get_ahrefs():
             for k, v in BATCH_METRICS.items()
         ],
         "default_metrics": DEFAULT_METRICS,
+        "default_domain_metrics": DEFAULT_DOMAIN_METRICS,
+        "url_only_metrics": sorted(URL_ONLY_METRICS),
         "batch_size": BATCH_SIZE,
         "base_request_units": BASE_REQUEST_UNITS,
     }

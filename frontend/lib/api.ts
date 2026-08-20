@@ -35,8 +35,10 @@ export type Job = {
   provider: string;
   /** "serp" = SERP monitoring only. "analyzer" = + Ahrefs URL metrics. */
   mode: "serp" | "analyzer";
-  /** Ahrefs batch-analysis field ids to request in analyzer mode. */
+  /** Ahrefs batch-analysis field ids for the URL-level (exact mode) pass. */
   ahrefs_metrics: string[];
+  /** Field ids for the domain-level pass. Empty = domain enrichment off. */
+  ahrefs_domain_metrics: string[];
   created_at: string;
   updated_at: string;
 };
@@ -48,6 +50,8 @@ export type AhrefsSettings = {
   /** `units` is the per-row unit cost of that field. */
   metrics: { id: string; label: string; units: number }[];
   default_metrics: string[];
+  default_domain_metrics: string[];
+  url_only_metrics: string[];
   batch_size: number;
   base_request_units: number;
 };
@@ -75,6 +79,7 @@ export type AnalysisRow = {
   weak_slots: number | null;
   weak_field: string | null;
   urls: AnalysisUrl[];
+  domains: { domain: string; metrics: Record<string, number | null>; analysed: boolean }[];
   /** AI verdict: "low" | "medium" | "hard" | "too hard", or null. */
   difficulty: string | null;
   /** 1-3 sentence AI explanation of this SERP's nuances. */
@@ -94,6 +99,7 @@ export type AIAnalysisSettings = {
 export type RunAnalysis = {
   mode: "serp" | "analyzer";
   metrics: string[];
+  domain_metrics: string[];
   rows: AnalysisRow[];
   ahrefs_units: number | null;
 };

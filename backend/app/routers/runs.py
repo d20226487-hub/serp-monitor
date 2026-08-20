@@ -2,8 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import Job, JobRun, Result, RunKeywordAnalysis, RunUrlMetric
-from ..providers.ahrefs_batch import canonical_metrics
+from ..models import (
+    Job, JobRun, Result, RunDomainMetric, RunKeywordAnalysis, RunUrlMetric,
+)
+from ..providers.ahrefs_batch import canonical_domain_metrics, canonical_metrics
 from ..providers.url_normalize import normalize_url
 from ..schemas import JobRunOut, ResultOut
 
@@ -38,6 +40,30 @@ def get_results(
 WEAK_THRESHOLD = 20
 
 
+def _host_of(url: str) -> str:
+    from urllib.parse import urlsplit
+    host = (urlsplit(url).hostname or "").lower()
+    return host[4:] if host.startswith("www.") else host
+
+
+def _domain_rows(pairs, by_domain: dict, fields: list[str]) -> list[dict]:
+    """Distinct domains behind this keyword's results, with their metrics."""
+    if not fields:
+        return []
+    out, seen = [], set()
+    for _original, canonical in pairs:
+        host = _host_of(canonical)
+        if not host or host in seen:
+            continue
+        seen.add(host)
+        out.append({
+            "domain": host,
+            "metrics": by_domain.get(host) or {},
+            "analysed": host in by_domain,
+        })
+    return out
+
+
 def _median(values: list[float]) -> float | None:
     """Median of the present values, or None when nothing was measurable.
 
@@ -67,9 +93,15 @@ def get_analysis(run_id: int, db: Session = Depends(get_db)):
     job = db.get(Job, run.job_id)
     mode = (getattr(job, "mode", None) or "serp") if job else "serp"
     selected = canonical_metrics(getattr(job, "ahrefs_metrics", None)) if job else []
+    domain_selected = (
+        canonical_domain_metrics(getattr(job, "ahrefs_domain_metrics", None)) if job else []
+    )
 
     if mode != "analyzer":
-        return {"mode": mode, "metrics": [], "rows": [], "ahrefs_units": None}
+        return {
+            "mode": mode, "metrics": [], "domain_metrics": [],
+            "rows": [], "ahrefs_units": None,
+        }
 
     # url -> metrics, for this run only.
     by_url: dict[str, dict] = {}
@@ -78,6 +110,11 @@ def get_analysis(run_id: int, db: Session = Depends(get_db)):
         by_url[m.url] = m.metrics or {}
         if m.error:
             errored.add(m.url)
+
+    by_domain = {
+        d.domain: (d.metrics or {})
+        for d in db.query(RunDomainMetric).filter(RunDomainMetric.run_id == run_id).all()
+    }
 
     ai = {
         a.keyword: {
@@ -178,6 +215,9 @@ def get_analysis(run_id: int, db: Session = Depends(get_db)):
                 }
                 for original, canonical in pairs
             ],
+            # One entry per distinct domain in this keyword's SERP (1:many with
+            # the URLs, hence its own list rather than columns on each URL row).
+            "domains": _domain_rows(pairs, by_domain, domain_selected),
             "difficulty": (ai.get(kw) or {}).get("difficulty"),
             "comment": (ai.get(kw) or {}).get("comment"),
             "ai_error": (ai.get(kw) or {}).get("error"),
@@ -187,6 +227,7 @@ def get_analysis(run_id: int, db: Session = Depends(get_db)):
     return {
         "mode": mode,
         "metrics": selected,
+        "domain_metrics": domain_selected,
         "rows": rows,
         "ahrefs_units": run.ahrefs_units,
     }

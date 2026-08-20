@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from urllib.parse import urlsplit
 from itertools import product
 from typing import Iterable
 
@@ -17,6 +18,7 @@ from .models import (
     Job,
     JobRun,
     Result,
+    RunDomainMetric,
     RunKeywordAnalysis,
     RunUrlMetric,
     SavedLocation,
@@ -176,6 +178,7 @@ async def _run_ahrefs_analysis(db: Session, run_id: int, job: Job) -> int:
     from .app_settings import get_ahrefs_api_key
     from .providers.ahrefs_batch import (
         BATCH_SIZE,
+        canonical_domain_metrics,
         canonical_metrics,
         fetch_batch_chunk,
     )
@@ -235,6 +238,45 @@ async def _run_ahrefs_analysis(db: Session, run_id: int, job: Job) -> int:
                         error=None, fetched_at=now,
                     ))
             db.commit()
+
+        # --- Domain-level pass -------------------------------------------
+        # Answers the one question page metrics can't: is this a weak page on a
+        # STRONG site (a parasite page) or a weak page on a weak site? Measured
+        # example: liga.net's article had 25 referring domains, the domain had
+        # 1,992. For single-page spam sites the two are identical, so this adds
+        # nothing there — but distinguishing the two cases is the point.
+        #
+        # Separate request, not mixed into the URL one: `select` is per-request,
+        # so mixing modes would force the union of both field sets onto every
+        # target and cost more than paying the 50-unit floor twice.
+        domain_select = canonical_domain_metrics(
+            getattr(job, "ahrefs_domain_metrics", None)
+        )
+        if domain_select:
+            domains: list[str] = []
+            dseen: set[str] = set()
+            for u in urls:
+                host = (urlsplit(u).hostname or "").lower()
+                if host.startswith("www."):
+                    host = host[4:]
+                if host and host not in dseen:
+                    dseen.add(host)
+                    domains.append(host)
+            for i in range(0, len(domains), BATCH_SIZE):
+                chunk = domains[i : i + BATCH_SIZE]
+                outcome = await fetch_batch_chunk(
+                    client, api_key, chunk, domain_select, mode="domain"
+                )
+                total_units += outcome.cost_billed or 0
+                now = utcnow()
+                for d in chunk:
+                    db.add(RunDomainMetric(
+                        run_id=run_id, domain=d,
+                        metrics=({} if outcome.error else (outcome.metrics_by_url.get(d) or {})),
+                        error=outcome.error[:500] if outcome.error else None,
+                        fetched_at=now,
+                    ))
+                db.commit()
     return total_units
 
 
@@ -249,8 +291,8 @@ async def _run_ai_difficulty(db: Session, run_id: int, job: Job) -> None:
     phase — one bad SERP shouldn't cost you the other nine verdicts.
     """
     from .app_settings import get_ai_analysis_provider
-    from .ai.serp_difficulty import build_serp_table, judge_keyword
-    from .providers.ahrefs_batch import canonical_metrics
+    from .ai.serp_difficulty import build_domain_table, build_serp_table, judge_keyword
+    from .providers.ahrefs_batch import canonical_domain_metrics, canonical_metrics
     from .providers.url_normalize import normalize_url
 
     provider_code = get_ai_analysis_provider()
@@ -258,6 +300,12 @@ async def _run_ai_difficulty(db: Session, run_id: int, job: Job) -> None:
         return  # no AI configured — metrics-only run, by design
 
     metrics = canonical_metrics(getattr(job, "ahrefs_metrics", None))
+    domain_metrics = canonical_domain_metrics(getattr(job, "ahrefs_domain_metrics", None))
+
+    by_domain = {
+        d.domain: (d.metrics or {})
+        for d in db.query(RunDomainMetric).filter(RunDomainMetric.run_id == run_id).all()
+    }
 
     # url -> metrics for this run.
     by_url = {
@@ -304,10 +352,22 @@ async def _run_ai_difficulty(db: Session, run_id: int, job: Job) -> None:
                 "metrics": by_url.get(canonical) or by_url.get(r.url or "") or {},
             })
         table = build_serp_table(table_rows, metrics, multi_variant=len(variants) > 1)
+        # Distinct domains behind this keyword's results, in first-seen order.
+        dom_rows, dseen = [], set()
+        for tr in table_rows:
+            host = (urlsplit(tr['url'] or '').hostname or '').lower()
+            if host.startswith('www.'):
+                host = host[4:]
+            if host and host not in dseen:
+                dseen.add(host)
+                dom_rows.append({'domain': host, 'metrics': by_domain.get(host) or {}})
+        domain_table = build_domain_table(dom_rows, domain_metrics)
 
         row = RunKeywordAnalysis(run_id=run_id, keyword=keyword)
         try:
-            verdict = await judge_keyword(provider_code, keyword, table)
+            verdict = await judge_keyword(
+                provider_code, keyword, table, domain_table=domain_table
+            )
             row.difficulty = verdict["difficulty"]
             row.comment = verdict["comment"]
             row.model = verdict["model"]

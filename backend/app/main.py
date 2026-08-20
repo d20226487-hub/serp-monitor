@@ -76,6 +76,7 @@ def _migrate_sqlite_columns() -> None:
         # unchanged for everything created before this.
         ("jobs", "mode", "VARCHAR(20) NOT NULL DEFAULT 'serp'"),
         ("jobs", "ahrefs_metrics", "JSON"),
+        ("jobs", "ahrefs_domain_metrics", "JSON"),
         # Ahrefs units actually billed for the run's batch-analysis phase.
         ("job_runs", "ahrefs_units", "INTEGER"),
     ]
@@ -85,6 +86,7 @@ def _migrate_sqlite_columns() -> None:
     # took down GET /jobs. Idempotent: only touches rows still NULL.
     backfills = [
         ("jobs", "ahrefs_metrics", "'[]'"),
+        ("jobs", "ahrefs_domain_metrics", "'[]'"),
     ]
     with engine.begin() as conn:
         for table, column, ddl in additions:

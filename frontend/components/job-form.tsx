@@ -52,6 +52,9 @@ export function JobForm({ initial, onSaved }: Props) {
   const [ahrefsMetrics, setAhrefsMetrics] = useState<string[]>(
     initial?.ahrefs_metrics ?? []
   );
+  const [ahrefsDomainMetrics, setAhrefsDomainMetrics] = useState<string[]>(
+    initial?.ahrefs_domain_metrics ?? []
+  );
   const [ahrefs, setAhrefs] = useState<AhrefsSettings | null>(null);
 
   const [langOpts, setLangOpts] = useState<Option<string>[]>([]);
@@ -79,6 +82,9 @@ export function JobForm({ initial, onSaved }: Props) {
       // never overwrite what an existing job already chose.
       setAhrefsMetrics(prev =>
         prev.length ? prev : (initial ? [] : a.default_metrics)
+      );
+      setAhrefsDomainMetrics(prev =>
+        prev.length ? prev : (initial ? [] : a.default_domain_metrics)
       );
     }).catch(() => {});
     api.listSavedLocations().then(rows => {
@@ -109,22 +115,35 @@ export function JobForm({ initial, onSaved }: Props) {
   // Ahrefs cost model, mirroring backend providers/ahrefs_batch.estimate_units:
   // billed = max(base, rows x sum(field costs)) per <=100-URL request.
   // Upper bound — duplicate URLs are fetched once and cached lookups bill less.
-  const { ahrefsUrlCount, perUrlUnits, ahrefsUnits } = useMemo(() => {
-    const chosen = ahrefsMetrics.length ? ahrefsMetrics : (ahrefs?.default_metrics ?? []);
+  const { ahrefsUrlCount, perUrlUnits, ahrefsUnits, perDomainUnits, domainUnits } = useMemo(() => {
     const unitOf = new Map((ahrefs?.metrics ?? []).map(m => [m.id, m.units]));
-    const perUrl = chosen.reduce((n, id) => n + (unitOf.get(id) ?? 1), 0);
-    const urls = (estimate?.total ?? 0) * Math.max(1, topN);
     const base = ahrefs?.base_request_units ?? 50;
     const size = ahrefs?.batch_size ?? 100;
-    let total = 0;
-    let remaining = urls;
-    while (remaining > 0) {
-      const rows = Math.min(remaining, size);
-      remaining -= rows;
-      total += Math.max(base, rows * perUrl);
-    }
-    return { ahrefsUrlCount: urls, perUrlUnits: perUrl, ahrefsUnits: total };
-  }, [ahrefsMetrics, ahrefs, estimate, topN]);
+    const cost = (rowsTotal: number, perRow: number) => {
+      if (!rowsTotal || !perRow) return 0;
+      let total = 0, remaining = rowsTotal;
+      while (remaining > 0) {
+        const rows = Math.min(remaining, size);
+        remaining -= rows;
+        total += Math.max(base, rows * perRow);
+      }
+      return total;
+    };
+    const chosen = ahrefsMetrics.length ? ahrefsMetrics : (ahrefs?.default_metrics ?? []);
+    const perUrl = chosen.reduce((n, id) => n + (unitOf.get(id) ?? 1), 0);
+    const urls = (estimate?.total ?? 0) * Math.max(1, topN);
+    const perDomain = ahrefsDomainMetrics.reduce((n, id) => n + (unitOf.get(id) ?? 1), 0);
+    // Domains dedupe far harder than URLs; ~1 domain per 3 results is a
+    // deliberately conservative (over-)estimate for a branded SERP.
+    const domains = perDomain ? Math.ceil(urls / 3) : 0;
+    return {
+      ahrefsUrlCount: urls,
+      perUrlUnits: perUrl,
+      ahrefsUnits: cost(urls, perUrl),
+      perDomainUnits: perDomain,
+      domainUnits: cost(domains, perDomain),
+    };
+  }, [ahrefsMetrics, ahrefsDomainMetrics, ahrefs, estimate, topN]);
 
   const buildPayload = (): Partial<Job> => ({
     name: name.trim(),
@@ -141,6 +160,7 @@ export function JobForm({ initial, onSaved }: Props) {
     provider,
     mode,
     ahrefs_metrics: mode === "analyzer" ? ahrefsMetrics : [],
+    ahrefs_domain_metrics: mode === "analyzer" ? ahrefsDomainMetrics : [],
   });
 
   async function save(runAfter = false) {
@@ -269,8 +289,51 @@ export function JobForm({ initial, onSaved }: Props) {
               );
             })}
           </div>
-          <div className="text-xs text-neutral-500">
+          {/* Domain-level pass: answers the one question page metrics can't —
+              weak page on a STRONG site, or weak page on a weak site. */}
+          <div className="pt-2 border-t dark:border-neutral-800">
+            <div className="font-medium text-sm">{t.jobForm.ahrefsDomainMetrics}</div>
+            <div className="text-xs text-neutral-500 mb-2">{t.jobForm.ahrefsDomainMetricsHelp}</div>
+            <div className="flex flex-wrap gap-2">
+              {(ahrefs?.metrics ?? [])
+                // url_rating is empty outside exact mode — don't offer to pay for it.
+                .filter(m => !(ahrefs?.url_only_metrics ?? []).includes(m.id))
+                .map(m => {
+                  const on = ahrefsDomainMetrics.includes(m.id);
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() =>
+                        setAhrefsDomainMetrics(prev =>
+                          prev.includes(m.id) ? prev.filter(x => x !== m.id) : [...prev, m.id]
+                        )
+                      }
+                      aria-pressed={on}
+                      className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
+                        on
+                          ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 border-neutral-900 dark:border-white"
+                          : "border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                      }`}
+                    >
+                      {m.label}
+                      <span className={`ml-1.5 ${on ? "opacity-60" : "text-neutral-400"}`}>
+                        {m.units}u
+                      </span>
+                    </button>
+                  );
+                })}
+            </div>
+            {ahrefsDomainMetrics.length === 0 && (
+              <div className="text-xs text-neutral-500 mt-1.5">{t.jobForm.ahrefsDomainOff}</div>
+            )}
+          </div>
+
+          <div className="text-xs text-neutral-500 pt-2 border-t dark:border-neutral-800">
             {t.jobForm.ahrefsUnitsEstimate(ahrefsUrlCount, perUrlUnits, ahrefsUnits)}
+            {perDomainUnits > 0 && (
+              <> {t.jobForm.ahrefsDomainUnits(perDomainUnits, domainUnits, ahrefsUnits + domainUnits)}</>
+            )}
           </div>
           {/* Below the floor, extra metrics are literally free — worth saying,
               since the opposite (paying 10u for a field returning zeros) is the

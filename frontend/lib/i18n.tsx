@@ -130,6 +130,8 @@ const messagesEn = {
     weakHint: (field: string) =>
       `Results with ${field === "url_rating" ? "UR" : "DR"} under 20 — the realistically displaceable slots`,
     rawTitle: "Raw Ahrefs data for every URL in this SERP",
+    rawDomainTitle: "Domain-level metrics for the sites above",
+    colDomain: "Domain",
     analyzedAs: "analysed as",
     notAnalysed: "not analysed",
     fetchFailed: "fetch failed",
@@ -150,6 +152,12 @@ const messagesEn = {
       "⚠ No Ahrefs API key configured — analyzer runs will fail. Add one in Settings → Ahrefs.",
     ahrefsUnitsEstimate: (urls: number, perUrl: number, units: number) =>
       `≈ ${urls.toLocaleString()} URLs × ${perUrl} units each ≈ ${units.toLocaleString()} Ahrefs units per run. Upper bound — duplicate URLs are fetched once and cached lookups bill less.`,
+    ahrefsDomainMetrics: "Domain-level metrics",
+    ahrefsDomainMetricsHelp:
+      "Fetched separately, in domain mode. This is what tells a weak page on a STRONG site apart from a weak page on a weak site — page metrics alone cannot. Domains dedupe far harder than URLs, so this costs much less than the URL pass.",
+    ahrefsDomainOff: "None selected — domain enrichment is off for this job.",
+    ahrefsDomainUnits: (perDomain: number, units: number, combined: number) =>
+      `Plus domains at ${perDomain} units each ≈ ${units.toLocaleString()} units — about ${combined.toLocaleString()} in total.`,
     ahrefsUnderFloor: (base: number) =>
       `Every request costs at least ${base} units, and this run is under that floor — additional metrics here are effectively free.`,
     name: "Name",
@@ -653,6 +661,8 @@ const messagesRu: Messages = {
     weakHint: (field: string) =>
       `Результаты с ${field === "url_rating" ? "UR" : "DR"} ниже 20 — реально вытесняемые позиции`,
     rawTitle: "Сырые данные Ahrefs по каждому URL этой выдачи",
+    rawDomainTitle: "Метрики уровня домена для сайтов выше",
+    colDomain: "Домен",
     analyzedAs: "проанализирован как",
     notAnalysed: "не проанализирован",
     fetchFailed: "ошибка запроса",
@@ -673,6 +683,12 @@ const messagesRu: Messages = {
       "⚠ API-ключ Ahrefs не задан — запуски в режиме анализатора завершатся ошибкой. Добавьте ключ в «Настройки → Ahrefs».",
     ahrefsUnitsEstimate: (urls: number, perUrl: number, units: number) =>
       `≈ ${urls.toLocaleString()} URL × ${perUrl} юнитов каждый ≈ ${units.toLocaleString()} юнитов Ahrefs за прогон. Это верхняя оценка — дубликаты URL запрашиваются один раз, а кэшированные ответы стоят дешевле.`,
+    ahrefsDomainMetrics: "Метрики уровня домена",
+    ahrefsDomainMetricsHelp:
+      "Запрашиваются отдельно, в режиме домена. Именно это отличает слабую страницу на СИЛЬНОМ сайте от слабой страницы на слабом сайте — по метрикам страницы такое не определить. Домены дедуплицируются гораздо сильнее URL, поэтому это заметно дешевле основного прохода.",
+    ahrefsDomainOff: "Ничего не выбрано — обогащение по доменам для этой задачи выключено.",
+    ahrefsDomainUnits: (perDomain: number, units: number, combined: number) =>
+      `Плюс домены по ${perDomain} юнитов ≈ ${units.toLocaleString()} юнитов — итого около ${combined.toLocaleString()}.`,
     ahrefsUnderFloor: (base: number) =>
       `Любой запрос стоит минимум ${base} юнитов, а этот прогон в этот минимум укладывается — дополнительные метрики здесь фактически бесплатны.`,
     name: "Название",
