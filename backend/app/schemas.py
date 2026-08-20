@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class LocationRef(BaseModel):
@@ -52,6 +52,21 @@ class JobOut(JobBase):
     id: int
     created_at: datetime
     updated_at: datetime
+
+    # Rows written before a JSON list column existed come back NULL, which would
+    # otherwise fail validation and 500 the whole endpoint (one legacy row breaks
+    # the entire list response). Coerce to the empty list instead — a missing
+    # value here genuinely means "nothing selected".
+    @field_validator("keywords", "engines", "devices", "locations", "languages",
+                     "google_domains", "scrape_fields", "ahrefs_metrics", mode="before")
+    @classmethod
+    def _none_to_empty_list(cls, v):
+        return [] if v is None else v
+
+    @field_validator("mode", mode="before")
+    @classmethod
+    def _default_mode(cls, v):
+        return v or "serp"
 
 
 class JobRunOut(BaseModel):

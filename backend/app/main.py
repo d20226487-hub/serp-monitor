@@ -79,11 +79,24 @@ def _migrate_sqlite_columns() -> None:
         # Ahrefs units actually billed for the run's batch-analysis phase.
         ("job_runs", "ahrefs_units", "INTEGER"),
     ]
+    # Values to backfill into rows that predate a column. ALTER TABLE ADD COLUMN
+    # without a DEFAULT leaves existing rows NULL, which then fails response
+    # validation for any non-Optional field — that's exactly how `ahrefs_metrics`
+    # took down GET /jobs. Idempotent: only touches rows still NULL.
+    backfills = [
+        ("jobs", "ahrefs_metrics", "'[]'"),
+    ]
     with engine.begin() as conn:
         for table, column, ddl in additions:
             existing = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table})"))}
             if column not in existing:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
+        for table, column, value in backfills:
+            existing = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table})"))}
+            if column in existing:
+                conn.execute(
+                    text(f"UPDATE {table} SET {column} = {value} WHERE {column} IS NULL")
+                )
 
 
 @asynccontextmanager
