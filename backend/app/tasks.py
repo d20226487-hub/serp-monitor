@@ -171,6 +171,7 @@ async def _run_ahrefs_analysis(db: Session, run_id: int, job: Job) -> int:
         canonical_metrics,
         fetch_batch_chunk,
     )
+    from .providers.url_normalize import normalize_url
 
     api_key = get_ahrefs_api_key()
     if not api_key:
@@ -181,6 +182,13 @@ async def _run_ahrefs_analysis(db: Session, run_id: int, job: Job) -> int:
     select = canonical_metrics(getattr(job, "ahrefs_metrics", None))
 
     # Unique, non-empty URLs from this run, in a stable order.
+    #
+    # NORMALISED first: search engines often rank an AMP or parameter-decorated
+    # variant, and Ahrefs treats those as separate URLs with an empty link
+    # profile. Measured on a real SERP, normalising turned "0 backlinks" into
+    # 298 for the same page — analysing the raw SERP URL badly under-reports how
+    # strong the ranking page is. Deduping AFTER normalisation also collapses
+    # amp+canonical pairs into one billed target.
     rows = (
         db.query(Result.url)
         .filter(Result.run_id == run_id, Result.url.isnot(None))
@@ -189,10 +197,10 @@ async def _run_ahrefs_analysis(db: Session, run_id: int, job: Job) -> int:
     seen: set[str] = set()
     urls: list[str] = []
     for (u,) in rows:
-        u = (u or "").strip()
-        if u and u not in seen:
-            seen.add(u)
-            urls.append(u)
+        canonical = normalize_url((u or "").strip())
+        if canonical and canonical not in seen:
+            seen.add(canonical)
+            urls.append(canonical)
     if not urls:
         return 0
 

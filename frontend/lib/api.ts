@@ -53,7 +53,11 @@ export type AhrefsSettings = {
 };
 
 export type AnalysisUrl = {
+  /** The URL as it ranked in the SERP. */
   url: string;
+  /** The canonical URL actually sent to Ahrefs (AMP/tracking stripped). */
+  analyzed_url: string;
+  normalized: boolean;
   metrics: Record<string, number | null>;
   error: boolean;
   analysed: boolean;

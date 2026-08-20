@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import Job, JobRun, Result, RunUrlMetric
 from ..providers.ahrefs_batch import canonical_metrics
+from ..providers.url_normalize import normalize_url
 from ..schemas import JobRunOut, ResultOut
 
 router = APIRouter(prefix="/runs", tags=["runs"])
@@ -91,7 +92,26 @@ def get_analysis(run_id: int, db: Session = Depends(get_db)):
 
     rows = []
     for kw, urls in per_keyword.items():
-        uniq = list(dict.fromkeys(u for u in urls if u))
+        # Map each SERP URL to the canonical form we actually asked Ahrefs
+        # about, then dedupe on that — an AMP variant and its canonical are one
+        # page. `pairs` keeps the original so the raw table can show both.
+        pairs: list[tuple[str, str]] = []
+        seen_c: set[str] = set()
+        for u in urls:
+            if not u:
+                continue
+            c = normalize_url(u)
+            if c in seen_c:
+                continue
+            seen_c.add(c)
+            pairs.append((u, c))
+        # Runs made BEFORE normalisation stored metrics under the raw SERP URL,
+        # so look up the canonical form first and fall back to the original.
+        # Without this, every pre-existing analyzer run would suddenly read
+        # "not analysed". We deliberately do NOT re-key the old rows: their
+        # metrics describe the AMP variant, and moving them onto the canonical
+        # URL would relabel wrong data as right.
+        uniq = [c if c in by_url else o for o, c in pairs]
         medians: dict[str, float | None] = {}
         means: dict[str, float | None] = {}
         mins: dict[str, float | None] = {}
@@ -134,12 +154,18 @@ def get_analysis(run_id: int, db: Session = Depends(get_db)):
             # actually returned. Ordered by SERP position.
             "urls": [
                 {
-                    "url": u,
-                    "metrics": by_url.get(u) or {},
-                    "error": (u in errored),
-                    "analysed": u in by_url,
+                    # What ranked, and what we measured — shown separately so a
+                    # normalisation is always visible rather than silent.
+                    # `key` is whichever URL actually holds the metrics (see the
+                    # legacy fallback above).
+                    "url": original,
+                    "analyzed_url": (key := canonical if canonical in by_url else original),
+                    "normalized": original != key,
+                    "metrics": by_url.get(key) or {},
+                    "error": (key in errored),
+                    "analysed": key in by_url,
                 }
-                for u in uniq
+                for original, canonical in pairs
             ],
             # Placeholder for phase 2 — the AI difficulty verdict.
             "difficulty": None,

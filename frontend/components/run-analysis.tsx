@@ -220,6 +220,14 @@ function AnalysisTableRow({ row, metrics }: { row: AnalysisRow; metrics: string[
                         >
                           {u.url}
                         </a>
+                        {/* Never hide that we measured a different URL than the
+                            one that ranked. */}
+                        {u.normalized && (
+                          <div className="text-neutral-500 break-all">
+                            {t.analysis.analyzedAs}{" "}
+                            <span className="font-mono">{u.analyzed_url}</span>
+                          </div>
+                        )}
                         {!u.analysed && (
                           <span className="ml-2 text-amber-700 dark:text-amber-300">
                             {t.analysis.notAnalysed}

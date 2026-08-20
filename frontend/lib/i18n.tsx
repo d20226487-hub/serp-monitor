@@ -122,10 +122,11 @@ const messagesEn = {
     weakHint: (field: string) =>
       `Results with ${field === "url_rating" ? "UR" : "DR"} under 20 — the realistically displaceable slots`,
     rawTitle: "Raw Ahrefs data for every URL in this SERP",
+    analyzedAs: "analysed as",
     notAnalysed: "not analysed",
     fetchFailed: "fetch failed",
     footnote:
-      "Headline figure is the median; hover a cell for average / min / max. Median resists a single very strong result skewing the picture, but ranking top-10 means beating the weakest reachable result — so watch the “weak” count too. URLs are analysed in Ahrefs exact-URL mode, which is what makes UR per-page rather than per-domain. Click a keyword to see the raw per-URL numbers.",
+      "Headline figure is the median; hover a cell for average / min / max. Median resists a single very strong result skewing the picture, but ranking top-10 means beating the weakest reachable result — so watch the “weak” count too. URLs are analysed in Ahrefs exact-URL mode, which is what makes UR per-page rather than per-domain; AMP and tracking variants are normalised to the canonical page first, because Ahrefs reports those as separate URLs with an empty link profile. Click a keyword to see the raw per-URL numbers.",
   },
   jobForm: {
     mode: "Mode",
@@ -620,10 +621,11 @@ const messagesRu: Messages = {
     weakHint: (field: string) =>
       `Результаты с ${field === "url_rating" ? "UR" : "DR"} ниже 20 — реально вытесняемые позиции`,
     rawTitle: "Сырые данные Ahrefs по каждому URL этой выдачи",
+    analyzedAs: "проанализирован как",
     notAnalysed: "не проанализирован",
     fetchFailed: "ошибка запроса",
     footnote:
-      "Основное число — медиана; наведите на ячейку, чтобы увидеть среднее / мин / макс. Медиана устойчива к одному очень сильному результату, но чтобы попасть в топ-10, нужно обойти самый слабый достижимый результат — поэтому смотрите и на счётчик «слабых». URL анализируются в режиме точного URL (exact), поэтому UR относится к странице, а не к домену. Кликните по ключевому слову, чтобы увидеть сырые данные по каждому URL.",
+      "Основное число — медиана; наведите на ячейку, чтобы увидеть среднее / мин / макс. Медиана устойчива к одному очень сильному результату, но чтобы попасть в топ-10, нужно обойти самый слабый достижимый результат — поэтому смотрите и на счётчик «слабых». URL анализируются в режиме точного URL (exact), поэтому UR относится к странице, а не к домену; AMP- и трекинговые варианты предварительно приводятся к каноническому URL, поскольку Ahrefs считает их отдельными страницами с пустым ссылочным профилем. Кликните по ключевому слову, чтобы увидеть сырые данные по каждому URL.",
   },
   jobForm: {
     mode: "Режим",
