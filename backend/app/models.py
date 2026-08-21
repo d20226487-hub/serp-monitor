@@ -106,6 +106,11 @@ class JobRun(Base):
     # what the run paid for the answers it ended up with.
     whois_domains: Mapped[int | None] = mapped_column(Integer, nullable=True)
     whois_fetched: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Ahrefs targets served from the cross-run cache versus actually bought.
+    # Reported so the units figure can be read against how much of the run was
+    # paid for — a cheap run and a cached run look identical otherwise.
+    ahrefs_cached: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ahrefs_fetched: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Per-run override of the opportunity formula, as JSON. NULL means "use the
     # global one", which is not the same as storing a copy of it: a run left on
     # the default follows Settings when the global changes, while a run that was
@@ -223,6 +228,39 @@ class KeywordVolume(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
 
+class AhrefsMetricCache(Base):
+    """Ahrefs metrics for one target, cached ACROSS runs.
+
+    Distinct from RunUrlMetric/RunDomainMetric, which stay per-run on purpose:
+    those are the historical record of what a run measured, and rewriting them
+    from a later fetch would rewrite history. This table only exists to avoid
+    re-buying a figure we already hold.
+
+    Unlike the WHOIS cache, the TTL here is a real trade-off rather than a free
+    win. DR, UR and backlink counts move daily, so caching too long makes a
+    monitoring run report stale numbers — which is the thing re-running the job
+    was meant to reveal. Hence a setting, defaulting to a week.
+
+    Keyed on (target, mode) because Ahrefs answers differently per mode: the
+    same host returns 9 organic keywords under mode=domain and 51,345 under
+    mode=subdomains. Mixing them would be silently wrong.
+    """
+    __tablename__ = "ahrefs_metric_cache"
+    __table_args__ = (
+        UniqueConstraint("target", "mode", name="uq_ahrefs_cache_target_mode"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    target: Mapped[str] = mapped_column(Text, index=True)
+    # "exact" for URL-level, "subdomains" for domain-level.
+    mode: Mapped[str] = mapped_column(String(20))
+    # Whatever fields were requested when this row was filled. A cached row can
+    # serve a later request only if it holds EVERY field that request needs —
+    # a run asking for six metrics cannot be answered from a four-metric row.
+    metrics: Mapped[dict] = mapped_column(JSON, default=dict)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class DomainWhois(Base):
     """WHOIS registration facts for one registrable domain — cached globally.
 
@@ -271,7 +309,18 @@ class RunKeywordAnalysis(Base):
     # "low" | "medium" | "hard" | "too hard". NULL when the call failed.
     difficulty: Mapped[str | None] = mapped_column(String(20), nullable=True)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The exact text sent to the model, and the exact JSON it sent back.
+    # Stored rather than rebuilt on demand: the prompt template, the metric
+    # selection and the model itself can all change afterwards, so a
+    # reconstruction would show what we WOULD send today, not what produced
+    # this verdict. Written before the call, so a failed verdict still has its
+    # prompt to look at — which is when you most want it.
+    prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    raw_response: Mapped[str | None] = mapped_column(Text, nullable=True)
     model: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # Sampling temperature in force for this verdict. Without it, two runs of
+    # the same SERP that disagree are indistinguishable from a settings change.
+    temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
     prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)

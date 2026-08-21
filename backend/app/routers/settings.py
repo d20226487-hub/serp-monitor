@@ -1,8 +1,12 @@
 """Runtime settings (UI-mutable). Provider credentials + scheduler info."""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from ..db import get_db
+from ..models import AhrefsMetricCache
 
 from ..ai import AIProviderConfigError, AIProviderError, get_ai_provider
 from ..ai.prompts import (
@@ -19,8 +23,19 @@ from ..app_settings import (
     ai_provider_status,
     clear_ai_provider_config,
     clear_provider_creds,
+    DEFAULT_AHREFS_CACHE_TTL_DAYS,
+    DEFAULT_AI_MAX_OUTPUT_TOKENS,
+    DEFAULT_AI_TEMPERATURE,
+    DEFAULT_AI_THINKING_BUDGET,
+    MAX_AI_TEMPERATURE,
+    MAX_AI_THINKING_BUDGET,
+    MAX_AHREFS_CACHE_TTL_DAYS,
     get_ahrefs_api_key,
+    get_ahrefs_cache_ttl_days,
     get_ai_analysis_provider,
+    get_ai_max_output_tokens,
+    get_ai_temperature,
+    get_ai_thinking_budget,
     get_opportunity_formula,
     get_provider_creds,
     get_provider_rates,
@@ -30,6 +45,10 @@ from ..app_settings import (
     set_ai_analysis_provider,
     set_ai_provider_config,
     set_provider_creds,
+    set_ahrefs_cache_ttl_days,
+    set_ai_max_output_tokens,
+    set_ai_temperature,
+    set_ai_thinking_budget,
     set_opportunity_formula,
     set_provider_rates,
     set_serpapi_key,
@@ -156,6 +175,14 @@ def get_ai_analysis_settings():
         **serp_difficulty_prompt_status(),
         "provider": get_ai_analysis_provider(),
         "available": list(AI_PROVIDER_FIELDS.keys()),
+        "temperature": get_ai_temperature(),
+        "temperature_default": DEFAULT_AI_TEMPERATURE,
+        "temperature_max": MAX_AI_TEMPERATURE,
+        "thinking_budget": get_ai_thinking_budget(),
+        "thinking_budget_default": DEFAULT_AI_THINKING_BUDGET,
+        "thinking_budget_max": MAX_AI_THINKING_BUDGET,
+        "max_output_tokens": get_ai_max_output_tokens(),
+        "max_output_tokens_default": DEFAULT_AI_MAX_OUTPUT_TOKENS,
     }
 
 
@@ -170,6 +197,26 @@ def update_domain_prompt(payload: PromptIn):
     """Guidance shown above the domain-level table. Empty resets to default."""
     set_domain_prompt(payload.prompt)
     return serp_difficulty_prompt_status()
+
+
+class AITuningIn(BaseModel):
+    temperature: float | None = None
+    thinking_budget: int | None = None
+    max_output_tokens: int | None = None
+
+
+@router.put("/ai-analysis/tuning")
+def update_ai_tuning(payload: AITuningIn):
+    """Sampling and reasoning parameters for the difficulty judge.
+
+    A field left null resets that parameter to its default rather than being
+    ignored, so the form can clear one without touching the others.
+    """
+    return {
+        "temperature": set_ai_temperature(payload.temperature),
+        "thinking_budget": set_ai_thinking_budget(payload.thinking_budget),
+        "max_output_tokens": set_ai_max_output_tokens(payload.max_output_tokens),
+    }
 
 
 @router.put("/ai-analysis/provider")
@@ -202,7 +249,29 @@ def get_ahrefs():
         "url_only_metrics": sorted(URL_ONLY_METRICS),
         "batch_size": BATCH_SIZE,
         "base_request_units": BASE_REQUEST_UNITS,
+        "cache_ttl_days": get_ahrefs_cache_ttl_days(),
+        "cache_ttl_default": DEFAULT_AHREFS_CACHE_TTL_DAYS,
+        "cache_ttl_max": MAX_AHREFS_CACHE_TTL_DAYS,
     }
+
+
+class AhrefsCacheTtlIn(BaseModel):
+    days: int | None = None
+
+
+@router.put("/ahrefs/cache-ttl")
+def update_ahrefs_cache_ttl(payload: AhrefsCacheTtlIn):
+    """How long a fetched Ahrefs metric may be reused across runs.
+    0 turns the cross-run cache off; null resets to the default."""
+    return {"cache_ttl_days": set_ahrefs_cache_ttl_days(payload.days)}
+
+
+@router.delete("/ahrefs/cache")
+def clear_ahrefs_cache(db: Session = Depends(get_db)):
+    """Drop every cached metric, forcing the next run to re-measure."""
+    n = db.query(AhrefsMetricCache).delete()
+    db.commit()
+    return {"cleared": n}
 
 
 @router.put("/ahrefs")

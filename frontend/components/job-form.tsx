@@ -224,7 +224,7 @@ export function JobForm({ initial, onSaved }: Props) {
 
       <div className="space-y-1.5">
         <label className="text-sm font-medium">
-          {t.jobForm.keywords} <span className="text-neutral-500 text-xs">{t.jobForm.keywordsHint}</span>
+          {t.jobForm.keywords} <span className="text-neutral-600 dark:text-neutral-400 text-xs">{t.jobForm.keywordsHint}</span>
         </label>
         <textarea
           value={keywordsText}
@@ -233,7 +233,7 @@ export function JobForm({ initial, onSaved }: Props) {
           placeholder={t.jobForm.keywordsPlaceholder}
           className="w-full px-3 py-2 rounded-md border font-mono text-sm bg-white dark:bg-neutral-900 dark:border-neutral-700"
         />
-        <div className="text-xs text-neutral-500">{t.jobForm.keywordsCount(keywords.length)}</div>
+        <div className="text-xs text-neutral-600 dark:text-neutral-400">{t.jobForm.keywordsCount(keywords.length)}</div>
       </div>
 
       {/* Mode selector. Mode 1 is the original behaviour and stays the default;
@@ -247,16 +247,14 @@ export function JobForm({ initial, onSaved }: Props) {
               type="button"
               onClick={() => setMode(m)}
               aria-pressed={mode === m}
-              className={`text-left px-3 py-2 rounded-md border transition-colors ${
-                mode === m
-                  ? "border-neutral-900 dark:border-white bg-neutral-50 dark:bg-neutral-900"
+              className={`text-left px-3 py-2 rounded-md border transition-colors ${mode === m ? "border-neutral-900 dark:border-white bg-neutral-50 dark:bg-neutral-900"
                   : "border-neutral-300 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-900/50"
               }`}
             >
               <div className="text-sm font-medium">
                 {m === "serp" ? t.jobForm.modeSerp : t.jobForm.modeAnalyzer}
               </div>
-              <div className="text-xs text-neutral-500 mt-0.5">
+              <div className="text-xs text-neutral-600 dark:text-neutral-400 mt-0.5">
                 {m === "serp" ? t.jobForm.modeSerpHelp : t.jobForm.modeAnalyzerHelp}
               </div>
             </button>
@@ -268,7 +266,7 @@ export function JobForm({ initial, onSaved }: Props) {
         <div className="border rounded-md p-4 dark:border-neutral-700 space-y-3">
           <div>
             <div className="font-medium text-sm">{t.jobForm.ahrefsMetrics}</div>
-            <div className="text-xs text-neutral-500">{t.jobForm.ahrefsMetricsHelp}</div>
+            <div className="text-xs text-neutral-600 dark:text-neutral-400">{t.jobForm.ahrefsMetricsHelp}</div>
           </div>
           {ahrefs && !ahrefs.configured && (
             <div className="text-xs text-amber-700 dark:text-amber-300 border-l-4 border-amber-400 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 rounded">
@@ -288,16 +286,14 @@ export function JobForm({ initial, onSaved }: Props) {
                     )
                   }
                   aria-pressed={on}
-                  className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
-                    on
-                      ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 border-neutral-900 dark:border-white"
+                  className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${on ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 border-neutral-900 dark:border-white"
                       : "border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800"
                   }`}
                 >
                   {m.label}
                   {/* Field prices differ ~10x, so show them inline: picking
                       org_traffic is a very different decision from picking DR. */}
-                  <span className={`ml-1.5 ${on ? "opacity-60" : "text-neutral-400"}`}>
+                  <span className={`ml-1.5 ${on ? "opacity-60" : "text-neutral-500 dark:text-neutral-400"}`}>
                     {m.units}u
                   </span>
                 </button>
@@ -308,7 +304,7 @@ export function JobForm({ initial, onSaved }: Props) {
               weak page on a STRONG site, or weak page on a weak site. */}
           <div className="pt-2 border-t dark:border-neutral-800">
             <div className="font-medium text-sm">{t.jobForm.ahrefsDomainMetrics}</div>
-            <div className="text-xs text-neutral-500 mb-2">{t.jobForm.ahrefsDomainMetricsHelp}</div>
+            <div className="text-xs text-neutral-600 dark:text-neutral-400 mb-2">{t.jobForm.ahrefsDomainMetricsHelp}</div>
             <div className="flex flex-wrap gap-2">
               {(ahrefs?.metrics ?? [])
                 // url_rating is empty outside exact mode — don't offer to pay for it.
@@ -325,14 +321,12 @@ export function JobForm({ initial, onSaved }: Props) {
                         )
                       }
                       aria-pressed={on}
-                      className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
-                        on
-                          ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 border-neutral-900 dark:border-white"
+                      className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${on ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 border-neutral-900 dark:border-white"
                           : "border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800"
                       }`}
                     >
                       {m.label}
-                      <span className={`ml-1.5 ${on ? "opacity-60" : "text-neutral-400"}`}>
+                      <span className={`ml-1.5 ${on ? "opacity-60" : "text-neutral-500 dark:text-neutral-400"}`}>
                         {m.units}u
                       </span>
                     </button>
@@ -340,7 +334,7 @@ export function JobForm({ initial, onSaved }: Props) {
                 })}
             </div>
             {ahrefsDomainMetrics.length === 0 && (
-              <div className="text-xs text-neutral-500 mt-1.5">{t.jobForm.ahrefsDomainOff}</div>
+              <div className="text-xs text-neutral-600 dark:text-neutral-400 mt-1.5">{t.jobForm.ahrefsDomainOff}</div>
             )}
           </div>
 
@@ -357,13 +351,13 @@ export function JobForm({ initial, onSaved }: Props) {
               />
               <span>
                 <span className="font-medium text-sm">{t.jobForm.whois}</span>
-                <span className="block text-xs text-neutral-500">
+                <span className="block text-xs text-neutral-600 dark:text-neutral-400">
                   {t.jobForm.whoisHelp}
                 </span>
               </span>
             </label>
             {whoisEnabled && (
-              <div className="text-xs text-neutral-500 mt-1.5 pl-6">
+              <div className="text-xs text-neutral-600 dark:text-neutral-400 mt-1.5 pl-6">
                 {t.jobForm.whoisCost}
                 {!dataforseoReady && (
                   <span className="block text-amber-700 dark:text-amber-300 mt-1">
@@ -374,7 +368,7 @@ export function JobForm({ initial, onSaved }: Props) {
             )}
           </div>
 
-          <div className="text-xs text-neutral-500 pt-2 border-t dark:border-neutral-800">
+          <div className="text-xs text-neutral-600 dark:text-neutral-400 pt-2 border-t dark:border-neutral-800">
             {t.jobForm.ahrefsUnitsEstimate(ahrefsUrlCount, perUrlUnits, ahrefsUnits)}
             {perDomainUnits > 0 && (
               <> {t.jobForm.ahrefsDomainUnits(perDomainUnits, domainUnits, ahrefsUnits + domainUnits)}</>
@@ -403,7 +397,7 @@ export function JobForm({ initial, onSaved }: Props) {
           <option value="oxylabs">Oxylabs</option>
           <option value="dataforseo">DataForSEO</option>
         </select>
-        <p className="text-xs text-neutral-500">
+        <p className="text-xs text-neutral-600 dark:text-neutral-400">
           {t.jobForm.providerHelpPrefix}
           <a href="/settings" className="underline">{t.jobForm.providerHelpLink}</a>
           {t.jobForm.providerHelpSuffix}
@@ -518,7 +512,7 @@ export function JobForm({ initial, onSaved }: Props) {
         <div className="flex items-center justify-between">
           <div>
             <div className="font-medium text-sm">{t.jobForm.schedule}</div>
-            <div className="text-xs text-neutral-500">
+            <div className="text-xs text-neutral-600 dark:text-neutral-400">
               {t.jobForm.cronHelpPrefix(schedTz)}
               {schedTz === "UTC" && t.jobForm.cronEditHint}
             </div>
@@ -560,7 +554,7 @@ export function JobForm({ initial, onSaved }: Props) {
           <div>
             <div className="text-sm font-medium mb-1">{t.jobForm.estimateTitle}</div>
             <div className="text-2xl font-semibold">{estimate?.total ?? 0}</div>
-            <div className="text-xs text-neutral-500 mt-1">
+            <div className="text-xs text-neutral-600 dark:text-neutral-400 mt-1">
               {t.jobForm.estimateBreakdown(estimate?.breakdown.google ?? 0, estimate?.breakdown.yandex ?? 0)}
             </div>
           </div>
@@ -571,7 +565,7 @@ export function JobForm({ initial, onSaved }: Props) {
                 (estimate?.total ?? 0) * billingUnits(provider, topN) * (rates?.rates[provider] ?? 0)
               )}
             </div>
-            <div className="text-xs text-neutral-500 mt-1">
+            <div className="text-xs text-neutral-600 dark:text-neutral-400 mt-1">
               {t.jobForm.estimateRate(formatUsd(rates?.rates[provider] ?? 0))}
               {" · "}
               <a href="/settings" className="underline">{t.jobForm.estimateEditRate}</a>
@@ -585,7 +579,7 @@ export function JobForm({ initial, onSaved }: Props) {
             )}
           </div>
         </div>
-        <div className="text-xs text-neutral-500 mt-3">
+        <div className="text-xs text-neutral-600 dark:text-neutral-400 mt-3">
           {t.jobForm.estimateApprox}
         </div>
       </div>
@@ -670,7 +664,7 @@ function GranBadge({ g }: { g: Granularity }) {
     : g === "country" ? t.jobForm.targeting.gran.country
     : t.jobForm.targeting.gran.none;
   return (
-    <span className={`inline-block text-[10px] font-medium uppercase px-1.5 py-0.5 rounded ${cls}`}>
+    <span className={`inline-block text-xs font-medium uppercase px-1.5 py-0.5 rounded ${cls}`}>
       {label}
     </span>
   );
@@ -683,7 +677,7 @@ function EngineRow({
   const name = engine === "google" ? t.jobForm.targeting.engineGoogle : t.jobForm.targeting.engineYandex;
   return (
     <div className="flex items-center gap-2 text-xs">
-      <span className="w-14 text-neutral-500">{name}</span>
+      <span className="w-14 text-neutral-600 dark:text-neutral-400">{name}</span>
       <GranBadge g={outcome.granularity} />
       <span className="text-neutral-600 dark:text-neutral-400 font-mono truncate">
         {outcome.via}{outcome.detail ? `  ${outcome.detail}` : ""}
@@ -703,7 +697,7 @@ function EffectiveTargetingPanel({
   const { t } = useT();
   if (locations.length === 0) {
     return (
-      <div className="text-xs text-neutral-500 italic">
+      <div className="text-xs text-neutral-600 dark:text-neutral-400 italic">
         {t.jobForm.targeting.noLocations}
       </div>
     );
@@ -713,7 +707,7 @@ function EffectiveTargetingPanel({
 
   return (
     <div className="border rounded-md p-3 dark:border-neutral-700 space-y-2">
-      <div className="text-xs uppercase tracking-wide font-semibold text-neutral-500">
+      <div className="text-xs uppercase tracking-wide font-semibold text-neutral-600 dark:text-neutral-400">
         {t.jobForm.targeting.header(provider)}
       </div>
       <div className="space-y-2">
@@ -726,13 +720,13 @@ function EffectiveTargetingPanel({
                 {showGoogle && <EngineRow engine="google" outcome={googleOutcome(provider, loc, saved)} />}
                 {showYandex && <EngineRow engine="yandex" outcome={yandexOutcome(provider, loc, saved)} />}
                 {!showGoogle && !showYandex && (
-                  <div className="text-xs text-neutral-500 italic">{t.jobForm.targeting.noEngines}</div>
+                  <div className="text-xs text-neutral-600 dark:text-neutral-400 italic">{t.jobForm.targeting.noEngines}</div>
                 )}
               </div>
               {/* Skip the lr hint for DataForSEO — Yandex won't run there at
                   all, so telling the user to add a region ID would mislead. */}
               {showYandex && provider !== "dataforseo" && !saved?.yandex_lr && (
-                <div className="text-[11px] text-amber-700 dark:text-amber-300 mt-1">
+                <div className="text-xs text-amber-700 dark:text-amber-300 mt-1">
                   {t.jobForm.targeting.noLrWarning}
                 </div>
               )}

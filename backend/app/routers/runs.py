@@ -129,6 +129,7 @@ def get_analysis(run_id: int, db: Session = Depends(get_db)):
         return {
             "mode": mode, "metrics": [], "domain_metrics": [],
             "rows": [], "ahrefs_units": None,
+            "ahrefs_cached": None, "ahrefs_fetched": None,
             "whois_cost": None, "whois_domains": None, "whois_fetched": None,
             "whois_enabled": False, "country": None, "countries": [],
             "sub_national": False,
@@ -242,6 +243,11 @@ def get_analysis(run_id: int, db: Session = Depends(get_db)):
             "difficulty": a.difficulty,
             "comment": a.comment,
             "error": a.error,
+            "prompt": a.prompt,
+            "raw_response": a.raw_response,
+            "model": a.model,
+            "prompt_tokens": a.prompt_tokens,
+            "completion_tokens": a.completion_tokens,
         }
         for a in db.query(RunKeywordAnalysis)
         .filter(RunKeywordAnalysis.run_id == run_id)
@@ -343,6 +349,11 @@ def get_analysis(run_id: int, db: Session = Depends(get_db)):
             "difficulty": (ai.get(kw) or {}).get("difficulty"),
             "comment": (ai.get(kw) or {}).get("comment"),
             "ai_error": (ai.get(kw) or {}).get("error"),
+            "ai_prompt": (ai.get(kw) or {}).get("prompt"),
+            "ai_raw": (ai.get(kw) or {}).get("raw_response"),
+            "ai_model": (ai.get(kw) or {}).get("model"),
+            "ai_prompt_tokens": (ai.get(kw) or {}).get("prompt_tokens"),
+            "ai_completion_tokens": (ai.get(kw) or {}).get("completion_tokens"),
         })
     rows.sort(key=lambda r: r["keyword"].lower())
 
@@ -352,6 +363,8 @@ def get_analysis(run_id: int, db: Session = Depends(get_db)):
         "domain_metrics": domain_selected,
         "rows": rows,
         "ahrefs_units": run.ahrefs_units,
+        "ahrefs_cached": getattr(run, "ahrefs_cached", None),
+        "ahrefs_fetched": getattr(run, "ahrefs_fetched", None),
         "whois_cost": getattr(run, "whois_cost", None),
         "whois_domains": getattr(run, "whois_domains", None),
         "whois_fetched": getattr(run, "whois_fetched", None),

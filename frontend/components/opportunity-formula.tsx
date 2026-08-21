@@ -22,20 +22,57 @@ type FieldSpec = {
   step: number;
 };
 
-// Bounds mirror _OPPORTUNITY_BOUNDS on the server. The server re-validates and
-// silently falls back on anything out of range, so these are a convenience for
-// the user rather than the guarantee.
-const NUMERIC_FIELDS: FieldSpec[] = [
-  { key: "ai_low", min: 0, max: 1, step: 0.05 },
-  { key: "ai_medium", min: 0, max: 1, step: 0.05 },
-  { key: "ai_hard", min: 0, max: 1, step: 0.05 },
-  { key: "ai_too_hard", min: 0, max: 1, step: 0.05 },
-  { key: "ai_unknown", min: 0, max: 1, step: 0.05 },
-  { key: "bar_dr_ceiling", min: 1, max: 100, step: 1 },
-  { key: "soft_floor", min: 0, max: 1, step: 0.05 },
-  { key: "min_weight", min: 0, max: 0.45, step: 0.05 },
-  { key: "balance", min: 0, max: 1, step: 0.1 },
-  { key: "shortlist", min: 1, max: 50, step: 1 },
+type Group = {
+  /** i18n key under t.formula.groups. */
+  id: string;
+  fields: FieldSpec[];
+  /** Rendered after the numeric fields of this group. */
+  curve?: boolean;
+};
+
+// Grouped by what a field DOES, not by its type. Fifteen numbers in one grid
+// gives no clue that ai_medium and ur_soft affect completely different halves
+// of the score; four short sections do.
+//
+// Bounds mirror _OPPORTUNITY_BOUNDS on the server, which re-validates and
+// silently falls back on anything out of range — these are a convenience for
+// the user, not the guarantee.
+const GROUPS: Group[] = [
+  {
+    id: "difficulty",
+    fields: [
+      { key: "ai_low", min: 0, max: 1, step: 0.05 },
+      { key: "ai_medium", min: 0, max: 1, step: 0.05 },
+      { key: "ai_hard", min: 0, max: 1, step: 0.05 },
+      { key: "ai_too_hard", min: 0, max: 1, step: 0.05 },
+      { key: "ai_unknown", min: 0, max: 1, step: 0.05 },
+    ],
+  },
+  {
+    id: "slots",
+    fields: [
+      { key: "ur_soft", min: 0, max: 100, step: 1 },
+      { key: "ur_strong", min: 0, max: 100, step: 1 },
+      { key: "dr_soft", min: 0, max: 100, step: 1 },
+      { key: "dr_strong", min: 0, max: 100, step: 1 },
+    ],
+  },
+  {
+    id: "winnability",
+    fields: [
+      { key: "bar_dr_ceiling", min: 1, max: 100, step: 1 },
+      { key: "soft_floor", min: 0, max: 1, step: 0.05 },
+    ],
+  },
+  {
+    id: "ranking",
+    fields: [
+      { key: "balance", min: 0, max: 1, step: 0.1 },
+      { key: "min_weight", min: 0, max: 0.45, step: 0.05 },
+      { key: "shortlist", min: 1, max: 50, step: 1 },
+    ],
+    curve: true,
+  },
 ];
 
 const CURVES: OpportunityFormula["volume_curve"][] = ["sqrt", "linear", "log"];
@@ -55,79 +92,91 @@ export function FormulaEditor({
     onChange({ ...value, [key]: v } as OpportunityFormula);
 
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2">
-        {NUMERIC_FIELDS.map(f => {
-          const current = value[f.key] as number;
-          const fallback = defaults[f.key] as number;
-          const changed = current !== fallback;
-          return (
-            <label key={f.key} className="text-xs">
-              <span className="block text-neutral-600 dark:text-neutral-300">
-                {t.formula.labels[f.key] ?? f.key}
+    <div className="space-y-4">
+      {GROUPS.map(group => (
+        <div key={group.id} className="space-y-2">
+          <div>
+            <div className="text-sm font-medium">{t.formula.groups[group.id]}</div>
+            <div className="text-xs text-neutral-600 dark:text-neutral-400">
+              {t.formula.groupHints[group.id]}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2">
+            {group.fields.map(f => {
+              const current = value[f.key] as number;
+              const fallback = defaults[f.key] as number;
+              const changed = current !== fallback;
+              return (
+                <label key={f.key} className="text-xs">
+                  <span className="block text-neutral-600 dark:text-neutral-400">
+                    {t.formula.labels[f.key] ?? f.key}
+                  </span>
+                  <span className="flex items-center gap-1.5 mt-0.5">
+                    <input
+                      type="number"
+                      value={current}
+                      min={f.min}
+                      max={f.max}
+                      step={f.step}
+                      disabled={disabled}
+                      onChange={e => set(f.key, Number(e.target.value))}
+                      className={`w-20 px-1.5 py-0.5 rounded border bg-white dark:bg-neutral-900 dark:border-neutral-700 font-mono ${
+                        changed ? "border-amber-500 dark:border-amber-500" : ""
+                      }`}
+                    />
+                    {/* Click to revert one field without resetting the lot. */}
+                    {changed && !disabled && (
+                      <button
+                        type="button"
+                        onClick={() => set(f.key, fallback)}
+                        title={t.formula.revertTo(String(fallback))}
+                        className="text-xs text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+                      >
+                        ↺ {fallback}
+                      </button>
+                    )}
+                  </span>
+                  <span className="block text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+                    {t.formula.hints[f.key] ?? ""}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+
+          {group.curve && (
+            <label className="text-xs block">
+              <span className="block text-neutral-600 dark:text-neutral-400">
+                {t.formula.labels.volume_curve}
               </span>
-              <span className="flex items-center gap-1.5 mt-0.5">
-                <input
-                  type="number"
-                  value={current}
-                  min={f.min}
-                  max={f.max}
-                  step={f.step}
-                  disabled={disabled}
-                  onChange={e => set(f.key, Number(e.target.value))}
-                  className={`w-20 px-1.5 py-0.5 rounded border bg-white dark:bg-neutral-900 dark:border-neutral-700 font-mono ${
-                    changed ? "border-amber-500 dark:border-amber-500" : ""
-                  }`}
-                />
-                {/* Click to revert one field without resetting the lot. */}
-                {changed && !disabled && (
+              <span className="inline-flex rounded-md border dark:border-neutral-700 overflow-hidden mt-0.5">
+                {CURVES.map(c => (
                   <button
+                    key={c}
                     type="button"
-                    onClick={() => set(f.key, fallback)}
-                    title={t.formula.revertTo(String(fallback))}
-                    className="text-[10px] text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+                    disabled={disabled}
+                    onClick={() => set("volume_curve", c)}
+                    aria-pressed={value.volume_curve === c}
+                    className={`px-2 py-0.5 text-xs border-l first:border-l-0 dark:border-neutral-700 ${
+                      value.volume_curve === c
+                        ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
+                        : "hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                    }`}
                   >
-                    ↺ {fallback}
+                    {c}
                   </button>
-                )}
+                ))}
               </span>
-              <span className="block text-[10px] text-neutral-400 mt-0.5">
-                {t.formula.hints[f.key] ?? ""}
+              <span className="block text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+                {t.formula.hints.volume_curve}
               </span>
             </label>
-          );
-        })}
-      </div>
-
-      <label className="text-xs block">
-        <span className="block text-neutral-600 dark:text-neutral-300">
-          {t.formula.labels.volume_curve}
-        </span>
-        <span className="inline-flex rounded-md border dark:border-neutral-700 overflow-hidden mt-0.5">
-          {CURVES.map(c => (
-            <button
-              key={c}
-              type="button"
-              disabled={disabled}
-              onClick={() => set("volume_curve", c)}
-              aria-pressed={value.volume_curve === c}
-              className={`px-2 py-0.5 text-xs border-l first:border-l-0 dark:border-neutral-700 ${
-                value.volume_curve === c
-                  ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                  : "hover:bg-neutral-100 dark:hover:bg-neutral-800"
-              }`}
-            >
-              {c}
-            </button>
-          ))}
-        </span>
-        <span className="block text-[10px] text-neutral-400 mt-0.5">
-          {t.formula.hints.volume_curve}
-        </span>
-      </label>
+          )}
+        </div>
+      ))}
 
       {/* The formula written out, so the fields above are never just knobs. */}
-      <div className="text-[11px] text-neutral-500 font-mono border-t dark:border-neutral-800 pt-2">
+      <div className="text-xs text-neutral-500 dark:text-neutral-400 font-mono border-t dark:border-neutral-800 pt-2">
         {t.formula.equation}
       </div>
     </div>

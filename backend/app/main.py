@@ -91,6 +91,12 @@ def _migrate_sqlite_columns() -> None:
         ("job_runs", "opportunity_formula", "JSON"),
         # Which lookup answered a cached WHOIS row.
         ("domain_whois", "source", "VARCHAR(20)"),
+        # What was sent to the AI and what came back, for debugging a verdict.
+        ("job_runs", "ahrefs_cached", "INTEGER"),
+        ("job_runs", "ahrefs_fetched", "INTEGER"),
+        ("run_keyword_analysis", "temperature", "FLOAT"),
+        ("run_keyword_analysis", "prompt", "TEXT"),
+        ("run_keyword_analysis", "raw_response", "TEXT"),
     ]
     # Values to backfill into rows that predate a column. ALTER TABLE ADD COLUMN
     # without a DEFAULT leaves existing rows NULL, which then fails response

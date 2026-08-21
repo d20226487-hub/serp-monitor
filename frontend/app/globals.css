@@ -20,3 +20,11 @@ body {
 [cmdk-item]  { @apply px-3 py-1.5 rounded cursor-pointer text-sm; }
 [cmdk-item][data-selected="true"] { @apply bg-neutral-100 dark:bg-neutral-800; }
 [cmdk-empty] { @apply px-3 py-3 text-sm text-neutral-500; }
+
+/* A full-bleed section (the analyzer table) is sized in vw, which includes the
+   vertical scrollbar's width — enough to give the whole page a stray
+   horizontal scrollbar. `clip` contains that without creating a scroll
+   container, so sticky/position:fixed children still behave. */
+body {
+  overflow-x: clip;
+}

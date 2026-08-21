@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import timezone
+from datetime import timedelta, timezone
 from urllib.parse import urlsplit
 from itertools import product
 from typing import Iterable, NamedTuple
@@ -16,6 +16,7 @@ from .app_settings import get_provider_rate
 from .config import settings
 from .db import SessionLocal
 from .models import (
+    AhrefsMetricCache,
     DomainWhois,
     Job,
     JobRun,
@@ -177,7 +178,7 @@ async def _run_ahrefs_analysis(db: Session, run_id: int, job: Job) -> int:
     """
     import httpx
 
-    from .app_settings import get_ahrefs_api_key
+    from .app_settings import get_ahrefs_api_key, get_ahrefs_cache_ttl_days
     from .providers.ahrefs_batch import (
         BATCH_SIZE,
         DOMAIN_MODE,
@@ -186,6 +187,60 @@ async def _run_ahrefs_analysis(db: Session, run_id: int, job: Job) -> int:
         fetch_batch_chunk,
     )
     from .providers.url_normalize import normalize_url
+
+    ttl_days = get_ahrefs_cache_ttl_days()
+
+    def cache_lookup(targets: list[str], mode: str, fields: list[str]) -> dict[str, dict]:
+        """Cached metrics for `targets`, keyed by target.
+
+        A row only qualifies when it is fresh AND holds every field this run
+        asked for — a four-metric row cannot answer a six-metric request, and
+        serving it would silently drop columns.
+        """
+        if ttl_days <= 0 or not targets:
+            return {}
+        cutoff = utcnow() - timedelta(days=ttl_days)
+        out: dict[str, dict] = {}
+        for row in (
+            db.query(AhrefsMetricCache)
+            .filter(
+                AhrefsMetricCache.mode == mode,
+                AhrefsMetricCache.target.in_(targets),
+            )
+            .all()
+        ):
+            stamp = row.fetched_at
+            # SQLite hands back naive datetimes; utcnow() is aware.
+            if stamp is not None and stamp.tzinfo is None:
+                stamp = stamp.replace(tzinfo=timezone.utc)
+            if stamp is None or stamp < cutoff:
+                continue
+            metrics = row.metrics or {}
+            if all(f in metrics for f in fields):
+                out[row.target] = metrics
+        return out
+
+    def cache_store(target: str, mode: str, metrics: dict) -> None:
+        """Merge freshly measured fields into the cached row.
+
+        Merged rather than replaced so a row built from a four-metric run can
+        grow to answer a six-metric one later, instead of the two runs
+        repeatedly evicting each other.
+        """
+        if ttl_days <= 0 or not metrics:
+            return
+        row = (
+            db.query(AhrefsMetricCache)
+            .filter(AhrefsMetricCache.target == target, AhrefsMetricCache.mode == mode)
+            .one_or_none()
+        )
+        if row is None:
+            db.add(AhrefsMetricCache(
+                target=target, mode=mode, metrics=dict(metrics), fetched_at=utcnow(),
+            ))
+        else:
+            row.metrics = {**(row.metrics or {}), **metrics}
+            row.fetched_at = utcnow()
 
     api_key = get_ahrefs_api_key()
     if not api_key:
@@ -216,12 +271,29 @@ async def _run_ahrefs_analysis(db: Session, run_id: int, job: Job) -> int:
             seen.add(canonical)
             urls.append(canonical)
     if not urls:
-        return 0
+        return AhrefsPhase(0, 0, 0)
 
     total_units = 0
+    cached_count = fetched_count = 0
     async with httpx.AsyncClient(timeout=60) as client:
-        for i in range(0, len(urls), BATCH_SIZE):
-            chunk = urls[i : i + BATCH_SIZE]
+        # Anything still fresh in the cross-run cache is written straight to
+        # this run's rows without going near the API. The per-run row is still
+        # created either way, so the run's own record stays complete.
+        url_cached = cache_lookup(urls, "exact", select)
+        if url_cached:
+            now = utcnow()
+            for u, metrics in url_cached.items():
+                db.add(RunUrlMetric(
+                    run_id=run_id, url=u, metrics=dict(metrics),
+                    error=None, fetched_at=now,
+                ))
+            cached_count += len(url_cached)
+            db.commit()
+        to_fetch = [u for u in urls if u not in url_cached]
+        fetched_count += len(to_fetch)
+
+        for i in range(0, len(to_fetch), BATCH_SIZE):
+            chunk = to_fetch[i : i + BATCH_SIZE]
             outcome = await fetch_batch_chunk(client, api_key, chunk, select)
             total_units += outcome.cost_billed or 0
             now = utcnow()
@@ -235,11 +307,12 @@ async def _run_ahrefs_analysis(db: Session, run_id: int, job: Job) -> int:
                     ))
             else:
                 for u in chunk:
+                    metrics = outcome.metrics_by_url.get(u) or {}
                     db.add(RunUrlMetric(
-                        run_id=run_id, url=u,
-                        metrics=outcome.metrics_by_url.get(u) or {},
+                        run_id=run_id, url=u, metrics=metrics,
                         error=None, fetched_at=now,
                     ))
+                    cache_store(u, "exact", metrics)
             db.commit()
 
         # --- Domain-level pass -------------------------------------------
@@ -280,22 +353,41 @@ async def _run_ahrefs_analysis(db: Session, run_id: int, job: Job) -> int:
                 if parent and parent != host and parent not in dseen:
                     dseen.add(parent)
                     domains.append(parent)
-            for i in range(0, len(domains), BATCH_SIZE):
-                chunk = domains[i : i + BATCH_SIZE]
+            dom_cached = cache_lookup(domains, DOMAIN_MODE, domain_select)
+            if dom_cached:
+                now = utcnow()
+                for d, metrics in dom_cached.items():
+                    db.add(RunDomainMetric(
+                        run_id=run_id, domain=d, metrics=dict(metrics),
+                        error=None, fetched_at=now,
+                    ))
+                cached_count += len(dom_cached)
+                db.commit()
+            dom_to_fetch = [d for d in domains if d not in dom_cached]
+            fetched_count += len(dom_to_fetch)
+
+            for i in range(0, len(dom_to_fetch), BATCH_SIZE):
+                chunk = dom_to_fetch[i : i + BATCH_SIZE]
                 outcome = await fetch_batch_chunk(
                     client, api_key, chunk, domain_select, mode=DOMAIN_MODE
                 )
                 total_units += outcome.cost_billed or 0
                 now = utcnow()
                 for d in chunk:
+                    metrics = {} if outcome.error else (outcome.metrics_by_url.get(d) or {})
                     db.add(RunDomainMetric(
-                        run_id=run_id, domain=d,
-                        metrics=({} if outcome.error else (outcome.metrics_by_url.get(d) or {})),
+                        run_id=run_id, domain=d, metrics=metrics,
                         error=outcome.error[:500] if outcome.error else None,
                         fetched_at=now,
                     ))
+                    if not outcome.error:
+                        cache_store(d, DOMAIN_MODE, metrics)
                 db.commit()
-    return total_units
+    log.info(
+        "ahrefs: run %s — %s targets from cache (%s-day TTL), %s bought, %s units",
+        run_id, cached_count, ttl_days, fetched_count, total_units,
+    )
+    return AhrefsPhase(total_units, cached_count, fetched_count)
 
 
 # How long a cached WHOIS row is trusted. Registration dates are immutable, so
@@ -305,6 +397,18 @@ async def _run_ahrefs_analysis(db: Session, run_id: int, job: Job) -> int:
 # a domain absent this month may be present next.
 WHOIS_TTL_DAYS = 180
 WHOIS_MISS_TTL_DAYS = 14
+
+
+class AhrefsPhase(NamedTuple):
+    """What one run's Ahrefs phase cost, and how much of it was already known.
+
+    The unit figure alone cannot distinguish a cheap run from a cached one, and
+    those call for different reactions — one means the SERPs are small, the
+    other means you are looking at metrics measured up to a week ago.
+    """
+    units: int
+    cached: int   # targets served from the cross-run cache
+    fetched: int  # targets actually bought
 
 
 class WhoisPhase(NamedTuple):
@@ -482,7 +586,9 @@ async def _run_ai_difficulty(db: Session, run_id: int, job: Job) -> None:
     phase — one bad SERP shouldn't cost you the other nine verdicts.
     """
     from .app_settings import get_ai_analysis_provider
-    from .ai.serp_difficulty import build_domain_table, build_serp_table, judge_keyword
+    from .ai.serp_difficulty import (
+        build_domain_table, build_prompt, build_serp_table, judge_keyword,
+    )
     from .providers.ahrefs_batch import canonical_domain_metrics, canonical_metrics
     from .providers.dataforseo_whois import domain_age_days, format_age
     from .providers.registrable import registrable_domain
@@ -585,13 +691,18 @@ async def _run_ai_difficulty(db: Session, run_id: int, job: Job) -> None:
         domain_table = build_domain_table(dom_rows, domain_metrics)
 
         row = RunKeywordAnalysis(run_id=run_id, keyword=keyword)
+        # Built and recorded BEFORE the call. A verdict that fails or reads
+        # oddly is exactly the one whose prompt you want, and building it after
+        # the fact would show what we would send now, not what produced this.
+        prompt = build_prompt(keyword, table, domain_table)
+        row.prompt = prompt
         try:
-            verdict = await judge_keyword(
-                provider_code, keyword, table, domain_table=domain_table
-            )
+            verdict = await judge_keyword(provider_code, prompt)
             row.difficulty = verdict["difficulty"]
             row.comment = verdict["comment"]
+            row.raw_response = verdict.get("raw")
             row.model = verdict["model"]
+            row.temperature = verdict.get("temperature")
             row.prompt_tokens = verdict["prompt_tokens"]
             row.completion_tokens = verdict["completion_tokens"]
         except Exception as e:  # noqa: BLE001 — recorded per keyword
@@ -667,9 +778,11 @@ async def run_job_async(run_id: int) -> None:
         # own; the error is recorded so the UI can explain the empty column.
         if (getattr(job, "mode", None) or "serp") == "analyzer":
             try:
-                units = await _run_ahrefs_analysis(db, run.id, job)
-                if units:
-                    run.ahrefs_units = units
+                phase = await _run_ahrefs_analysis(db, run.id, job)
+                if phase.units:
+                    run.ahrefs_units = phase.units
+                run.ahrefs_cached = phase.cached
+                run.ahrefs_fetched = phase.fetched
             except Exception as e:  # noqa: BLE001
                 log.exception("ahrefs analysis failed for run %s", run.id)
                 if not run.error:

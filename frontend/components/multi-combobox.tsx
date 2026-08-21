@@ -101,7 +101,7 @@ export function MultiCombobox<T = string>({
           )}
         >
           {selected.length === 0 && (
-            <span className="text-neutral-500 text-sm px-1">{ph}</span>
+            <span className="text-neutral-600 dark:text-neutral-400 text-sm px-1">{ph}</span>
           )}
           {selected.map((v, i) => (
             <span
@@ -127,7 +127,7 @@ export function MultiCombobox<T = string>({
                 placeholder={ph}
               />
               <Command.List>
-                {loading && <div className="px-3 py-2 text-sm text-neutral-500">{t.combobox.searching}</div>}
+                {loading && <div className="px-3 py-2 text-sm text-neutral-600 dark:text-neutral-400">{t.combobox.searching}</div>}
                 {!loading && visible.length === 0 && (
                   <Command.Empty>{t.combobox.noMatches}</Command.Empty>
                 )}
@@ -140,7 +140,7 @@ export function MultiCombobox<T = string>({
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <div>{o.label}</div>
-                        {o.sub && <div className="text-xs text-neutral-500">{o.sub}</div>}
+                        {o.sub && <div className="text-xs text-neutral-600 dark:text-neutral-400">{o.sub}</div>}
                       </div>
                       {isSelected(o.value) && (
                         <span className="text-xs text-emerald-600 dark:text-emerald-400">✓</span>

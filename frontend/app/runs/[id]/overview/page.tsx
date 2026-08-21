@@ -72,7 +72,7 @@ export default function RunOverviewPage() {
 
       {/* Group-by selector */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm text-neutral-500">{t.overviewPage.groupBy}:</span>
+        <span className="text-sm text-neutral-600 dark:text-neutral-400">{t.overviewPage.groupBy}:</span>
         {ALL_DIMS.map((d) => {
           const on = dims.includes(d);
           return (
@@ -81,9 +81,7 @@ export default function RunOverviewPage() {
               type="button"
               onClick={() => toggleDim(d)}
               aria-pressed={on}
-              className={`px-3 py-1 text-sm rounded-md border transition-colors ${
-                on
-                  ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 border-neutral-900 dark:border-white"
+              className={`px-3 py-1 text-sm rounded-md border transition-colors ${on ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 border-neutral-900 dark:border-white"
                   : "border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800"
               }`}
             >
@@ -92,16 +90,16 @@ export default function RunOverviewPage() {
           );
         })}
         {!loading && (
-          <span className="text-xs text-neutral-500 ml-1">
+          <span className="text-xs text-neutral-600 dark:text-neutral-400 ml-1">
             {t.overviewPage.combinations(groups.length)}
           </span>
         )}
       </div>
 
-      {loading && <div className="text-sm text-neutral-500">{t.common.loading}</div>}
+      {loading && <div className="text-sm text-neutral-600 dark:text-neutral-400">{t.common.loading}</div>}
 
       {!loading && results.length === 0 && (
-        <div className="text-sm text-neutral-500 border rounded-md p-6 dark:border-neutral-700">
+        <div className="text-sm text-neutral-600 dark:text-neutral-400 border rounded-md p-6 dark:border-neutral-700">
           {t.overviewPage.empty}
         </div>
       )}
@@ -121,12 +119,12 @@ export default function RunOverviewPage() {
                       key={i}
                       className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 border dark:border-neutral-700"
                     >
-                      <span className="text-neutral-400">{dimLabel(dims[i])}:</span>
+                      <span className="text-neutral-500 dark:text-neutral-400">{dimLabel(dims[i])}:</span>
                       {valueLabel(dims[i], v)}
                     </span>
                   ))
                 )}
-                <span className="text-xs text-neutral-500">
+                <span className="text-xs text-neutral-600 dark:text-neutral-400">
                   {t.overviewPage.rowsInGroup(g.rows.length)}
                 </span>
               </div>

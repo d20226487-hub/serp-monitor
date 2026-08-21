@@ -40,7 +40,7 @@ export default function DocsPage() {
     <article className="max-w-3xl mx-auto pb-20">
       <header className="mb-6">
         <h1 className="text-3xl font-bold">Документация</h1>
-        <p className="text-sm text-neutral-500 mt-1">
+        <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-1">
           Подробное руководство по работе с SERP Monitor — на русском, единое для обоих
           языков интерфейса.
         </p>
@@ -974,7 +974,7 @@ docker compose up -d web`}
         </pre>
       </section>
 
-      <footer className="mt-16 pt-6 border-t dark:border-neutral-800 text-xs text-neutral-500">
+      <footer className="mt-16 pt-6 border-t dark:border-neutral-800 text-xs text-neutral-600 dark:text-neutral-400">
         <p>
           Не нашли ответа на свой вопрос? Откройте логи API через{" "}
           <code className={CODE}>docker compose logs api --since=15m</code> — большинство проблем

@@ -59,6 +59,10 @@ export type AhrefsSettings = {
   url_only_metrics: string[];
   batch_size: number;
   base_request_units: number;
+  /** How long a fetched metric may be reused across runs. 0 = cache off. */
+  cache_ttl_days: number;
+  cache_ttl_default: number;
+  cache_ttl_max: number;
 };
 
 export type AnalysisUrl = {
@@ -121,6 +125,14 @@ export type AnalysisRow = {
   comment: string | null;
   /** Set when the AI call failed for this keyword. */
   ai_error: string | null;
+  /** The exact text sent to the model, recorded before the call so a failed
+   *  verdict still has its prompt. Null on runs made before this was stored. */
+  ai_prompt: string | null;
+  /** The model's own JSON reply, before parsing. */
+  ai_raw: string | null;
+  ai_model: string | null;
+  ai_prompt_tokens: number | null;
+  ai_completion_tokens: number | null;
 };
 
 export type AIAnalysisSettings = {
@@ -135,6 +147,18 @@ export type AIAnalysisSettings = {
   domain_default_ru: string;
   provider: string | null;
   available: string[];
+  /** Sampling temperature. Measured to have little effect on the verdict. */
+  temperature: number;
+  temperature_default: number;
+  temperature_max: number;
+  /** Reasoning-token allowance. 0 = thinking off. Measured to shift the
+   *  verdict substantially — see the note in the settings UI. */
+  thinking_budget: number;
+  thinking_budget_default: number;
+  thinking_budget_max: number;
+  /** Answer cap. Thinking is billed against this same allowance. */
+  max_output_tokens: number;
+  max_output_tokens_default: number;
 };
 
 export type RunAnalysis = {
@@ -143,6 +167,10 @@ export type RunAnalysis = {
   domain_metrics: string[];
   rows: AnalysisRow[];
   ahrefs_units: number | null;
+  /** Targets served from the cross-run cache versus actually bought. Lets the
+   *  unit figure be read against how much of the run was paid for. */
+  ahrefs_cached: number | null;
+  ahrefs_fetched: number | null;
   /** USD billed by DataForSEO for this run's WHOIS lookups. 0 when the domain
    *  cache covered everything, which is the steady state for a recurring job. */
   whois_cost: number | null;
@@ -272,6 +300,20 @@ export const api = {
     req<KeywordVolumeRow[]>("/keyword-volumes", {
       method: "PUT", body: JSON.stringify(items),
     }),
+  setAITuning: (body: {
+    temperature: number | null;
+    thinking_budget: number | null;
+    max_output_tokens: number | null;
+  }) =>
+    req<{ temperature: number; thinking_budget: number; max_output_tokens: number }>(
+      "/settings/ai-analysis/tuning", { method: "PUT", body: JSON.stringify(body) },
+    ),
+  setAhrefsCacheTtl: (days: number | null) =>
+    req<{ cache_ttl_days: number }>("/settings/ahrefs/cache-ttl", {
+      method: "PUT", body: JSON.stringify({ days }),
+    }),
+  clearAhrefsCache: () =>
+    req<{ cleared: number }>("/settings/ahrefs/cache", { method: "DELETE" }),
   getOpportunityFormula: () =>
     req<{ formula: OpportunityFormula; defaults: OpportunityFormula }>("/settings/opportunity"),
   saveOpportunityFormula: (formula: Partial<OpportunityFormula>) =>

@@ -133,7 +133,7 @@ export default function SettingsPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-semibold">{t.settings.title}</h1>
-        <p className="text-sm text-neutral-500 mt-1">
+        <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-1">
           {t.settings.intro}
         </p>
       </div>
@@ -162,7 +162,7 @@ export default function SettingsPage() {
       {/* Add one */}
       <section className="border rounded-md p-4 dark:border-neutral-700 space-y-3">
         <h2 className="font-medium">{t.settings.addLocation.title}</h2>
-        <p className="text-xs text-neutral-500">
+        <p className="text-xs text-neutral-600 dark:text-neutral-400">
           {t.settings.addLocation.help}
         </p>
         <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2">
@@ -213,7 +213,7 @@ export default function SettingsPage() {
       {/* Opportunity formula — the global defaults every run inherits. */}
       <section className="border rounded-md p-4 dark:border-neutral-700 space-y-3">
         <h2 className="font-medium">{t.formula.title}</h2>
-        <p className="text-xs text-neutral-500">{t.formula.subtitle}</p>
+        <p className="text-xs text-neutral-600 dark:text-neutral-400">{t.formula.subtitle}</p>
         {formula && formulaDefaults ? (
           <GlobalFormulaSection
             initial={formula}
@@ -228,14 +228,14 @@ export default function SettingsPage() {
             }}
           />
         ) : (
-          <div className="text-xs text-neutral-500">{t.common.loading}</div>
+          <div className="text-xs text-neutral-600 dark:text-neutral-400">{t.common.loading}</div>
         )}
       </section>
 
       {/* Bulk import */}
       <section className="border rounded-md p-4 dark:border-neutral-700 space-y-3">
         <h2 className="font-medium">{t.settings.bulk.title}</h2>
-        <p className="text-xs text-neutral-500">
+        <p className="text-xs text-neutral-600 dark:text-neutral-400">
           {t.settings.bulk.help}
         </p>
         <textarea
@@ -261,7 +261,7 @@ export default function SettingsPage() {
             className="ml-auto px-3 py-1.5 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700 text-sm" />
         </div>
 
-        <p className="text-xs text-neutral-500">
+        <p className="text-xs text-neutral-600 dark:text-neutral-400">
           {t.settings.list.perProviderHelp}
         </p>
 
@@ -301,7 +301,7 @@ export default function SettingsPage() {
                       <td className="px-3 py-2"><UuleCell canonicalName={editDraft.canonical_name} /></td>
                       <td className="px-3 py-2 flex gap-2">
                         <button onClick={saveEdit} className="text-emerald-700 dark:text-emerald-300"><Check className="w-4 h-4" /></button>
-                        <button onClick={() => setEditId(null)} className="text-neutral-500"><X className="w-4 h-4" /></button>
+                        <button onClick={() => setEditId(null)} className="text-neutral-600 dark:text-neutral-400"><X className="w-4 h-4" /></button>
                       </td>
                     </>
                   ) : (
@@ -325,7 +325,7 @@ export default function SettingsPage() {
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={7} className="px-3 py-6 text-center text-neutral-500">{t.settings.list.empty}</td></tr>
+                <tr><td colSpan={7} className="px-3 py-6 text-center text-neutral-600 dark:text-neutral-400">{t.settings.list.empty}</td></tr>
               )}
             </tbody>
           </table>
@@ -343,7 +343,7 @@ function UuleCell({ canonicalName }: { canonicalName: string }) {
   const [copied, setCopied] = useState(false);
   const value = useMemo(() => googleUule(canonicalName), [canonicalName]);
   if (!value) {
-    return <span className="text-neutral-500">—</span>;
+    return <span className="text-neutral-600 dark:text-neutral-400">—</span>;
   }
   const truncated = value.length > 18 ? value.slice(0, 18) + "…" : value;
   async function copy() {
@@ -355,12 +355,12 @@ function UuleCell({ canonicalName }: { canonicalName: string }) {
   }
   return (
     <div className="flex items-center gap-1.5">
-      <code title={value} className="font-mono text-[11px] cursor-help text-neutral-700 dark:text-neutral-300">
+      <code title={value} className="font-mono text-xs cursor-help text-neutral-700 dark:text-neutral-300">
         {truncated}
       </code>
       <button
         onClick={copy}
-        className="text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+        className="text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
         title={t.settings.list.copyUuleTitle}
       >
         {copied ? <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3 h-3" />}
@@ -375,6 +375,9 @@ function UuleCell({ canonicalName }: { canonicalName: string }) {
 function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void }) {
   const { t } = useT();
   const [data, setData] = useState<AIAnalysisSettings | null>(null);
+  const [tuning, setTuning] = useState({
+    temperature: "0.2", thinking_budget: "0", max_output_tokens: "600",
+  });
   const [draft, setDraft] = useState<string | null>(null);
   const [domainDraft, setDomainDraft] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -382,6 +385,11 @@ function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void 
   async function reload() {
     try {
       const d = await api.getAIAnalysisSettings();
+      setTuning({
+        temperature: String(d.temperature),
+        thinking_budget: String(d.thinking_budget),
+        max_output_tokens: String(d.max_output_tokens),
+      });
       setData(d);
       setDraft(null);
       setDomainDraft(null);
@@ -418,6 +426,27 @@ function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void 
     catch (e: any) { onError(e?.message ?? "Reset failed"); }
   }
 
+  async function saveTuning() {
+    onError(null);
+    try {
+      const r = await api.setAITuning({
+        temperature: tuning.temperature === "" ? null : Number(tuning.temperature),
+        thinking_budget: tuning.thinking_budget === "" ? null : Number(tuning.thinking_budget),
+        max_output_tokens:
+          tuning.max_output_tokens === "" ? null : Number(tuning.max_output_tokens),
+      });
+      // Echo back what the server clamped to, so an out-of-range entry does
+      // not sit on screen looking accepted.
+      setTuning({
+        temperature: String(r.temperature),
+        thinking_budget: String(r.thinking_budget),
+        max_output_tokens: String(r.max_output_tokens),
+      });
+      setMsg(t.common.saved);
+      await reload();
+    } catch (e: any) { onError(e?.message ?? "Save failed"); }
+  }
+
   async function pickProvider(v: string) {
     onError(null);
     try { await api.setAIAnalysisProvider(v === "auto" ? null : v); await reload(); }
@@ -441,7 +470,37 @@ function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void 
           </span>
         )}
       </div>
-      <p className="text-xs text-neutral-500">{t.settings.aiAnalysis.help}</p>
+      <p className="text-xs text-neutral-600 dark:text-neutral-400">{t.settings.aiAnalysis.help}</p>
+
+      {/* Sampling and reasoning. Each field carries what the measurement
+          actually showed, because two of the three look equally important and
+          only one of them moves the verdict. */}
+      <div className="pt-2 border-t dark:border-neutral-800 space-y-2.5">
+        <div>
+          <div className="text-sm font-medium">{t.aiTuning.tuningTitle}</div>
+          <p className="text-xs text-neutral-600 dark:text-neutral-400">{t.aiTuning.tuningHelp}</p>
+        </div>
+        {([
+          ["temperature", t.aiTuning.temperature, t.aiTuning.temperatureHelp, 0, data.temperature_max, 0.1],
+          ["thinking_budget", t.aiTuning.thinking, t.aiTuning.thinkingHelp, 0, data.thinking_budget_max, 128],
+          ["max_output_tokens", t.aiTuning.maxTokens, t.aiTuning.maxTokensHelp, 128, 16384, 100],
+        ] as const).map(([key, label, help, min, max, step]) => (
+          <label key={key} className="block">
+            <span className="text-xs font-medium">{label}</span>
+            <input
+              type="number"
+              min={min}
+              max={max}
+              step={step}
+              value={tuning[key]}
+              onChange={e => setTuning(v => ({ ...v, [key]: e.target.value }))}
+              onBlur={saveTuning}
+              className="ml-2 w-28 px-2 py-1 rounded border text-sm bg-white dark:bg-neutral-900 dark:border-neutral-700"
+            />
+            <span className="block text-xs text-neutral-600 dark:text-neutral-400 mt-0.5">{help}</span>
+          </label>
+        ))}
+      </div>
 
       <div className="space-y-1">
         <label className="text-xs font-medium">{t.settings.aiAnalysis.providerLabel}</label>
@@ -462,7 +521,7 @@ function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void 
 
       <div className="space-y-1">
         <label className="text-xs font-medium">{t.settings.aiAnalysis.promptLabel}</label>
-        <div className="text-[11px] text-neutral-500">{t.settings.aiAnalysis.placeholders}</div>
+        <div className="text-xs text-neutral-600 dark:text-neutral-400">{t.settings.aiAnalysis.placeholders}</div>
         <textarea
           rows={16}
           value={value}
@@ -506,7 +565,7 @@ function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void 
             </span>
           )}
         </div>
-        <div className="text-[11px] text-neutral-500">{t.settings.aiAnalysis.domainHelp}</div>
+        <div className="text-xs text-neutral-600 dark:text-neutral-400">{t.settings.aiAnalysis.domainHelp}</div>
         <textarea
           rows={14}
           value={domainDraft ?? data.domain_prompt}
@@ -544,6 +603,7 @@ function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void 
 function AhrefsSection({ onError }: { onError: (msg: string | null) => void }) {
   const { t } = useT();
   const [data, setData] = useState<AhrefsSettings | null>(null);
+  const [ttlDraft, setTtlDraft] = useState("7");
   const [draft, setDraft] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [testRes, setTestRes] = useState<{ units_billed?: number; sample_dr?: number | null } | null>(null);
@@ -554,6 +614,23 @@ function AhrefsSection({ onError }: { onError: (msg: string | null) => void }) {
     catch (e: any) { onError(e?.message ?? "Failed to load Ahrefs settings"); }
   }
   useEffect(() => { reload(); }, []);
+  useEffect(() => {
+    if (data) setTtlDraft(String(data.cache_ttl_days));
+  }, [data]);
+
+  async function saveTtl() {
+    const n = Number(ttlDraft);
+    if (!Number.isFinite(n) || n < 0) { setTtlDraft(String(data?.cache_ttl_days ?? 7)); return; }
+    const r = await api.setAhrefsCacheTtl(Math.round(n));
+    setTtlDraft(String(r.cache_ttl_days));
+    setMsg(t.common.saved);
+    await reload();
+  }
+
+  async function clearCache() {
+    const r = await api.clearAhrefsCache();
+    setMsg(t.jobForm.ahrefsCacheCleared(r.cleared));
+  }
 
   async function save() {
     if (!draft.trim()) { onError("Nothing to save."); return; }
@@ -593,11 +670,46 @@ function AhrefsSection({ onError }: { onError: (msg: string | null) => void }) {
           <span className="text-xs px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">{t.settings.providers.notSet}</span>
         )}
       </div>
-      <p className="text-xs text-neutral-500">{t.settings.ahrefs.help}</p>
+      <p className="text-xs text-neutral-600 dark:text-neutral-400">{t.settings.ahrefs.help}</p>
+
+      {/* Cross-run metric cache. Its TTL is a freshness trade-off rather than a
+          free win, so it is exposed rather than assumed. */}
+      <div className="pt-2 border-t dark:border-neutral-800 space-y-1.5">
+        <div className="text-sm font-medium">{t.jobForm.ahrefsCacheTitle}</div>
+        <p className="text-xs text-neutral-600 dark:text-neutral-400">
+          {t.jobForm.ahrefsCacheHelp}
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="text-xs">{t.jobForm.ahrefsCacheTtl}</label>
+          <input
+            type="number"
+            min={0}
+            max={data.cache_ttl_max}
+            value={ttlDraft}
+            onChange={e => setTtlDraft(e.target.value)}
+            onBlur={saveTtl}
+            className="w-20 px-2 py-1 rounded border text-sm bg-white dark:bg-neutral-900 dark:border-neutral-700"
+          />
+          <span className="text-xs text-neutral-600 dark:text-neutral-400">
+            {t.jobForm.ahrefsCacheDays}
+          </span>
+          <button
+            onClick={clearCache}
+            className="ml-auto text-xs px-2.5 py-1 rounded border dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+          >
+            {t.jobForm.ahrefsCacheClear}
+          </button>
+        </div>
+        {Number(ttlDraft) === 0 && (
+          <div className="text-xs text-amber-700 dark:text-amber-300">
+            {t.jobForm.ahrefsCacheOff}
+          </div>
+        )}
+      </div>
       <div className="space-y-1">
         <label className="text-xs font-medium">{t.settings.ahrefs.apiKey}</label>
         {data.configured && (
-          <div className="text-xs text-neutral-500">
+          <div className="text-xs text-neutral-600 dark:text-neutral-400">
             {t.settings.providers.savedSecret(data.last4, data.length)}
           </div>
         )}
@@ -626,7 +738,7 @@ function AhrefsSection({ onError }: { onError: (msg: string | null) => void }) {
           {t.settings.ahrefs.testOk(testRes.units_billed ?? 0)}
         </div>
       )}
-      <p className="text-[11px] text-neutral-500">{t.settings.ahrefs.footnote}</p>
+      <p className="text-xs text-neutral-600 dark:text-neutral-400">{t.settings.ahrefs.footnote}</p>
     </section>
   );
 }
@@ -725,7 +837,7 @@ function AIProvidersSection({ onError }: { onError: (msg: string | null) => void
   return (
     <section className="space-y-3">
       <h2 className="font-medium">{t.settings.ai.title}</h2>
-      <p className="text-xs text-neutral-500">{t.settings.ai.help}</p>
+      <p className="text-xs text-neutral-600 dark:text-neutral-400">{t.settings.ai.help}</p>
       <div className="grid lg:grid-cols-2 gap-4">
         {META.map(meta => {
           const status = statuses.find(s => s.provider === meta.id);
@@ -752,7 +864,7 @@ function AIProvidersSection({ onError }: { onError: (msg: string | null) => void
                   </span>
                 )}
               </div>
-              <p className="text-xs text-neutral-500">{meta.help}</p>
+              <p className="text-xs text-neutral-600 dark:text-neutral-400">{meta.help}</p>
 
               {meta.fields.map(f => {
                 const cur = status?.fields?.[f.key];
@@ -760,7 +872,7 @@ function AIProvidersSection({ onError }: { onError: (msg: string | null) => void
                   <div key={f.key} className="space-y-1">
                     <label className="text-xs font-medium">{f.label}</label>
                     {cur?.configured && (
-                      <div className="text-xs text-neutral-500 break-all">
+                      <div className="text-xs text-neutral-600 dark:text-neutral-400 break-all">
                         {cur.last4
                           ? t.settings.providers.savedSecret(cur.last4, cur.length ?? 0)
                           : cur.value
@@ -807,7 +919,7 @@ function AIProvidersSection({ onError }: { onError: (msg: string | null) => void
                   <div>{t.settings.ai.testOk(testRes.model ?? "")}</div>
                   {testRes.text && <div className="font-mono">“{testRes.text}”</div>}
                   {(testRes.prompt_tokens != null || testRes.completion_tokens != null) && (
-                    <div className="text-neutral-500">
+                    <div className="text-neutral-600 dark:text-neutral-400">
                       {t.settings.ai.testTokens(testRes.prompt_tokens ?? 0, testRes.completion_tokens ?? 0)}
                     </div>
                   )}
@@ -817,7 +929,7 @@ function AIProvidersSection({ onError }: { onError: (msg: string | null) => void
           );
         })}
       </div>
-      <p className="text-[11px] text-neutral-500">{t.settings.ai.testNote}</p>
+      <p className="text-xs text-neutral-600 dark:text-neutral-400">{t.settings.ai.testNote}</p>
     </section>
   );
 }
@@ -861,7 +973,7 @@ function RatesSection({ onError }: { onError: (msg: string | null) => void }) {
   return (
     <section className="border rounded-md p-4 dark:border-neutral-700 space-y-3">
       <h2 className="font-medium">{t.settings.rates.title}</h2>
-      <p className="text-xs text-neutral-500">{t.settings.rates.help}</p>
+      <p className="text-xs text-neutral-600 dark:text-neutral-400">{t.settings.rates.help}</p>
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {Object.keys(data.defaults).map((p) => {
           const current = data.rates[p];
@@ -870,7 +982,7 @@ function RatesSection({ onError }: { onError: (msg: string | null) => void }) {
             <div key={p} className="space-y-1">
               <label className="text-xs font-medium">{RATE_PROVIDER_NAMES[p] ?? p}</label>
               <div className="flex items-center gap-1">
-                <span className="text-neutral-500 text-sm">$</span>
+                <span className="text-neutral-600 dark:text-neutral-400 text-sm">$</span>
                 <input
                   type="number"
                   step="0.0001"
@@ -880,7 +992,7 @@ function RatesSection({ onError }: { onError: (msg: string | null) => void }) {
                   className="w-full px-2 py-1.5 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700 text-sm font-mono"
                 />
               </div>
-              <div className="text-[11px] text-neutral-500">
+              <div className="text-xs text-neutral-600 dark:text-neutral-400">
                 {isDefault
                   ? t.settings.rates.usingDefault
                   : t.settings.rates.defaultIs(String(data.defaults[p]))}
@@ -897,7 +1009,7 @@ function RatesSection({ onError }: { onError: (msg: string | null) => void }) {
         >{t.common.save}</button>
         {msg && <span className="text-sm text-emerald-700 dark:text-emerald-300">{msg}</span>}
       </div>
-      <p className="text-[11px] text-neutral-500">{t.settings.rates.footnote}</p>
+      <p className="text-xs text-neutral-600 dark:text-neutral-400">{t.settings.rates.footnote}</p>
     </section>
   );
 }
@@ -1031,7 +1143,7 @@ function ProvidersSection({ onError }: { onError: (msg: string | null) => void }
                   <span className="text-xs px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">{t.settings.providers.notSet}</span>
                 )}
               </div>
-              <p className="text-xs text-neutral-500">{meta.help}</p>
+              <p className="text-xs text-neutral-600 dark:text-neutral-400">{meta.help}</p>
 
               {meta.fields.map(f => {
                 const cur = status?.fields?.[f.key];
@@ -1039,7 +1151,7 @@ function ProvidersSection({ onError }: { onError: (msg: string | null) => void }
                   <div key={f.key} className="space-y-1">
                     <label className="text-xs font-medium">{f.label}</label>
                     {cur?.configured && (
-                      <div className="text-xs text-neutral-500">
+                      <div className="text-xs text-neutral-600 dark:text-neutral-400">
                         {cur.last4 ? t.settings.providers.savedSecret(cur.last4, cur.length ?? 0) :
                           cur.value ? t.settings.providers.savedPlain(cur.value) : t.settings.providers.savedNoDetail}
                       </div>

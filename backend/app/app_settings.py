@@ -411,6 +411,17 @@ DEFAULT_OPPORTUNITY_FORMULA: dict[str, float | str | int] = {
     "ai_unknown": 0.5,
     # How many top-ranked keywords are highlighted as the shortlist.
     "shortlist": 5,
+    # Slot banding. What counts as a soft slot (a realistic target) versus a
+    # strong one, on each axis.
+    #
+    # UR is compressed near zero — a UR 15 page is already well linked — while
+    # DR is not, so the two axes need separate thresholds rather than one
+    # shared cutoff. The original code used a single value of 20 for both,
+    # which made every result "weak": almost nothing scores UR 20.
+    "ur_soft": 5.0,
+    "ur_strong": 15.0,
+    "dr_soft": 30.0,
+    "dr_strong": 70.0,
 }
 
 # (minimum, maximum) per numeric field. Bounds are not cosmetic: min_weight at
@@ -427,6 +438,10 @@ _OPPORTUNITY_BOUNDS: dict[str, tuple[float, float]] = {
     "ai_too_hard": (0.0, 1.0),
     "ai_unknown": (0.0, 1.0),
     "shortlist": (1, 50),
+    "ur_soft": (0.0, 100.0),
+    "ur_strong": (0.0, 100.0),
+    "dr_soft": (0.0, 100.0),
+    "dr_strong": (0.0, 100.0),
 }
 
 _VOLUME_CURVES = ("sqrt", "linear", "log")
@@ -459,6 +474,14 @@ def coerce_opportunity_formula(raw: dict | None) -> dict:
         if num != num or num < lo or num > hi:  # NaN fails every comparison
             continue
         out[key] = int(num) if isinstance(default, int) and not isinstance(default, bool) else num
+
+    # A soft threshold at or above its strong counterpart leaves no middle band
+    # and inverts the ordering, so the pair is reset together rather than left
+    # in a state where "soft" and "strong" mean the same thing.
+    for soft, strong in (("ur_soft", "ur_strong"), ("dr_soft", "dr_strong")):
+        if out[soft] >= out[strong]:
+            out[soft] = DEFAULT_OPPORTUNITY_FORMULA[soft]
+            out[strong] = DEFAULT_OPPORTUNITY_FORMULA[strong]
     return out
 
 
@@ -490,3 +513,164 @@ def set_opportunity_formula(values: dict | None) -> dict:
         return merged
     finally:
         db.close()
+
+# ---------------------------------------------------------------------------
+# Ahrefs metric cache TTL
+#
+# How long a fetched metric may be reused across runs, in days. Unlike a WHOIS
+# registration date this is a genuine trade-off: DR, UR and backlink counts
+# move, so too long a TTL makes a monitoring run report figures that have not
+# been re-measured. A week is short enough that weekly monitoring still sees
+# fresh numbers, long enough to cover re-running a job while working on it.
+#
+# 0 disables the cache entirely, which is the right setting if you are
+# specifically watching day-to-day movement.
+# ---------------------------------------------------------------------------
+KEY_AHREFS_CACHE_TTL = "ahrefs_cache_ttl_days"
+DEFAULT_AHREFS_CACHE_TTL_DAYS = 7
+MAX_AHREFS_CACHE_TTL_DAYS = 365
+
+
+def get_ahrefs_cache_ttl_days() -> int:
+    db = SessionLocal()
+    try:
+        raw = _get(db, KEY_AHREFS_CACHE_TTL)
+    finally:
+        db.close()
+    if raw is None:
+        return DEFAULT_AHREFS_CACHE_TTL_DAYS
+    try:
+        days = int(float(raw))
+    except (TypeError, ValueError):
+        # A malformed value must not silently disable the cache, nor make it
+        # permanent — fall back to the documented default.
+        return DEFAULT_AHREFS_CACHE_TTL_DAYS
+    return max(0, min(days, MAX_AHREFS_CACHE_TTL_DAYS))
+
+
+def set_ahrefs_cache_ttl_days(days: int | str | None) -> int:
+    """Persist the TTL. None or "" resets to the default rather than storing 0,
+    because 0 means "cache off" and blanking a field should not turn a feature
+    off by accident."""
+    db = SessionLocal()
+    try:
+        if days is None or (isinstance(days, str) and not days.strip()):
+            _set(db, KEY_AHREFS_CACHE_TTL, None)
+            return DEFAULT_AHREFS_CACHE_TTL_DAYS
+        value = max(0, min(int(float(days)), MAX_AHREFS_CACHE_TTL_DAYS))
+        _set(db, KEY_AHREFS_CACHE_TTL, str(value))
+        return value
+    finally:
+        db.close()
+
+# ---------------------------------------------------------------------------
+# AI creativity (sampling temperature)
+#
+# 0.2 by default: the judge is reading a table and returning one of four
+# labels, which is closer to classification than to writing. Low temperature
+# makes the same SERP produce the same verdict run after run, so a difficulty
+# that CHANGES between runs means the SERP changed rather than the dice.
+#
+# Raising it makes the prose comment more varied and, high enough, makes the
+# label itself unstable — a real cost for a score you sort on.
+# ---------------------------------------------------------------------------
+KEY_AI_TEMPERATURE = "ai_temperature"
+DEFAULT_AI_TEMPERATURE = 0.2
+MAX_AI_TEMPERATURE = 2.0
+
+
+def get_ai_temperature() -> float:
+    db = SessionLocal()
+    try:
+        raw = _get(db, KEY_AI_TEMPERATURE)
+    finally:
+        db.close()
+    if raw is None:
+        return DEFAULT_AI_TEMPERATURE
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return DEFAULT_AI_TEMPERATURE
+    if value != value:  # NaN fails every comparison
+        return DEFAULT_AI_TEMPERATURE
+    return max(0.0, min(value, MAX_AI_TEMPERATURE))
+
+
+def set_ai_temperature(value: float | str | None) -> float:
+    """Persist the temperature. None/"" resets to the default — 0.0 is a
+    meaningful setting (fully deterministic), so blanking must not mean it."""
+    db = SessionLocal()
+    try:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            _set(db, KEY_AI_TEMPERATURE, None)
+            return DEFAULT_AI_TEMPERATURE
+        v = max(0.0, min(float(value), MAX_AI_TEMPERATURE))
+        _set(db, KEY_AI_TEMPERATURE, str(v))
+        return v
+    finally:
+        db.close()
+
+# ---------------------------------------------------------------------------
+# AI reasoning budget and answer cap
+#
+# On Gemini 2.5+ thinking is billed against the SAME allowance as the answer,
+# so the two settings are coupled: raise the budget without raising the cap and
+# the model spends its whole allowance reasoning and returns nothing. judge_
+# keyword enforces headroom, but both are exposed because the right trade-off
+# depends on how much you trust the verdict versus what you pay for it.
+#
+# 0 disables thinking, which is what this ran on originally.
+# ---------------------------------------------------------------------------
+KEY_AI_THINKING = "ai_thinking_budget"
+KEY_AI_MAX_OUTPUT = "ai_max_output_tokens"
+DEFAULT_AI_THINKING_BUDGET = 0
+DEFAULT_AI_MAX_OUTPUT_TOKENS = 600
+MAX_AI_THINKING_BUDGET = 8192
+MAX_AI_MAX_OUTPUT_TOKENS = 16384
+
+
+def _get_int(key: str, default: int, lo: int, hi: int) -> int:
+    db = SessionLocal()
+    try:
+        raw = _get(db, key)
+    finally:
+        db.close()
+    if raw is None:
+        return default
+    try:
+        return max(lo, min(int(float(raw)), hi))
+    except (TypeError, ValueError):
+        return default
+
+
+def _set_int(key: str, value, default: int, lo: int, hi: int) -> int:
+    db = SessionLocal()
+    try:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            _set(db, key, None)
+            return default
+        v = max(lo, min(int(float(value)), hi))
+        _set(db, key, str(v))
+        return v
+    finally:
+        db.close()
+
+
+def get_ai_thinking_budget() -> int:
+    return _get_int(KEY_AI_THINKING, DEFAULT_AI_THINKING_BUDGET,
+                    0, MAX_AI_THINKING_BUDGET)
+
+
+def set_ai_thinking_budget(value) -> int:
+    return _set_int(KEY_AI_THINKING, value, DEFAULT_AI_THINKING_BUDGET,
+                    0, MAX_AI_THINKING_BUDGET)
+
+
+def get_ai_max_output_tokens() -> int:
+    return _get_int(KEY_AI_MAX_OUTPUT, DEFAULT_AI_MAX_OUTPUT_TOKENS,
+                    128, MAX_AI_MAX_OUTPUT_TOKENS)
+
+
+def set_ai_max_output_tokens(value) -> int:
+    return _set_int(KEY_AI_MAX_OUTPUT, value, DEFAULT_AI_MAX_OUTPUT_TOKENS,
+                    128, MAX_AI_MAX_OUTPUT_TOKENS)

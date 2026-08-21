@@ -51,11 +51,11 @@ export function VolumePastePanel({
     <div className="px-4 py-3 border-b dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/50 space-y-2">
       <div className="flex items-baseline gap-2">
         <span className="font-medium text-sm">{t.analysis.pasteTitle}</span>
-        <span className="text-xs text-neutral-500">{t.analysis.pasteHelp(market)}</span>
+        <span className="text-xs text-neutral-600 dark:text-neutral-400">{t.analysis.pasteHelp(market)}</span>
         <button
           type="button"
           onClick={onClose}
-          className="ml-auto text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100"
+          className="ml-auto text-xs text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100"
         >
           {t.common.cancel}
         </button>
@@ -80,7 +80,7 @@ export function VolumePastePanel({
               {t.analysis.pasteColumns(parsed.header.keyword, parsed.header.volume)}
             </div>
           ) : (
-            <div className="text-neutral-500">{t.analysis.pasteNoHeader}</div>
+            <div className="text-neutral-600 dark:text-neutral-400">{t.analysis.pasteNoHeader}</div>
           )}
 
           {wrongCountry && (
@@ -106,13 +106,13 @@ export function VolumePastePanel({
           )}
 
           {parsed.skipped.length > 0 && (
-            <div className="text-neutral-500">
+            <div className="text-neutral-600 dark:text-neutral-400">
               {t.analysis.pasteSkipped(parsed.skipped.length)}
             </div>
           )}
 
           {parsed.missing.length > 0 && (
-            <div className="text-neutral-500">
+            <div className="text-neutral-600 dark:text-neutral-400">
               {t.analysis.pasteMissing(
                 parsed.missing.length,
                 parsed.missing.slice(0, 5).join(", ")

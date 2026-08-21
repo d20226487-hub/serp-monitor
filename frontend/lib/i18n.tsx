@@ -106,12 +106,38 @@ const messagesEn = {
       canceled: "canceled",
     },
   },
+  aiTuning: {
+    tuningTitle: "Model tuning",
+    tuningHelp:
+      "How the difficulty judge samples. Measured on a real SERP with an identical prompt, 8 samples per setting.",
+    temperature: "Creativity (temperature)",
+    temperatureHelp:
+      "Measured: no material effect. The verdict split the same way at 0.0 and at 1.5, and the wording was freshly phrased at every setting — so raising it does not add variety and lowering it does not add determinism.",
+    thinking: "Reasoning budget (tokens)",
+    thinkingHelp:
+      "Measured: this is the setting that matters. At 0 the judge called this SERP medium 7 times in 8; at 1024 it called it hard 8 times out of 8, correctly weighing that parasite pages on DR-77 news domains are hard to displace despite empty link profiles. Costs about 3x the completion tokens. 0 turns thinking off.",
+    maxTokens: "Answer cap (tokens)",
+    maxTokensHelp:
+      "Thinking is billed against this same allowance, so the cap is raised automatically to keep room for the answer. Set it too low with thinking on and the model spends everything reasoning and returns nothing.",
+  },
   formula: {
     title: "Opportunity formula",
     subtitle:
       "How keywords in a run are ranked. Set the defaults here; any run can override them.",
     equation:
       "Opportunity = (Volume^wv × Winnability^ww)^½ · Winnability = Bar × Soft × AI",
+    groups: {
+      difficulty: "SERP difficulty",
+      slots: "Slot strength",
+      winnability: "Entry bar",
+      ranking: "Ranking",
+    } as Record<string, string>,
+    groupHints: {
+      difficulty: "What each AI verdict multiplies winnability by. A multiplier, not an addend — so a verdict can veto a SERP the numbers call easy.",
+      slots: "Where a slot stops being soft and starts being strong. Drives both the ladder's colours and the soft-slot count.",
+      winnability: "How the weakest competitors and the soft slots turn into a winnability figure.",
+      ranking: "How volume and winnability combine into the final score.",
+    } as Record<string, string>,
     labels: {
       ai_low: "AI: low",
       ai_medium: "AI: medium",
@@ -123,6 +149,10 @@ const messagesEn = {
       min_weight: "Minimum weight",
       balance: "Default balance",
       shortlist: "Shortlist size",
+      ur_soft: "Soft slot: UR below",
+      ur_strong: "Strong slot: UR at or above",
+      dr_soft: "Weak domain: DR below",
+      dr_strong: "Strong domain: DR at or above",
       volume_curve: "Volume curve",
     } as Record<string, string>,
     hints: {
@@ -136,6 +166,10 @@ const messagesEn = {
       min_weight: "Stops either factor dropping out at the slider extremes",
       balance: "Where the quick-wins ↔ big-prizes slider starts",
       shortlist: "How many top keywords get highlighted",
+      ur_soft: "A page below this has essentially no links of its own",
+      ur_strong: "At or above this the page is genuinely well linked",
+      dr_soft: "An empty page below this DR is soft; above it, domain-carried",
+      dr_strong: "Only used when DR drives the ladder instead of UR",
       volume_curve: "sqrt tempers big keywords · linear lets them dominate · log flattens hardest",
     } as Record<string, string>,
     revertTo: (v: string) => `Revert to ${v}`,
@@ -149,10 +183,10 @@ const messagesEn = {
   },
   analysis: {
     title: "SERP analysis",
-    subtitle: (depth: number, size: number, ranker: string) =>
+    subtitle: (depth: number, ranker: string) =>
       depth === 0
-        ? `Entry bar across the whole SERP — the ${size} weakest domains by ${ranker}, averaged`
-        : `Entry bar for the top ${depth} — the ${size} weakest domains by ${ranker}, averaged`,
+        ? `Entry bar across the whole SERP — the weakest domains by ${ranker}, averaged`
+        : `Entry bar for the top ${depth} — the weakest domains by ${ranker}, averaged`,
     depthLabel: "Aiming for",
     depthOption: (n: number) => `Top ${n}`,
     depthAll: "All",
@@ -180,6 +214,10 @@ const messagesEn = {
     aiFailed: "AI failed",
     empty: "No analysis yet. Run this job to collect Ahrefs metrics.",
     units: (n: number) => `${n.toLocaleString()} Ahrefs units`,
+    ahrefsCache: (cached: number, fetched: number) =>
+      cached > 0 ? `· ${cached} of ${cached + fetched} from cache` : "",
+    ahrefsCacheHint: (cached: number, fetched: number, ttl: number) =>
+      `${cached} target(s) were already measured within the last ${ttl} day(s) and reused; ${fetched} were bought. Ahrefs metrics move, so the cached figures are up to ${ttl} day(s) old — shorten the TTL in Settings if you are watching day-to-day movement.`,
     partialHint: "Some URLs in this depth could not be analysed",
     cellHint: (metric: string, from: number, of: number, ranker: string, positions: string) =>
       from < of
@@ -256,6 +294,18 @@ melbet	kz	34	20,000	0.45`,
     gapHint: (pos: number) =>
       `#${pos} — no organic result here (an ad or a SERP feature took the slot)`,
     legendTitle: "Bar height = page strength · colour =",
+    promptTitle: "Prompt sent to the AI",
+    promptHint:
+      "Exactly what the model received for this keyword, recorded before the call. Includes the SERP table, the metrics and the domain section.",
+    promptMeta: (model: string, inTok: number | null, outTok: number | null) =>
+      [model, inTok != null ? `${inTok.toLocaleString()} in` : null,
+       outTok != null ? `${outTok.toLocaleString()} out` : null]
+        .filter(Boolean).join(" · "),
+    promptCopy: "Copy prompt",
+    promptCopied: "Copied",
+    promptNone:
+      "No prompt recorded — this run predates prompt logging. Re-run the job to capture it.",
+    promptResponse: "Model reply",
     rawTitle: "Raw Ahrefs data for every URL in this SERP",
     rawDomainTitle: "Domain-level metrics for the sites above",
     colDomain: "Domain",
@@ -302,6 +352,14 @@ melbet	kz	34	20,000	0.45`,
       "Uses DataForSEO WHOIS. Billed per request (~$0.12), not per domain, and only when a domain isn't already cached — registration dates don't change, so a recurring job pays once and then reads the cache.",
     whoisNoCreds:
       "⚠ DataForSEO credentials are not set — domain age will fail for this job. Add them in Settings → DataForSEO.",
+    ahrefsCacheTitle: "Metric cache",
+    ahrefsCacheHelp:
+      "How long a fetched Ahrefs metric is reused across runs instead of being bought again. Unlike a domain's registration date, DR and backlink counts move — too long a TTL means a monitoring run reports figures it never re-measured. 0 turns the cache off.",
+    ahrefsCacheTtl: "Reuse metrics for",
+    ahrefsCacheDays: "days",
+    ahrefsCacheOff: "Cache disabled — every run buys every metric again.",
+    ahrefsCacheClear: "Clear cache",
+    ahrefsCacheCleared: (n: number) => `Cleared ${n} cached metric(s).`,
     ahrefsNoKey:
       "⚠ No Ahrefs API key configured — analyzer runs will fail. Add one in Settings → Ahrefs.",
     ahrefsUnitsEstimate: (urls: number, perUrl: number, units: number) =>
@@ -797,12 +855,38 @@ const messagesRu: Messages = {
       canceled: "отменено",
     },
   },
+  aiTuning: {
+    tuningTitle: "Настройка модели",
+    tuningHelp:
+      "Как AI-судья сэмплирует ответ. Замерено на реальной выдаче с идентичным промптом, по 8 прогонов на настройку.",
+    temperature: "Креативность (temperature)",
+    temperatureHelp:
+      "Замер: заметного влияния нет. При 0.0 и при 1.5 вердикты распределились одинаково, а формулировки каждый раз были новыми — то есть повышение не добавляет разнообразия, а понижение не добавляет детерминированности.",
+    thinking: "Бюджет рассуждений (токены)",
+    thinkingHelp:
+      "Замер: именно эта настройка и решает. При 0 судья назвал выдачу «средней» 7 раз из 8; при 1024 — «высокой» 8 раз из 8, верно взвесив, что паразитные страницы на новостных доменах с DR 77 сместить трудно, несмотря на пустой ссылочный профиль страниц. Стоит примерно втрое больше выходных токенов. 0 отключает рассуждения.",
+    maxTokens: "Лимит ответа (токены)",
+    maxTokensHelp:
+      "Рассуждения тарифицируются из того же лимита, поэтому он автоматически поднимается, чтобы осталось место под ответ. Слишком низкий лимит при включённых рассуждениях — модель потратит всё на размышления и вернёт пустоту.",
+  },
   formula: {
     title: "Формула перспективности",
     subtitle:
       "Как ранжируются ключевые слова в запуске. Здесь задаются значения по умолчанию; любой запуск может их переопределить.",
     equation:
       "Перспективность = (Частотность^wv × Шансы^ww)^½ · Шансы = Порог × Слабые × AI",
+    groups: {
+      difficulty: "Сложность выдачи",
+      slots: "Сила позиций",
+      winnability: "Порог входа",
+      ranking: "Ранжирование",
+    } as Record<string, string>,
+    groupHints: {
+      difficulty: "На что вердикт AI умножает шансы. Именно множитель, а не слагаемое — поэтому вердикт может перечеркнуть выдачу, которую метрики считают лёгкой.",
+      slots: "Где позиция перестаёт быть слабой и становится сильной. Задаёт и цвета столбиков, и счётчик слабых позиций.",
+      winnability: "Как самые слабые конкуренты и слабые позиции превращаются в оценку шансов.",
+      ranking: "Как частотность и шансы складываются в итоговую оценку.",
+    } as Record<string, string>,
     labels: {
       ai_low: "AI: низкая",
       ai_medium: "AI: средняя",
@@ -814,6 +898,10 @@ const messagesRu: Messages = {
       min_weight: "Минимальный вес",
       balance: "Баланс по умолчанию",
       shortlist: "Размер шорт-листа",
+      ur_soft: "Слабая позиция: UR ниже",
+      ur_strong: "Сильная позиция: UR от",
+      dr_soft: "Слабый домен: DR ниже",
+      dr_strong: "Сильный домен: DR от",
       volume_curve: "Кривая частотности",
     } as Record<string, string>,
     hints: {
@@ -827,6 +915,10 @@ const messagesRu: Messages = {
       min_weight: "Не даёт фактору обнулиться на краях ползунка",
       balance: "Стартовое положение ползунка «быстрые победы ↔ крупные цели»",
       shortlist: "Сколько верхних слов подсвечивать",
+      ur_soft: "У страницы ниже этого значения своих ссылок практически нет",
+      ur_strong: "От этого значения страница действительно прокачана ссылками",
+      dr_soft: "Пустая страница на домене ниже этого DR — слабая; выше — «за счёт домена»",
+      dr_strong: "Используется, только если лестницу задаёт DR, а не UR",
       volume_curve: "sqrt сглаживает крупные слова · linear даёт им доминировать · log сглаживает сильнее всего",
     } as Record<string, string>,
     revertTo: (v: string) => `Вернуть ${v}`,
@@ -840,10 +932,10 @@ const messagesRu: Messages = {
   },
   analysis: {
     title: "Анализ выдачи",
-    subtitle: (depth: number, size: number, ranker: string) =>
+    subtitle: (depth: number, ranker: string) =>
       depth === 0
-        ? `Порог входа по всей выдаче — среднее по ${size} самым слабым доменам по ${ranker}`
-        : `Порог входа в топ-${depth} — среднее по ${size} самым слабым доменам по ${ranker}`,
+        ? `Порог входа по всей выдаче — среднее по самым слабым доменам по ${ranker}`
+        : `Порог входа в топ-${depth} — среднее по самым слабым доменам по ${ranker}`,
     depthLabel: "Цель",
     depthOption: (n: number) => `Топ-${n}`,
     depthAll: "Вся",
@@ -871,6 +963,10 @@ const messagesRu: Messages = {
     aiFailed: "ошибка AI",
     empty: "Анализа пока нет. Запустите задачу, чтобы собрать метрики Ahrefs.",
     units: (n: number) => `${n.toLocaleString()} юнитов Ahrefs`,
+    ahrefsCache: (cached: number, fetched: number) =>
+      cached > 0 ? `· ${cached} из ${cached + fetched} из кэша` : "",
+    ahrefsCacheHint: (cached: number, fetched: number, ttl: number) =>
+      `${cached} целей уже были измерены за последние ${ttl} дн. и переиспользованы; ${fetched} докуплено. Метрики Ahrefs меняются, поэтому кэшированным значениям может быть до ${ttl} дн. — уменьшите TTL в настройках, если следите за динамикой по дням.`,
     partialHint: "Часть URL на этой глубине не удалось проанализировать",
     cellHint: (metric: string, from: number, of: number, ranker: string, positions: string) =>
       from < of
@@ -950,6 +1046,18 @@ melbet	kz	34	20 000	0,45`,
     gapHint: (pos: number) =>
       `#${pos} — органики здесь нет (позицию занял блок рекламы или колдунщик)`,
     legendTitle: "Высота столбика — сила страницы · цвет —",
+    promptTitle: "Промпт, отправленный в AI",
+    promptHint:
+      "Ровно то, что модель получила по этому ключевому слову; записано до вызова. Включает таблицу выдачи, метрики и доменный блок.",
+    promptMeta: (model: string, inTok: number | null, outTok: number | null) =>
+      [model, inTok != null ? `${inTok.toLocaleString()} вход` : null,
+       outTok != null ? `${outTok.toLocaleString()} выход` : null]
+        .filter(Boolean).join(" · "),
+    promptCopy: "Скопировать промпт",
+    promptCopied: "Скопировано",
+    promptNone:
+      "Промпт не сохранён — этот запуск сделан до включения логирования. Перезапустите задачу, чтобы он записался.",
+    promptResponse: "Ответ модели",
     rawTitle: "Сырые данные Ahrefs по каждому URL этой выдачи",
     rawDomainTitle: "Метрики уровня домена для сайтов выше",
     colDomain: "Домен",
@@ -996,6 +1104,14 @@ melbet	kz	34	20 000	0,45`,
       "Используется DataForSEO WHOIS. Тарифицируется за запрос (~$0,12), а не за домен, и только если домена ещё нет в кэше — даты регистрации не меняются, поэтому регулярная задача платит один раз и дальше читает кэш.",
     whoisNoCreds:
       "⚠ Доступы DataForSEO не заданы — получение возраста домена для этой задачи завершится ошибкой. Добавьте их в «Настройки → DataForSEO».",
+    ahrefsCacheTitle: "Кэш метрик",
+    ahrefsCacheHelp:
+      "Сколько времени метрика Ahrefs переиспользуется между запусками вместо повторной покупки. В отличие от даты регистрации домена, DR и число ссылок меняются — слишком большой TTL означает, что запуск покажет значения, которые он не измерял. 0 отключает кэш.",
+    ahrefsCacheTtl: "Переиспользовать метрики",
+    ahrefsCacheDays: "дней",
+    ahrefsCacheOff: "Кэш отключён — каждый запуск покупает все метрики заново.",
+    ahrefsCacheClear: "Очистить кэш",
+    ahrefsCacheCleared: (n: number) => `Очищено записей: ${n}.`,
     ahrefsNoKey:
       "⚠ API-ключ Ahrefs не задан — запуски в режиме анализатора завершатся ошибкой. Добавьте ключ в «Настройки → Ahrefs».",
     ahrefsUnitsEstimate: (urls: number, perUrl: number, units: number) =>

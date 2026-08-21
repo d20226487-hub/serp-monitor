@@ -64,6 +64,12 @@ export type OpportunityFormula = {
   ai_unknown: number;
   /** How many top-ranked keywords are highlighted as the shortlist. */
   shortlist: number;
+  /** Slot banding: what counts as a soft slot versus a strong one, per axis.
+   *  Drives both the soft-slot factor here and the ladder's colours. */
+  ur_soft: number;
+  ur_strong: number;
+  dr_soft: number;
+  dr_strong: number;
 };
 
 /** Mirrors the server's DEFAULT_OPPORTUNITY_FORMULA. Only a fallback for the
@@ -80,6 +86,10 @@ export const DEFAULT_FORMULA: OpportunityFormula = {
   ai_too_hard: 0.1,
   ai_unknown: 0.5,
   shortlist: 5,
+  ur_soft: 5,
+  ur_strong: 15,
+  dr_soft: 30,
+  dr_strong: 70,
 };
 
 /** The multiplier for one AI verdict under a given formula. */
@@ -222,12 +232,16 @@ export function scoreRow(
   // counts. Using the ranker for both, as this first did, made the score's soft
   // factor disagree with the soft count sitting next to it in the same row:
   // two numbers with one name, quietly differing.
-  const cohort = weakestCohort(inDepth, weaknessRanker(metrics), cohortSizeFor(depth));
+  const cohort = weakestCohort(
+    inDepth, weaknessRanker(metrics), cohortSizeFor(inDepth.length),
+  );
   // Deliberately DR and not the ranking metric: the bar ceiling below is
   // calibrated on domain rating, so a run that ranked by UR would otherwise be
   // scored against a scale that does not apply to it.
   const cohortDr = cohortAverage(cohort, "domain_rating").value;
-  const bands: Record<Band, number> = bandCounts(inDepth, ladderDriver(metrics));
+  const bands: Record<Band, number> = bandCounts(
+    inDepth, ladderDriver(metrics), formula,
+  );
 
   const bar = barScore(cohortDr, formula.bar_dr_ceiling);
   const soft = softScore(bands.soft, inDepth.length, formula.soft_floor);

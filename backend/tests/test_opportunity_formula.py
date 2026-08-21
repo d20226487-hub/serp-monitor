@@ -75,6 +75,24 @@ def test_defaults_match_the_shape_the_frontend_expects():
     gets discarded. The mirror of this assertion lives in opportunity.test.ts."""
     assert sorted(D) == [
         "ai_hard", "ai_low", "ai_medium", "ai_too_hard", "ai_unknown",
-        "balance", "bar_dr_ceiling", "min_weight", "shortlist", "soft_floor",
-        "volume_curve",
+        "balance", "bar_dr_ceiling", "dr_soft", "dr_strong", "min_weight",
+        "shortlist", "soft_floor", "ur_soft", "ur_strong", "volume_curve",
     ]
+
+
+def test_band_thresholds_cannot_invert():
+    """soft >= strong leaves no middle band and reverses the ordering, so the
+    pair resets together rather than sitting in a state where the two words
+    mean the same thing."""
+    out = coerce({"ur_soft": 40, "ur_strong": 10})
+    assert out["ur_soft"] == D["ur_soft"]
+    assert out["ur_strong"] == D["ur_strong"]
+    out = coerce({"dr_soft": 70, "dr_strong": 70})
+    assert out["dr_soft"] == D["dr_soft"]
+    assert out["dr_strong"] == D["dr_strong"]
+
+
+def test_valid_band_thresholds_are_kept():
+    out = coerce({"ur_soft": 3, "ur_strong": 25})
+    assert out["ur_soft"] == 3.0
+    assert out["ur_strong"] == 25.0

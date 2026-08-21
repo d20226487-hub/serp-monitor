@@ -168,8 +168,8 @@ describe("DEFAULT_FORMULA", () => {
     // drop a field from the editor or send one that gets discarded.
     expect(Object.keys(F).sort()).toEqual([
       "ai_hard", "ai_low", "ai_medium", "ai_too_hard", "ai_unknown",
-      "balance", "bar_dr_ceiling", "min_weight", "shortlist", "soft_floor",
-      "volume_curve",
+      "balance", "bar_dr_ceiling", "dr_soft", "dr_strong", "min_weight",
+      "shortlist", "soft_floor", "ur_soft", "ur_strong", "volume_curve",
     ]);
     expect(SHORTLIST).toBe(F.shortlist);
   });

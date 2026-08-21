@@ -30,7 +30,7 @@ const CHIP = {
 
 function Chip({ kind, children }: { kind: keyof typeof CHIP; children: React.ReactNode }) {
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border ${CHIP[kind]}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${CHIP[kind]}`}>
       {children}
     </span>
   );
@@ -191,7 +191,7 @@ export default function RunPage() {
     return Array.from(m.entries());
   }, [verifyEntries]);
 
-  if (!run) return <div className="text-sm text-neutral-500">{t.common.loading}</div>;
+  if (!run) return <div className="text-sm text-neutral-600 dark:text-neutral-400">{t.common.loading}</div>;
 
   const statusLabels = t.jobs.statusBadge as Record<string, string>;
 
@@ -199,7 +199,7 @@ export default function RunPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold">{t.run.title(run.id)}</h1>
-        <span className="text-xs text-neutral-500">
+        <span className="text-xs text-neutral-600 dark:text-neutral-400">
           {new Date(run.started_at).toLocaleString()} · {statusLabels[run.status] ?? run.status} · {t.run.headerStats(run.queries_done, run.queries_total)}
           {run.queries_failed > 0 && <span className="text-red-600 dark:text-red-400"> · {t.run.failed(run.queries_failed)}</span>}
           {run.cost != null && (
@@ -208,7 +208,7 @@ export default function RunPage() {
               <span title={run.cost_source === "actual" ? t.cost.actualHint : t.cost.estimateHint}>
                 {formatUsd(run.cost)}
                 {run.cost_source === "estimate" && (
-                  <span className="text-neutral-400"> ({t.cost.estimated})</span>
+                  <span className="text-neutral-500 dark:text-neutral-400"> ({t.cost.estimated})</span>
                 )}
               </span>
             </>
@@ -246,7 +246,16 @@ export default function RunPage() {
       {/* Analyzer mode replaces the domain/URL distribution with the
           per-keyword difficulty table — different question, different view. */}
       {analysis?.mode === "analyzer" ? (
-        <RunAnalysisTable analysis={analysis} runId={id} />
+        // The analyzer table runs to twelve columns before its nested per-URL
+        // and per-domain tables, which the page's max-w-6xl container clips.
+        // Break out of that container and re-centre at a width the table can
+        // actually use, rather than widening every form in the app to suit one
+        // table. Capped so it stays readable on an ultrawide display.
+        <div className="mx-[calc(50%-50vw)] w-screen px-4 sm:px-6">
+          <div className="mx-auto w-full max-w-[1800px]">
+            <RunAnalysisTable analysis={analysis} runId={id} />
+          </div>
+        </div>
       ) : (
         <RunOverview results={results} runId={id} />
       )}
@@ -254,9 +263,9 @@ export default function RunPage() {
       {verifyEntries.length > 0 && (
         <details className="border rounded-md dark:border-neutral-700 group">
           <summary className="cursor-pointer select-none px-4 py-2.5 flex items-center gap-2 hover:bg-neutral-50 dark:hover:bg-neutral-900/40">
-            <span className="text-neutral-400 group-open:rotate-90 transition-transform">▶</span>
+            <span className="text-neutral-600 dark:text-neutral-300 group-open:rotate-90 transition-transform">▶</span>
             <span className="font-medium text-sm">{t.run.verify.title}</span>
-            <span className="text-xs text-neutral-500">
+            <span className="text-xs text-neutral-600 dark:text-neutral-400">
               {t.run.verify.summary(verifyEntries.length)}
             </span>
           </summary>
@@ -270,8 +279,7 @@ export default function RunPage() {
                   {entries.map(e => (
                     <li key={e.key} className="flex flex-wrap items-baseline gap-2 text-xs">
                       <span
-                        className={`inline-block px-1.5 py-0.5 rounded font-medium ${
-                          e.engine === "yandex"
+                        className={`inline-block px-1.5 py-0.5 rounded font-medium ${ e.engine ==="yandex"
                             ? "bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-200"
                             : "bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200"
                         }`}
@@ -292,7 +300,7 @@ export default function RunPage() {
                 </ul>
               </div>
             ))}
-            <p className="text-[11px] text-neutral-500 italic pt-2 border-t dark:border-neutral-800">
+            <p className="text-xs text-neutral-600 dark:text-neutral-400 italic pt-2 border-t dark:border-neutral-800">
               {t.run.verify.footer}
             </p>
           </div>
@@ -303,21 +311,32 @@ export default function RunPage() {
         {groups.map(g => {
           const totalRows = g.variants.reduce((n, v) => n + v.rows.length, 0);
           return (
-            <div
+            // Collapsed by default: a 100-keyword run renders a thousand
+            // result rows, and scrolling past all of them to reach the next
+            // keyword is the common case, not reading them.
+            <details
               key={g.keyword}
-              className={`rounded-lg border overflow-hidden border-l-4 ${KEYWORD_ACCENT.border} ${KEYWORD_ACCENT.borderL} dark:border-neutral-700`}
+              className={`group rounded-lg border overflow-hidden border-l-4 ${KEYWORD_ACCENT.border} ${KEYWORD_ACCENT.borderL} dark:border-neutral-700`}
             >
-              <div className={`px-5 py-3 flex items-center gap-3 ${KEYWORD_ACCENT.header}`}>
+              <summary
+                className={`px-5 py-3 flex items-center gap-3 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden ${KEYWORD_ACCENT.header}`}
+              >
+                <span className="text-neutral-600 dark:text-neutral-300 transition-transform group-open:rotate-90">▶</span>
                 <span className={`inline-block w-2 h-2 rounded-full ${KEYWORD_ACCENT.dot}`} />
                 <div className="font-semibold text-base">{g.keyword}</div>
-                <span className="text-xs text-neutral-600 dark:text-neutral-300">
+                <span className="text-sm text-neutral-600 dark:text-neutral-300">
                   {t.run.groupCount(totalRows, g.variants.length)}
                 </span>
                 <button
-                  onClick={() => copyKeyword(g.keyword)}
-                  className="ml-auto text-xs px-2.5 py-1 rounded border bg-white/70 dark:bg-neutral-900/40 dark:border-neutral-700 hover:bg-white dark:hover:bg-neutral-900"
+                  onClick={e => {
+                    // Inside a <summary>, a click would also toggle the panel.
+                    e.preventDefault();
+                    e.stopPropagation();
+                    copyKeyword(g.keyword);
+                  }}
+                  className="ml-auto text-sm px-2.5 py-1 rounded border bg-white/70 dark:bg-neutral-900/40 dark:border-neutral-700 hover:bg-white dark:hover:bg-neutral-900"
                 >{t.common.copy}</button>
-              </div>
+              </summary>
               <div className="bg-white dark:bg-neutral-900">
                 {g.variants.map((v, vi) => (
                   <div key={v.key} className={vi > 0 ? "border-t dark:border-neutral-800" : ""}>
@@ -337,7 +356,7 @@ export default function RunPage() {
                       <tbody>
                         {v.rows.sort((a, b) => a.position - b.position).map(r => (
                           <tr key={r.id} className="border-t first:border-t-0 dark:border-neutral-800 align-top">
-                            <td className="px-3 py-3 w-10 text-neutral-500 font-mono">{r.position}</td>
+                            <td className="px-3 py-3 w-10 text-neutral-600 dark:text-neutral-400 font-mono">{r.position}</td>
                             <td className="px-3 py-3">
                               <a
                                 href={r.url ?? "#"}
@@ -354,13 +373,13 @@ export default function RunPage() {
                   </div>
                 ))}
               </div>
-            </div>
+            </details>
           );
         })}
       </div>
 
       {groups.length === 0 && (
-        <div className="text-sm text-neutral-500">
+        <div className="text-sm text-neutral-600 dark:text-neutral-400">
           {run.status === "running" ? t.run.streaming : t.run.noResults}
         </div>
       )}

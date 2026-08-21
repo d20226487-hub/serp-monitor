@@ -25,6 +25,11 @@ log = logging.getLogger(__name__)
 
 VALID_DIFFICULTIES = ("low", "medium", "hard", "too hard")
 
+# Room the answer needs once thinking has taken its share. A verdict plus a
+# 1-3 sentence comment fits in a few hundred tokens; 600 is the value this ran
+# on for its whole life before thinking was an option.
+ANSWER_HEADROOM_TOKENS = 600
+
 # Column headers for the metric ids we may send.
 _METRIC_HEADERS = {
     "url_rating": "UR",
@@ -188,15 +193,13 @@ def _coerce_difficulty(value: str | None) -> str | None:
     return None
 
 
-async def judge_keyword(
-    provider_code: str,
-    keyword: str,
-    table: str,
-    *,
-    domain_table: str = "",
-    model: str | None = None,
-) -> dict:
-    """One AI verdict for one keyword. Raises AIProviderError on failure."""
+def build_prompt(keyword: str, table: str, domain_table: str = "") -> str:
+    """Assemble the exact text the model will receive.
+
+    Split out from `judge_keyword` so the caller holds the prompt BEFORE the
+    call goes out and can record it whether the call succeeds or fails. A
+    failed verdict is precisely when you want to read what was sent.
+    """
     prompt_template = get_serp_difficulty_prompt()
     # Appended rather than a {domain_table} placeholder: a user who saved a
     # custom prompt before domain metrics existed would otherwise silently lose
@@ -220,19 +223,48 @@ async def judge_keyword(
         # fall back to appending the data so the call still has context.
         log.warning("serp_difficulty prompt has bad placeholders; appending data")
         prompt = f"{prompt_template}\n\nKeyword: {keyword}\n\nSERP:\n{full_table}"
+    return prompt
 
+
+async def judge_keyword(
+    provider_code: str,
+    prompt: str,
+    *,
+    model: str | None = None,
+    temperature: float | None = None,
+    thinking_budget: int | None = None,
+    max_output_tokens: int | None = None,
+) -> dict:
+    """One AI verdict from an already-built prompt. Raises on failure.
+
+    `temperature` overrides the configured default, so the effect of creativity
+    on a verdict can be measured against identical input rather than guessed at.
+    """
+    from ..app_settings import (
+        get_ai_max_output_tokens, get_ai_temperature, get_ai_thinking_budget,
+    )
+    temp = get_ai_temperature() if temperature is None else temperature
+    think = get_ai_thinking_budget() if thinking_budget is None else thinking_budget
+    max_out = (
+        get_ai_max_output_tokens() if max_output_tokens is None else max_output_tokens
+    )
+    # Thinking is billed against the SAME allowance as the answer, so a budget
+    # that approaches the cap leaves nothing for the verdict and the call comes
+    # back empty. Guarantee headroom rather than let that happen silently.
+    if think > 0 and max_out < think + ANSWER_HEADROOM_TOKENS:
+        max_out = think + ANSWER_HEADROOM_TOKENS
     provider = get_ai_provider(provider_code)
     result = await provider.generate(
         prompt,
         model=model,
         params=GenerationParams(
-            max_output_tokens=600,
-            temperature=0.2,
+            max_output_tokens=max_out,
+            temperature=temp,
             # Thinking is billed against max_output_tokens on Gemini 2.5+, and a
             # 1-3 sentence verdict doesn't need a reasoning budget — leaving it
             # dynamic risks the model spending the entire allowance thinking and
             # returning nothing.
-            thinking_budget=0,
+            thinking_budget=think,
             response_schema=RESPONSE_SCHEMA,
         ),
     )
@@ -252,7 +284,12 @@ async def judge_keyword(
         raise AIProviderError(f"unrecognised difficulty value: {data.get('difficulty')!r}")
     return {
         "difficulty": difficulty,
+        "temperature": temp,
+        "thinking_budget": think,
         "comment": (data.get("comment") or "").strip(),
+        # The model's own JSON, kept so a surprising verdict can be checked
+        # against what actually came back rather than the parsed view of it.
+        "raw": raw,
         "model": result.model,
         "prompt_tokens": result.prompt_tokens,
         "completion_tokens": result.completion_tokens,

@@ -46,7 +46,7 @@ export default function HomePage() {
       {err && <div className="text-red-600 dark:text-red-400 text-sm">{err}</div>}
 
       {jobs.length === 0 && (
-        <div className="text-neutral-500 text-sm border rounded-md p-6 dark:border-neutral-700">
+        <div className="text-neutral-600 dark:text-neutral-400 text-sm border rounded-md p-6 dark:border-neutral-700">
           {t.home.empty}
         </div>
       )}
@@ -56,7 +56,7 @@ export default function HomePage() {
           <div key={j.id} className="border rounded-md px-4 py-3 flex items-center gap-4 dark:border-neutral-700">
             <div className="flex-1 min-w-0">
               <Link href={`/jobs/${j.id}`} className="font-medium hover:underline">{j.name}</Link>
-              <div className="text-xs text-neutral-500 truncate">
+              <div className="text-xs text-neutral-600 dark:text-neutral-400 truncate">
                 {j.provider || "serpapi"} ·
                 {" "}{t.home.kwCount(j.keywords.length)} · {j.engines.join(", ") || "—"} ·
                 {" "}{j.devices.join(", ") || "—"} ·

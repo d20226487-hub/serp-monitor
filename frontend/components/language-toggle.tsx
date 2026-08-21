@@ -27,7 +27,7 @@ export function LanguageToggle() {
         type="button"
         onClick={() => pick("en")}
         aria-pressed={lang === "en"}
-        className={`${base} ${lang === "en" ? active : idle}`}
+        className={`${base} ${lang ==="en" ? active : idle}`}
       >
         {t.langName.en}
       </button>
@@ -35,7 +35,7 @@ export function LanguageToggle() {
         type="button"
         onClick={() => pick("ru")}
         aria-pressed={lang === "ru"}
-        className={`${base} ${lang === "ru" ? active : idle}`}
+        className={`${base} ${lang ==="ru" ? active : idle}`}
       >
         {t.langName.ru}
       </button>

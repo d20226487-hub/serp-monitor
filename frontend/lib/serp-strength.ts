@@ -36,35 +36,53 @@ export type Depth = (typeof DEPTHS)[number];
  */
 export type Band = "soft" | "propped" | "moderate" | "strong" | "unknown";
 
-// Thresholds are rules of thumb, not Ahrefs constants, chosen against how these
-// metrics actually distribute: UR is compressed near zero (a UR 15 page is
-// already well linked), DR is not (DR 70+ is an authority domain). The previous
-// code used one threshold of 20 for both, which made every result "weak" —
-// almost nothing scores UR 20.
-export const UR_SOFT = 5;
-export const UR_STRONG = 15;
-export const DR_SOFT = 30;
-export const DR_STRONG = 70;
+/**
+ * Where the band boundaries sit, on each axis.
+ *
+ * Rules of thumb rather than Ahrefs constants, which is exactly why they are
+ * configurable: UR is compressed near zero (a UR 15 page is already well
+ * linked) while DR is not, so the two axes need separate cutoffs. The original
+ * code used a single value of 20 for both and every result came out "weak",
+ * because almost nothing scores UR 20.
+ *
+ * Defaults live on the server; these are the fallback before settings load.
+ */
+export type BandThresholds = {
+  ur_soft: number;
+  ur_strong: number;
+  dr_soft: number;
+  dr_strong: number;
+};
+
+export const DEFAULT_BANDS: BandThresholds = {
+  ur_soft: 5, ur_strong: 15, dr_soft: 30, dr_strong: 70,
+};
+
+export const UR_SOFT = DEFAULT_BANDS.ur_soft;
+export const UR_STRONG = DEFAULT_BANDS.ur_strong;
+export const DR_SOFT = DEFAULT_BANDS.dr_soft;
+export const DR_STRONG = DEFAULT_BANDS.dr_strong;
 
 export function bandOf(
   m: Record<string, number | null> | undefined,
   analysed: boolean,
   driver: string,
+  bands: BandThresholds = DEFAULT_BANDS,
 ): Band {
   if (!analysed || !m) return "unknown";
   const ur = m["url_rating"];
   const dr = m["domain_rating"];
 
   if (driver === "url_rating" && ur != null) {
-    if (ur >= UR_STRONG) return "strong";
-    if (ur >= UR_SOFT) return "moderate";
-    // Below UR_SOFT the page itself is empty; the domain decides whether that
-    // is an opportunity or a trap.
-    return dr != null && dr >= DR_SOFT ? "propped" : "soft";
+    if (ur >= bands.ur_strong) return "strong";
+    if (ur >= bands.ur_soft) return "moderate";
+    // Below the soft cutoff the page itself is empty; the domain decides
+    // whether that is an opportunity or a trap.
+    return dr != null && dr >= bands.dr_soft ? "propped" : "soft";
   }
   if (driver === "domain_rating" && dr != null) {
-    if (dr >= DR_STRONG) return "strong";
-    if (dr >= DR_SOFT) return "moderate";
+    if (dr >= bands.dr_strong) return "strong";
+    if (dr >= bands.dr_soft) return "moderate";
     return "soft";
   }
   // Any other driving metric has no absolute scale we can defend, so we do not
@@ -122,15 +140,27 @@ export function withinDepth(urls: AnalysisUrl[], depth: Depth): AnalysisUrl[] {
 }
 
 /**
+ * At how many results the cohort grows from two competitors to three.
+ *
+ * Below this the SERP is too thin to spare a third: three of five results is
+ * most of the page, and averaging most of a SERP is not an "entry bar", it is
+ * just the SERP.
+ */
+export const COHORT_STEP_UP_AT = 7;
+
+/**
  * How many of the weakest competitors the entry bar averages over.
  *
- * Two is right for a bounded depth: at Top 3 a cohort of three would be the
- * entire SERP, and the "weakest" framing would mean nothing. Across the whole
- * SERP there is far more to choose from, so a third page costs little and makes
- * the figure steadier.
+ * Scales with the number of results actually available, not with the depth
+ * setting. Depth is what you are AIMING at; how many results came back is what
+ * you have to work with, and those differ — a Top 10 view of a SERP that only
+ * returned five results should behave like a small SERP, because it is one.
+ *
+ * More than one competitor because a single weakest page is a coin flip; no
+ * more than three because past that the cohort stops describing the soft tail.
  */
-export function cohortSizeFor(depth: Depth): number {
-  return depth === 0 ? 3 : 2;
+export function cohortSizeFor(resultCount: number): number {
+  return resultCount >= COHORT_STEP_UP_AT ? 3 : 2;
 }
 
 /**
@@ -216,11 +246,15 @@ export function cohortAverage(cohort: AnalysisUrl[], metric: string): CohortStat
 }
 
 /** Count of each band inside the depth — the shape of the SERP in one line. */
-export function bandCounts(urls: AnalysisUrl[], driver: string | null): Record<Band, number> {
+export function bandCounts(
+  urls: AnalysisUrl[],
+  driver: string | null,
+  bands: BandThresholds = DEFAULT_BANDS,
+): Record<Band, number> {
   const out: Record<Band, number> = {
     soft: 0, propped: 0, moderate: 0, strong: 0, unknown: 0,
   };
   if (!driver) return out;
-  for (const u of urls) out[bandOf(u.metrics, u.analysed, driver)] += 1;
+  for (const u of urls) out[bandOf(u.metrics, u.analysed, driver, bands)] += 1;
   return out;
 }

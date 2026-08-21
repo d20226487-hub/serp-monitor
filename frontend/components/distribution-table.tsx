@@ -44,15 +44,15 @@ export function DistributionTable({
     <div className="border rounded-md dark:border-neutral-700 overflow-hidden">
       <div className="px-3 py-2 bg-neutral-50 dark:bg-neutral-900/50 border-b dark:border-neutral-800 flex items-baseline gap-2">
         <span className="font-medium text-sm">{title}</span>
-        <span className="text-xs text-neutral-500">({rows.length})</span>
+        <span className="text-xs text-neutral-600 dark:text-neutral-400">({rows.length})</span>
       </div>
       <div className="max-h-80 overflow-auto">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-white dark:bg-neutral-900 z-10">
             <tr className="border-b dark:border-neutral-800 text-left">
-              <th className="px-3 py-2 font-medium text-neutral-500">{keyHeader}</th>
+              <th className="px-3 py-2 font-medium text-neutral-600 dark:text-neutral-400">{keyHeader}</th>
               <th
-                className={`px-3 py-2 font-medium text-neutral-500 w-20 text-right ${thBtn}`}
+                className={`px-3 py-2 font-medium text-neutral-600 dark:text-neutral-400 w-20 text-right ${thBtn}`}
                 onClick={() => toggle("count")}
                 title={t.run.overview.colCount}
               >
@@ -60,7 +60,7 @@ export function DistributionTable({
                 {arrow("count")}
               </th>
               <th
-                className={`px-3 py-2 font-medium text-neutral-500 w-24 text-right ${thBtn}`}
+                className={`px-3 py-2 font-medium text-neutral-600 dark:text-neutral-400 w-24 text-right ${thBtn}`}
                 onClick={() => toggle("avgPos")}
                 title={t.run.overview.colAvgPos}
               >
@@ -93,7 +93,7 @@ export function DistributionTable({
             ))}
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={3} className="px-3 py-4 text-center text-neutral-500 text-xs">
+                <td colSpan={3} className="px-3 py-4 text-center text-neutral-600 dark:text-neutral-400 text-xs">
                   {t.run.overview.noneForEngine}
                 </td>
               </tr>

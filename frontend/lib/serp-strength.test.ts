@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AnalysisUrl } from "@/lib/api";
 import {
+  COHORT_STEP_UP_AT,
   bandCounts,
   bandOf,
   barHeight,
@@ -67,12 +68,26 @@ describe("withinDepth", () => {
 });
 
 describe("cohortSizeFor", () => {
-  it("uses two at a bounded depth and three across the whole SERP", () => {
-    // Three of a top-3 would be the entire SERP, making "weakest" meaningless.
-    expect(cohortSizeFor(3)).toBe(2);
+  it("scales with how many results came back, not with the depth setting", () => {
+    // Three of five results is most of the page; averaging most of a SERP is
+    // not an entry bar, it is just the SERP.
+    expect(cohortSizeFor(0)).toBe(2);
+    expect(cohortSizeFor(1)).toBe(2);
     expect(cohortSizeFor(5)).toBe(2);
-    expect(cohortSizeFor(10)).toBe(2);
-    expect(cohortSizeFor(0)).toBe(3);
+    expect(cohortSizeFor(6)).toBe(2);
+    expect(cohortSizeFor(COHORT_STEP_UP_AT)).toBe(3);
+    expect(cohortSizeFor(10)).toBe(3);
+    expect(cohortSizeFor(100)).toBe(3);
+  });
+
+  it("steps up at seven", () => {
+    expect(COHORT_STEP_UP_AT).toBe(7);
+  });
+
+  it("is driven by results present, so a thin SERP stays on two at any depth", () => {
+    // run 66 returned 7 results overall but only 5 inside the top 5.
+    expect(cohortSizeFor(withinDepth(RUN66, 5).length)).toBe(2);
+    expect(cohortSizeFor(withinDepth(RUN66, 0).length)).toBe(3);
   });
 });
 
