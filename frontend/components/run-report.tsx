@@ -37,9 +37,15 @@ import { downloadReportPdf } from "@/lib/report-pdf";
  * they are the number a client recognises — "we need links from ~30 domains"
  * is a brief, "DR 25" is a rating they have to take on trust.
  *
- * Averaged over the same weakest-domains cohort the DR bar uses, so both bars
- * describe the same competitors. weakestCohort keeps one page per domain, so
- * no site can weight the average twice.
+ * The mean of the same cohort the DR bar averages, so both bars describe the
+ * same competitors and both answer "the weakest N here look like this".
+ * cohortSizeFor picks that N from how many results came back: two below seven,
+ * three at seven or more. weakestCohort keeps one page per domain, so no site
+ * can weight the average twice.
+ *
+ * Worth knowing when reading it: unlike DR, referring domains are unbounded,
+ * so one heavily-linked member pulls the mean well above the others. On the
+ * "vavada" SERP the cohort carried 0, 17 and 3084 and the bar reads 1034.
  */
 function cohortRefdomains(row: AnalysisRow, cohort: AnalysisUrl[]): number | null {
   const byDomain = new Map(row.domains.map(d => [d.domain, d]));
