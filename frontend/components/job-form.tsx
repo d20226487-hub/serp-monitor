@@ -6,6 +6,16 @@ import { MultiCombobox, Option } from "./multi-combobox";
 import { useT } from "@/lib/i18n";
 import { formatUsd, billingUnits } from "@/lib/cost";
 
+/** How many keywords one job may carry.
+ *
+ * A ceiling rather than a considered batch size: the run fans out to
+ * keywords x engines x devices x locations x languages queries, and the
+ * analyzer phases behind it judge one keyword at a time, so the honest limit
+ * is patience and spend rather than anything structural. The form prices both
+ * before you save.
+ */
+const MAX_KEYWORDS = 1000;
+
 type Props = {
   initial?: Job;
   /** Called after a successful save (create or update). When provided, the
@@ -106,9 +116,16 @@ export function JobForm({ initial, onSaved }: Props) {
     }).catch(() => {});
   }, []);
 
-  const keywords = useMemo(() =>
-    keywordsText.split("\n").map(s => s.trim()).filter(Boolean).slice(0, 100),
-    [keywordsText]);
+  // Anything past the cap is DROPPED, and a paste is exactly where that goes
+  // unnoticed — so the overflow is counted and shown rather than silently
+  // trimmed off the end of the textarea.
+  const { keywords, overflow } = useMemo(() => {
+    const all = keywordsText.split("\n").map(s => s.trim()).filter(Boolean);
+    return {
+      keywords: all.slice(0, MAX_KEYWORDS),
+      overflow: Math.max(0, all.length - MAX_KEYWORDS),
+    };
+  }, [keywordsText]);
 
   // Local cost estimate (matches backend logic well enough for UI feedback)
   useEffect(() => {
@@ -234,6 +251,11 @@ export function JobForm({ initial, onSaved }: Props) {
           className="w-full px-3 py-2 rounded-md border font-mono text-sm bg-white dark:bg-neutral-900 dark:border-neutral-700"
         />
         <div className="text-xs text-neutral-600 dark:text-neutral-400">{t.jobForm.keywordsCount(keywords.length)}</div>
+        {overflow > 0 && (
+          <div className="text-xs text-amber-700 dark:text-amber-300">
+            {t.jobForm.keywordsOverflow(overflow, MAX_KEYWORDS)}
+          </div>
+        )}
       </div>
 
       {/* Mode selector. Mode 1 is the original behaviour and stays the default;
