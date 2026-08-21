@@ -316,7 +316,12 @@ function DomainSubTable({
                           ? (d.is_subdomain
                               ? t.analysis.ageSubdomainHint(created, d.registrable ?? "")
                               : t.analysis.ageHint(created, d.registrable ?? d.domain))
-                          : t.analysis.ageUnknownHint
+                          // "We found nothing" and "we found a record with no
+                          // date on it" are different facts, and only one of
+                          // them says anything about the domain.
+                          : d.whois_checked
+                            ? t.analysis.ageNoDateHint
+                            : t.analysis.ageUnknownHint
                       }
                     >
                       {/* A subdomain has no registration of its own, so the age

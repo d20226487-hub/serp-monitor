@@ -265,7 +265,9 @@ melbet	kz	34	20,000	0.45`,
       `Registered ${created} (${registrable})`,
     ageSubdomainHint: (created: string, registrable: string) =>
       `Subdomain — this is the age of ${registrable}, registered ${created}`,
-    ageUnknownHint: "DataForSEO's WHOIS database has no record for this domain",
+    ageUnknownHint: "No registration record found — neither RDAP nor DataForSEO has this domain",
+    ageNoDateHint:
+      "A registration record exists, but its registry does not publish a creation date. Common for some ccTLDs — this is not a new domain, its age is simply unknown.",
     whoisSpend: (usd: string, perDomain: string) => `WHOIS ${usd} · ${perDomain}/domain`,
     whoisCached: "WHOIS cached · free",
     whoisSpendHint: (fetched: number, cached: number, usd: string, perDomain: string) =>
@@ -957,7 +959,9 @@ melbet	kz	34	20 000	0,45`,
       `Зарегистрирован ${created} (${registrable})`,
     ageSubdomainHint: (created: string, registrable: string) =>
       `Поддомен — это возраст ${registrable}, зарегистрирован ${created}`,
-    ageUnknownHint: "В базе WHOIS DataForSEO нет записи об этом домене",
+    ageUnknownHint: "Запись о регистрации не найдена — ни в RDAP, ни в DataForSEO",
+    ageNoDateHint:
+      "Запись о регистрации есть, но реестр не публикует дату создания. Это бывает у части ccTLD — домен не новый, просто возраст неизвестен.",
     whoisSpend: (usd: string, perDomain: string) => `WHOIS ${usd} · ${perDomain}/домен`,
     whoisCached: "WHOIS из кэша · бесплатно",
     whoisSpendHint: (fetched: number, cached: number, usd: string, perDomain: string) =>

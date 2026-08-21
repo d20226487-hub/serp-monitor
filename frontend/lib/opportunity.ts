@@ -132,7 +132,13 @@ export function volumeScore(
   if (curve === "log") {
     // Flattest of the three: use when a handful of head terms would otherwise
     // decide the whole ranking on volume alone.
-    return Math.log10(1 + 9 * share);
+    //
+    // The constant has to be this large to earn that description. With
+    // log10(1 + 9x) the curve sits BELOW sqrt for any share under ~0.25 — so
+    // the option billed as flattening hardest was in fact punishing small
+    // keywords harder than the default, which is backwards. log10(1 + 99x)/2
+    // is above sqrt across the whole range and still maps 0 to 0 and 1 to 1.
+    return Math.log10(1 + 99 * share) / 2;
   }
   return Math.sqrt(share);
 }
