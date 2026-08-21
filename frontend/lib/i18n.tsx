@@ -142,7 +142,7 @@ const messagesEn = {
         : `the average DR of the weakest domains in the top ${depth}`) +
       " — the level you need to reach to compete for a slot.",
     legendBarRd:
-      "the same bar in referring domains, read off the sites rather than the pages — roughly how many linking domains it takes to compete.",
+      "the same bar in referring domains, averaged over the same weakest competitors — roughly how many linking domains it takes to compete here.",
     legendScore:
       "0-100. Demand weighted against how winnable the SERP looks, so the top of this list is where to start.",
     detailTitle: "Keyword detail",
@@ -271,6 +271,12 @@ const messagesEn = {
       "too hard": "too hard",
     } as Record<string, string>,
     aiFailed: "AI failed",
+    aiMissing: (judged: number, total: number) =>
+      `${judged} of ${total} keywords have an AI verdict.`,
+    aiRescoreHint:
+      "The SERP, the Ahrefs metrics and the domain ages are already stored — scoring the rest costs AI tokens only, nothing is re-scraped or re-billed.",
+    aiRescore: (n: number) => `Score the remaining ${n}`,
+    aiRescoring: "Scoring…",
     empty: "No analysis yet. Run this job to collect Ahrefs metrics.",
     units: (n: number) => `${n.toLocaleString()} Ahrefs units`,
     ahrefsCache: (cached: number, fetched: number) =>
@@ -568,6 +574,12 @@ melbet	kz	34	20,000	0.45`,
     exportTop: "Export top",
     downloadCsv: "Download CSV",
     filterPlaceholder: "Filter by keyword…",
+    missingQueries: (missing: number, total: number) =>
+      `${missing} of ${total} queries returned nothing.`,
+    missingHint:
+      "Those keywords have no SERP, and so no metrics, no domain age and no AI verdict. Retrying re-issues only the missing queries — the rest of the run is not re-scraped or re-billed.",
+    retryQueries: (n: number) => `Retry ${n}`,
+    retrying: "Retrying…",
     verify: {
       title: "Verify scraped queries",
       summary: (n: number) =>
@@ -992,7 +1004,7 @@ const messagesRu: Messages = {
         : `средний DR самых слабых доменов в топ-${depth}`) +
       " — уровень, до которого достаточно дотянуться, чтобы бороться за позицию.",
     legendBarRd:
-      "тот же порог в ссылающихся доменах, но по сайтам, а не по страницам — сколько примерно доноров нужно, чтобы конкурировать.",
+      "тот же порог в ссылающихся доменах — среднее по тем же самым слабым конкурентам, но по сайтам, а не по страницам: сколько примерно доноров нужно, чтобы конкурировать.",
     legendScore:
       "0-100. Спрос, взвешенный с тем, насколько выдачу реально взять: начинать стоит с верха списка.",
     detailTitle: "Разбор по запросам",
@@ -1121,6 +1133,12 @@ const messagesRu: Messages = {
       "too hard": "очень высокая",
     } as Record<string, string>,
     aiFailed: "ошибка AI",
+    aiMissing: (judged: number, total: number) =>
+      `Вердикт AI есть у ${judged} из ${total} запросов.`,
+    aiRescoreHint:
+      "Выдача, метрики Ahrefs и возраст доменов уже сохранены — оценка остальных стоит только токенов AI, ничего не пересобирается и не оплачивается заново.",
+    aiRescore: (n: number) => `Оценить оставшиеся: ${n}`,
+    aiRescoring: "Оцениваем…",
     empty: "Анализа пока нет. Запустите задачу, чтобы собрать метрики Ahrefs.",
     units: (n: number) => `${n.toLocaleString()} юнитов Ahrefs`,
     ahrefsCache: (cached: number, fetched: number) =>
@@ -1423,6 +1441,12 @@ melbet	kz	34	20 000	0,45`,
     exportTop: "Экспортировать топ",
     downloadCsv: "Скачать CSV",
     filterPlaceholder: "Фильтр по ключевому слову…",
+    missingQueries: (missing: number, total: number) =>
+      `${missing} из ${total} запросов не вернули результатов.`,
+    missingHint:
+      "У этих ключей нет выдачи, а значит нет ни метрик, ни возраста доменов, ни вердикта AI. Повтор отправит только недостающие запросы — остальная часть прогона не пересобирается и не оплачивается заново.",
+    retryQueries: (n: number) => `Повторить: ${n}`,
+    retrying: "Повторяем…",
     verify: {
       title: "Проверить выполненные запросы",
       summary: (n: number) =>

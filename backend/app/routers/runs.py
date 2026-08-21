@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -27,6 +27,96 @@ def get_run(run_id: int, db: Session = Depends(get_db)):
     if not run:
         raise HTTPException(404)
     return run
+
+
+@router.post("/{run_id}/retry")
+async def retry_run(
+    run_id: int, bg: BackgroundTasks, db: Session = Depends(get_db),
+):
+    """Re-issue the queries this run never got results for.
+
+    Provider errors are per query: three failures out of ninety-nine leave
+    those three keywords with no SERP, no metrics, no domain age and no
+    verdict, while the rest of the run is sound. Re-running the whole job to
+    recover them would re-scrape and re-bill all ninety-nine.
+
+    The retry re-issues only what is missing and then tops up the analyzer
+    phases, each of which skips what the run already holds.
+    """
+    from ..tasks import claim_retry, count_missing_variants, retry_failed_queries
+
+    run = db.get(JobRun, run_id)
+    if not run:
+        raise HTTPException(404)
+    if run.status in ("running", "pending"):
+        raise HTTPException(409, "run is still in progress")
+
+    missing = count_missing_variants(run_id)
+    if not missing:
+        return {"missing": 0, "started": False}
+    if not claim_retry(run_id):
+        raise HTTPException(409, "already retrying this run")
+    bg.add_task(retry_failed_queries, run_id)
+    return {"missing": missing, "started": True}
+
+
+@router.post("/{run_id}/ai")
+async def rescore_ai(
+    run_id: int, bg: BackgroundTasks, db: Session = Depends(get_db),
+):
+    """Run the AI phase over a run that already holds its SERP and metrics.
+
+    A run interrupted partway — a crash, a deploy, a container recreated under
+    it — leaves the expensive half done and the cheap half missing: the SERP
+    results, the Ahrefs metrics and the DomainWhois rows are all committed,
+    and only the verdicts are absent. Rerunning the whole job would re-scrape
+    every query and re-bill both providers to recover something that needs
+    neither.
+
+    So this re-enters phase 3 alone. It reads only from the database, and
+    keywords that already have a verdict are left alone, so the cost is tokens
+    for the keywords actually missing one — call it twice and the second call
+    is free.
+    """
+    from ..app_settings import get_ai_analysis_provider
+    from ..tasks import claim_ai_phase, run_ai_phase
+
+    run = db.get(JobRun, run_id)
+    if not run:
+        raise HTTPException(404)
+    if run.status in ("running", "pending"):
+        # Two judges writing the same (run_id, keyword) would race on a unique
+        # constraint, and the in-flight run will get there on its own.
+        raise HTTPException(409, "run is still in progress")
+    job = db.get(Job, run.job_id)
+    if not job or (getattr(job, "mode", None) or "serp") != "analyzer":
+        raise HTTPException(400, "not an analyzer run")
+    if not get_ai_analysis_provider():
+        raise HTTPException(400, "no AI provider configured")
+
+    judged = (
+        db.query(func.count(RunKeywordAnalysis.id))
+        .filter(
+            RunKeywordAnalysis.run_id == run_id,
+            RunKeywordAnalysis.difficulty.isnot(None),
+        )
+        .scalar()
+    ) or 0
+    keywords = (
+        db.query(func.count(func.distinct(Result.keyword)))
+        .filter(Result.run_id == run_id)
+        .scalar()
+    ) or 0
+
+    # Claimed here rather than inside the task: BackgroundTasks does not start
+    # until the response is sent, so a second request arriving in between would
+    # otherwise see nothing in flight.
+    if not claim_ai_phase(run_id):
+        raise HTTPException(409, "already scoring this run")
+    bg.add_task(run_ai_phase, run_id)
+    # Reported before the work starts, so the caller can say what it is about
+    # to pay for rather than poll for it.
+    return {"keywords": keywords, "judged": judged, "pending": max(0, keywords - judged)}
 
 
 @router.get("/{run_id}/results", response_model=list[ResultOut])

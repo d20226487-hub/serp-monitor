@@ -54,6 +54,7 @@ export default function RunPage() {
   const [run, setRun] = useState<JobRun | null>(null);
   const [results, setResults] = useState<Result[]>([]);
   const [topExport, setTopExport] = useState(10);
+  const [retrying, setRetrying] = useState(false);
   const [filterKw, setFilterKw] = useState<string>("");
   // canonical_name → SavedLocation, used to look up yandex_lr when building
   // browser-equivalent URLs for the verify section.
@@ -77,6 +78,38 @@ export default function RunPage() {
       setLrByCanonical(m);
     }).catch(() => {});
   }, []);
+
+  // Queries that came back with nothing — a provider error on one variant
+  // costs that keyword its SERP and everything downstream, while the rest of
+  // the run is sound.
+  const missingQueries = run ? Math.max(0, run.queries_total - run.queries_done) : 0;
+
+  async function retryRun() {
+    setRetrying(true);
+    try {
+      const r = await api.retryRun(id);
+      if (!r.started) setRetrying(false);
+    } catch {
+      setRetrying(false);
+    }
+  }
+
+  // The retry does not put the run back into "running" — it is topping up a
+  // finished one — so the status poll below will not pick it up. Watch the
+  // query counter instead, and stop when it stops moving.
+  useEffect(() => {
+    if (!retrying) return;
+    const started = Date.now();
+    const t = setInterval(() => {
+      if (Date.now() - started > 20 * 60 * 1000) setRetrying(false);
+      else load();
+    }, 4000);
+    return () => clearInterval(t);
+  }, [retrying, id]);
+
+  useEffect(() => {
+    if (retrying && missingQueries === 0) setRetrying(false);
+  }, [retrying, missingQueries]);
 
   // Live-poll while running
   useEffect(() => {
@@ -244,6 +277,25 @@ export default function RunPage() {
         </div>
       )}
 
+      {(missingQueries > 0 || retrying) && (
+        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-md px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+          <span className="text-amber-900 dark:text-amber-200">
+            {t.run.missingQueries(missingQueries, run.queries_total)}
+          </span>
+          <span className="text-xs text-amber-800/80 dark:text-amber-200/70">
+            {t.run.missingHint}
+          </span>
+          <button
+            type="button"
+            onClick={retryRun}
+            disabled={retrying}
+            className="ml-auto px-2.5 py-1 text-xs rounded-md border border-amber-400 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/40 disabled:opacity-60"
+          >
+            {retrying ? t.run.retrying : t.run.retryQueries(missingQueries)}
+          </button>
+        </div>
+      )}
+
       <input
         value={filterKw}
         onChange={e => setFilterKw(e.target.value)}
@@ -261,7 +313,7 @@ export default function RunPage() {
         // table. Capped so it stays readable on an ultrawide display.
         <div className="mx-[calc(50%-50vw)] w-screen px-4 sm:px-6">
           <div className="mx-auto w-full max-w-[1800px]">
-            <RunAnalysisTable analysis={analysis} runId={id} />
+            <RunAnalysisTable analysis={analysis} runId={id} onRefresh={load} />
           </div>
         </div>
       ) : (

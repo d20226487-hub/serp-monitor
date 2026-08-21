@@ -504,8 +504,8 @@ type KeywordView = {
 };
 
 export function RunAnalysisTable({
-  analysis, runId,
-}: { analysis: RunAnalysis; runId: number }) {
+  analysis, runId, onRefresh,
+}: { analysis: RunAnalysis; runId: number; onRefresh?: () => void }) {
   const { t } = useT();
   const [sortKey, setSortKey] = useState<SortKey>("keyword");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -518,6 +518,7 @@ export function RunAnalysisTable({
   const [volumeEdits, setVolumeEdits] = useState<Record<string, number>>({});
   const [pasting, setPasting] = useState(false);
   const [pickingColumns, setPickingColumns] = useState(false);
+  const [scoring, setScoring] = useState(false);
   // Only the CSV columns the user has explicitly ticked or unticked; the rest
   // follow their defaults. See lib/analysis-csv for why this is stored as
   // overrides rather than as the selected set.
@@ -682,6 +683,43 @@ export function RunAnalysisTable({
       ...Object.fromEntries(rows.map(r => [r.keyword, r.volume])),
     }));
   }
+
+  // A run whose process died between the metrics and the verdicts leaves the
+  // expensive half done: every keyword here already has its SERP, its Ahrefs
+  // metrics and its domain ages stored.
+  const missingAi = analysis.rows.filter(r => !r.difficulty).length;
+  // Nothing left to attempt — every keyword either has a verdict or a recorded
+  // failure. This, not `missingAi`, is what ends the polling: a keyword the
+  // model keeps refusing would otherwise leave it running forever.
+  const unresolvedAi = analysis.rows.filter(r => !r.difficulty && !r.ai_error).length;
+
+  async function rescoreAi() {
+    setScoring(true);
+    try {
+      await api.rescoreAi(runId);
+    } catch {
+      setScoring(false);
+    }
+  }
+
+  // Verdicts are judged one keyword at a time, so pull the table back in while
+  // it works and watch the column fill rather than leaving a spinner sitting
+  // over a run that takes minutes.
+  useEffect(() => {
+    if (!scoring) return;
+    const started = Date.now();
+    const t = setInterval(() => {
+      // A cap, because the poll cannot see the backend give up on a keyword
+      // that never records anything at all.
+      if (Date.now() - started > 20 * 60 * 1000) setScoring(false);
+      else onRefresh?.();
+    }, 4000);
+    return () => clearInterval(t);
+  }, [scoring, onRefresh]);
+
+  useEffect(() => {
+    if (scoring && unresolvedAi === 0) setScoring(false);
+  }, [scoring, unresolvedAi]);
 
   const driver = useMemo(() => ladderDriver(analysis.metrics), [analysis.metrics]);
   const ranker = useMemo(() => weaknessRanker(analysis.metrics), [analysis.metrics]);
@@ -1011,6 +1049,24 @@ export function RunAnalysisTable({
           onApply={applyVolumes}
           onClose={() => setPasting(false)}
         />
+      )}
+      {(missingAi > 0 || scoring) && (
+        <div className="px-4 py-2 border-b dark:border-neutral-800 bg-amber-50 dark:bg-amber-950/30 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+          <span className="text-amber-900 dark:text-amber-200">
+            {t.analysis.aiMissing(analysis.rows.length - missingAi, analysis.rows.length)}
+          </span>
+          <span className="text-amber-800/80 dark:text-amber-200/70">
+            {t.analysis.aiRescoreHint}
+          </span>
+          <button
+            type="button"
+            onClick={rescoreAi}
+            disabled={scoring}
+            className="ml-auto px-2 py-0.5 rounded-md border border-amber-400 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/40 disabled:opacity-60"
+          >
+            {scoring ? t.analysis.aiRescoring : t.analysis.aiRescore(missingAi)}
+          </button>
+        </div>
       )}
       {otherMarkets.length > 0 && (
         <div className="px-4 py-2 border-b dark:border-neutral-800 text-xs text-amber-700 dark:text-amber-300">

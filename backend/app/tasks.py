@@ -270,6 +270,17 @@ async def _run_ahrefs_analysis(db: Session, run_id: int, job: Job) -> int:
         if canonical and canonical not in seen:
             seen.add(canonical)
             urls.append(canonical)
+    # Anything this run already measured stays measured. Without this the
+    # phase cannot be re-entered at all: (run_id, url) is unique, so a second
+    # pass over a run that recovered a few late queries would collide on every
+    # URL it had already stored. Skipping them also means the retry pays only
+    # for the targets it actually added.
+    done_urls = {
+        u for (u,) in db.query(RunUrlMetric.url)
+        .filter(RunUrlMetric.run_id == run_id).all()
+    }
+    if done_urls:
+        urls = [u for u in urls if u not in done_urls]
     if not urls:
         return AhrefsPhase(0, 0, 0)
 
@@ -353,6 +364,12 @@ async def _run_ahrefs_analysis(db: Session, run_id: int, job: Job) -> int:
                 if parent and parent != host and parent not in dseen:
                     dseen.add(parent)
                     domains.append(parent)
+            done_domains = {
+                d for (d,) in db.query(RunDomainMetric.domain)
+                .filter(RunDomainMetric.run_id == run_id).all()
+            }
+            if done_domains:
+                domains = [d for d in domains if d not in done_domains]
             dom_cached = cache_lookup(domains, DOMAIN_MODE, domain_select)
             if dom_cached:
                 now = utcnow()
@@ -575,7 +592,14 @@ async def _run_whois(db: Session, run_id: int, job: Job) -> WhoisPhase:
     return WhoisPhase(outcome.cost, len(wanted), len(stale))
 
 
-async def _run_ai_difficulty(db: Session, run_id: int, job: Job) -> None:
+class AiPhase(NamedTuple):
+    judged: int
+    """Keywords that already had a verdict and were left alone."""
+    skipped: int
+    failed: int
+
+
+async def _run_ai_difficulty(db: Session, run_id: int, job: Job) -> AiPhase:
     """Analyzer phase 3: one AI verdict per keyword.
 
     Sends a single united table per keyword (SERP result + that URL's Ahrefs
@@ -584,6 +608,13 @@ async def _run_ai_difficulty(db: Session, run_id: int, job: Job) -> None:
 
     Per-keyword failures are recorded on that keyword's row and never abort the
     phase — one bad SERP shouldn't cost you the other nine verdicts.
+
+    RESUMABLE. Everything this phase reads — results, URL and domain metrics,
+    WHOIS — is already in the database, so it can be run again over a run whose
+    process died partway through without re-scraping anything or re-billing
+    Ahrefs and DataForSEO. A keyword that already holds a verdict is left
+    alone; a keyword whose previous attempt errored is retried in place, since
+    (run_id, keyword) is unique and a second row would violate it.
     """
     from .app_settings import get_ai_analysis_provider
     from .ai.serp_difficulty import (
@@ -596,7 +627,7 @@ async def _run_ai_difficulty(db: Session, run_id: int, job: Job) -> None:
 
     provider_code = get_ai_analysis_provider()
     if not provider_code:
-        return  # no AI configured — metrics-only run, by design
+        return AiPhase(0, 0, 0)  # no AI configured — metrics-only run, by design
 
     metrics = canonical_metrics(getattr(job, "ahrefs_metrics", None))
     domain_metrics = canonical_domain_metrics(getattr(job, "ahrefs_domain_metrics", None))
@@ -612,6 +643,15 @@ async def _run_ai_difficulty(db: Session, run_id: int, job: Job) -> None:
     whois_rows = {}
     if getattr(job, "whois_enabled", False):
         whois_rows = {w.domain: w for w in db.query(DomainWhois).all()}
+
+    # What a previous attempt at this run already produced. Empty on a first
+    # pass; on a resume it is what keeps the phase from paying twice.
+    existing = {
+        a.keyword: a
+        for a in db.query(RunKeywordAnalysis)
+        .filter(RunKeywordAnalysis.run_id == run_id)
+        .all()
+    }
 
     # url -> metrics for this run.
     by_url = {
@@ -629,18 +669,15 @@ async def _run_ai_difficulty(db: Session, run_id: int, job: Job) -> None:
     for r in results:
         per_keyword.setdefault(r.keyword, []).append(r)
 
+    judged = skipped = failed = 0
+
     for keyword, rows in per_keyword.items():
-        # Skip keywords already judged (resume-safe, and avoids paying twice).
-        exists = (
-            db.query(RunKeywordAnalysis)
-            .filter(
-                RunKeywordAnalysis.run_id == run_id,
-                RunKeywordAnalysis.keyword == keyword,
-                RunKeywordAnalysis.difficulty.isnot(None),
-            )
-            .first()
-        )
-        if exists:
+        # Already has a verdict: leave it alone rather than pay for it twice.
+        # A row that only carries an error is NOT a verdict — retrying those is
+        # the point of coming back here.
+        prior = existing.get(keyword)
+        if prior is not None and prior.difficulty is not None:
+            skipped += 1
             continue
 
         variants = {(r.engine, r.device, r.location) for r in rows}
@@ -690,12 +727,19 @@ async def _run_ai_difficulty(db: Session, run_id: int, job: Job) -> None:
                     })
         domain_table = build_domain_table(dom_rows, domain_metrics)
 
-        row = RunKeywordAnalysis(run_id=run_id, keyword=keyword)
+        # Reuse the row a failed attempt left behind rather than inserting a
+        # second one — (run_id, keyword) is unique.
+        row = existing.get(keyword) or RunKeywordAnalysis(
+            run_id=run_id, keyword=keyword,
+        )
         # Built and recorded BEFORE the call. A verdict that fails or reads
         # oddly is exactly the one whose prompt you want, and building it after
         # the fact would show what we would send now, not what produced this.
         prompt = build_prompt(keyword, table, domain_table)
         row.prompt = prompt
+        # A retry that fails again must not leave the previous attempt's error
+        # showing beside a fresh prompt.
+        row.error = None
         try:
             verdict = await judge_keyword(provider_code, prompt)
             row.difficulty = verdict["difficulty"]
@@ -705,11 +749,15 @@ async def _run_ai_difficulty(db: Session, run_id: int, job: Job) -> None:
             row.temperature = verdict.get("temperature")
             row.prompt_tokens = verdict["prompt_tokens"]
             row.completion_tokens = verdict["completion_tokens"]
+            judged += 1
         except Exception as e:  # noqa: BLE001 — recorded per keyword
             log.warning("ai difficulty failed for %r: %s", keyword, e)
             row.error = redact(str(e))[:500]
+            failed += 1
         db.add(row)
         db.commit()
+
+    return AiPhase(judged=judged, skipped=skipped, failed=failed)
 
 
 async def run_job_async(run_id: int) -> None:
@@ -808,7 +856,11 @@ async def run_job_async(run_id: int) -> None:
             # configured — the metrics table is useful on its own, and this
             # phase costs tokens on every scheduled run.
             try:
-                await _run_ai_difficulty(db, run.id, job)
+                ai = await _run_ai_difficulty(db, run.id, job)
+                log.info(
+                    "ai difficulty for run %s: %s judged, %s skipped, %s failed",
+                    run.id, ai.judged, ai.skipped, ai.failed,
+                )
             except Exception as e:  # noqa: BLE001
                 log.exception("ai difficulty failed for run %s", run.id)
                 if not run.error:
@@ -840,6 +892,198 @@ async def run_job_async(run_id: int) -> None:
             run.finished_at = utcnow()
             db.commit()
     finally:
+        db.close()
+
+
+def _missing_variants(db: Session, run: JobRun, job: Job) -> list[dict]:
+    """The queries this run was meant to make and has no results for.
+
+    Failures are not recorded per variant — the run carries a count and the
+    first error message — so the set is reconstructed by re-expanding the job
+    and subtracting what actually landed. That also makes the answer correct
+    for a run cut short by a restart, where nothing recorded a failure at all.
+    """
+    canonical = {
+        (l or {}).get("canonical_name") for l in (job.locations or []) if l
+    }
+    lr_map = _yandex_lr_lookup(db, {c for c in canonical if c})
+    have = {
+        (r.keyword, r.engine, r.device, r.location, r.language, r.google_domain)
+        for r in db.query(
+            Result.keyword, Result.engine, Result.device, Result.location,
+            Result.language, Result.google_domain,
+        ).filter(Result.run_id == run.id).distinct()
+    }
+    missing = []
+    for v in _expand_variants(job, lr_map=lr_map):
+        loc = (v["location"] or {}).get("canonical_name") if v["location"] else None
+        key = (v["keyword"], v["engine"], v["device"], loc, v["language"],
+               v["google_domain"])
+        if key not in have:
+            missing.append(v)
+    return missing
+
+
+def count_missing_variants(run_id: int) -> int:
+    """How many queries a retry would re-issue. Read-only."""
+    db = SessionLocal()
+    try:
+        run = db.get(JobRun, run_id)
+        job = db.get(Job, run.job_id) if run else None
+        return len(_missing_variants(db, run, job)) if run and job else 0
+    finally:
+        db.close()
+
+
+# Runs currently being retried, for the same reason _ai_phase_running exists.
+_retry_running: set[int] = set()
+
+
+def claim_retry(run_id: int) -> bool:
+    if run_id in _retry_running:
+        return False
+    _retry_running.add(run_id)
+    return True
+
+
+async def retry_failed_queries(run_id: int) -> None:
+    """Re-issue the queries a run never got results for, then top up the rest.
+
+    A provider erroring on three of ninety-nine queries costs those three
+    keywords everything downstream — no metrics, no domain ages, no verdict —
+    while the other ninety-six are fine. Re-running the job to recover them
+    would re-scrape and re-bill all ninety-nine.
+
+    So this re-issues only the missing queries and then re-enters the analyzer
+    phases, each of which now skips what the run already holds: Ahrefs passes
+    over URLs it has measured, WHOIS is cached per domain across every run, and
+    the AI phase leaves judged keywords alone. The marginal cost is the few
+    queries plus whatever those keywords add.
+    """
+    db = SessionLocal()
+    try:
+        run = db.get(JobRun, run_id)
+        if not run:
+            return
+        job = db.get(Job, run.job_id)
+        if not job:
+            return
+        missing = _missing_variants(db, run, job)
+        if not missing:
+            log.info("retry: run %s has no missing queries", run_id)
+            return
+
+        log.info("retry: run %s re-issuing %s queries", run_id, len(missing))
+        recovered = 0
+        provider_name = getattr(job, "provider", None) or "serpapi"
+        async with get_provider(provider_name) as provider:
+            async def worker(v: dict):
+                nonlocal recovered
+                try:
+                    rows = await _execute_variant(provider, v, job.top_n or 10)
+                    _persist_results(db, run.id, v, rows)
+                    recovered += 1
+                except Exception as e:  # noqa: BLE001
+                    log.exception("retry variant failed: %s", v)
+                    run.error = redact(f"{type(e).__name__}: {e}")
+                finally:
+                    db.commit()
+
+            await asyncio.gather(*(worker(v) for v in missing))
+
+        # Counters describe the run as it now stands, not as it went the first
+        # time: a query that has results is done, whatever it did before.
+        run.queries_done += recovered
+        run.queries_failed = max(0, run.queries_failed - recovered)
+        if recovered and not run.queries_failed:
+            # Nothing outstanding any more. The status is the headline on the
+            # run list, and leaving it "failed" would keep pointing at an error
+            # that no longer describes anything.
+            run.status = "done"
+            run.error = None
+        db.commit()
+
+        if recovered and (getattr(job, "mode", None) or "serp") == "analyzer":
+            try:
+                phase = await _run_ahrefs_analysis(db, run.id, job)
+                # Added to, never replaced: the original figure is what this run
+                # actually spent, and overwriting it with the top-up would erase
+                # the expensive first pass from the record.
+                run.ahrefs_units = (run.ahrefs_units or 0) + phase.units
+                run.ahrefs_cached = (run.ahrefs_cached or 0) + phase.cached
+                run.ahrefs_fetched = (run.ahrefs_fetched or 0) + phase.fetched
+            except Exception as e:  # noqa: BLE001
+                log.exception("retry ahrefs failed for run %s", run.id)
+                run.error = redact(f"Ahrefs analysis failed: {e}")
+            db.commit()
+
+            if getattr(job, "whois_enabled", False):
+                try:
+                    phase = await _run_whois(db, run.id, job)
+                    run.whois_cost = round((run.whois_cost or 0) + phase.cost, 6)
+                    run.whois_domains = phase.domains
+                    run.whois_fetched = (run.whois_fetched or 0) + phase.fetched
+                except Exception as e:  # noqa: BLE001
+                    log.exception("retry whois failed for run %s", run.id)
+                db.commit()
+
+            try:
+                ai = await _run_ai_difficulty(db, run.id, job)
+                log.info(
+                    "retry ai for run %s: %s judged, %s skipped, %s failed",
+                    run.id, ai.judged, ai.skipped, ai.failed,
+                )
+            except Exception as e:  # noqa: BLE001
+                log.exception("retry ai failed for run %s", run.id)
+            db.commit()
+    except Exception:  # noqa: BLE001
+        log.exception("retry failed for run %s", run_id)
+    finally:
+        _retry_running.discard(run_id)
+        db.close()
+
+
+# Runs currently being re-judged. Two judges over one run would both try to
+# write the same (run_id, keyword) and one would lose to the unique constraint
+# after paying for the verdict. A process-local set is enough: this deploys as
+# a single API container, and a stale entry cannot outlive the process that
+# holds it.
+_ai_phase_running: set[int] = set()
+
+
+def claim_ai_phase(run_id: int) -> bool:
+    """Reserve a run for re-judging. False when one is already in flight."""
+    if run_id in _ai_phase_running:
+        return False
+    _ai_phase_running.add(run_id)
+    return True
+
+
+async def run_ai_phase(run_id: int) -> None:
+    """Re-enter the AI phase for a stored run, on its own session.
+
+    Its own session because this is a background task with no request scoped
+    around it, and its own error handling because there is no run status to
+    fail: the run has already finished one way or another, and a keyword that
+    cannot be judged records that on its own row.
+    """
+    db = SessionLocal()
+    try:
+        run = db.get(JobRun, run_id)
+        if not run:
+            return
+        job = db.get(Job, run.job_id)
+        if not job:
+            return
+        ai = await _run_ai_difficulty(db, run_id, job)
+        log.info(
+            "ai rescore for run %s: %s judged, %s skipped, %s failed",
+            run_id, ai.judged, ai.skipped, ai.failed,
+        )
+    except Exception:  # noqa: BLE001
+        log.exception("ai rescore failed for run %s", run_id)
+    finally:
+        _ai_phase_running.discard(run_id)
         db.close()
 
 

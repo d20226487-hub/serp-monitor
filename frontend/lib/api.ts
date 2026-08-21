@@ -372,6 +372,19 @@ export const api = {
     req<{ timezone: string }>("/settings/scheduler"),
 
   getAnalysis: (runId: number) => req<RunAnalysis>(`/runs/${runId}/analysis`),
+  /** Re-issue the queries a run never got results for, then top up the
+   *  analyzer phases for whatever those queries add. */
+  retryRun: (runId: number) =>
+    req<{ missing: number; started: boolean }>(
+      `/runs/${runId}/retry`, { method: "POST" },
+    ),
+  /** Re-enter the AI phase for a run that already holds its SERP and metrics.
+   *  Only keywords without a verdict are judged, so the cost is tokens for
+   *  what is actually missing. Returns the counts before the work starts. */
+  rescoreAi: (runId: number) =>
+    req<{ keywords: number; judged: number; pending: number }>(
+      `/runs/${runId}/ai`, { method: "POST" },
+    ),
 
   // AI SERP-difficulty prompt + provider choice
   getAIAnalysisSettings: () => req<AIAnalysisSettings>("/settings/ai-analysis"),
