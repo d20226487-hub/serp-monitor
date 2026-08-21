@@ -1,3 +1,5 @@
+import type { OpportunityFormula } from "@/lib/opportunity";
+
 const BASE = process.env.NEXT_PUBLIC_API_BASE || "/api";
 
 async function req<T = any>(path: string, init?: RequestInit): Promise<T> {
@@ -39,6 +41,9 @@ export type Job = {
   ahrefs_metrics: string[];
   /** Field ids for the domain-level pass. Empty = domain enrichment off. */
   ahrefs_domain_metrics: string[];
+  /** Look up domain registration dates via DataForSEO WHOIS and feed the age
+   *  to the AI judge. Bills dollars per request, so it is opt-in per job. */
+  whois_enabled: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -74,6 +79,27 @@ export type AnalysisUrl = {
   analysed: boolean;
 };
 
+export type AnalysisDomain = {
+  domain: string;
+  metrics: Record<string, number | null>;
+  analysed: boolean;
+  /** The registrable parent's own Ahrefs figures, when this host is a
+   *  subdomain. Separate from `metrics` because they describe a different
+   *  entity — an empty subdomain can sit on an enormous platform. */
+  parent_metrics: Record<string, number | null> | null;
+  /** The registration this domain's WHOIS facts belong to (eTLD+1). */
+  registrable: string | null;
+  /** True when `domain` sits below `registrable` — the age describes the
+   *  parent registration, not this host on its own. */
+  is_subdomain: boolean;
+  age_days: number | null;
+  created: string | null;
+  registrar: string | null;
+  /** False = never looked up. True with a null age = looked up, and
+   *  DataForSEO's database has no record for it. */
+  whois_checked: boolean;
+};
+
 export type AnalysisRow = {
   keyword: string;
   urls_total: number;
@@ -82,7 +108,13 @@ export type AnalysisRow = {
    *  this to the weakest-domain cohort at the selected depth and averages it —
    *  see lib/serp-strength. */
   urls: AnalysisUrl[];
-  domains: { domain: string; metrics: Record<string, number | null>; analysed: boolean }[];
+  domains: AnalysisDomain[];
+  /** Monthly search volume for the run's primary country, or the
+   *  country-agnostic figure. null = never entered, which is NOT zero demand. */
+  volume: number | null;
+  /** Which country the volume was priced in; null = country-agnostic entry. */
+  volume_country: string | null;
+  volume_source: string | null;
   /** AI verdict: "low" | "medium" | "hard" | "too hard", or null. */
   difficulty: string | null;
   /** 1-3 sentence AI explanation of this SERP's nuances. */
@@ -111,6 +143,37 @@ export type RunAnalysis = {
   domain_metrics: string[];
   rows: AnalysisRow[];
   ahrefs_units: number | null;
+  /** USD billed by DataForSEO for this run's WHOIS lookups. 0 when the domain
+   *  cache covered everything, which is the steady state for a recurring job. */
+  whois_cost: number | null;
+  /** Registrable domains this run needed, cached ones included. */
+  whois_domains: number | null;
+  /** How many of those were actually bought rather than read from the cache. */
+  whois_fetched: number | null;
+  whois_enabled: boolean;
+  /** The run's primary market — the country most of its results came from.
+   *  Volume edits are written back against this. */
+  country: string | null;
+  /** Every country the run touched. More than one means the score prices
+   *  demand in `country` alone and ignores the rest. */
+  countries: string[];
+  /** The formula this run is scored with — its override if it has one,
+   *  otherwise the global. Already resolved by the server. */
+  formula: OpportunityFormula;
+  formula_is_override: boolean;
+  formula_global: OpportunityFormula;
+  formula_defaults: OpportunityFormula;
+  /** True when the run targeted a city or region rather than a whole country.
+   *  Keyword tools report volume per COUNTRY, so the figure is country-wide
+   *  even though the SERP was measured from one city. */
+  sub_national: boolean;
+};
+
+export type KeywordVolumeRow = {
+  keyword: string;
+  country_code: string | null;
+  volume: number;
+  source: string;
 };
 
 export type JobRun = {
@@ -198,6 +261,35 @@ export const api = {
     const tail = qs.toString();
     return req<Result[]>(`/runs/${id}/results${tail ? `?${tail}` : ""}`);
   },
+  listKeywordVolumes: (keywords?: string[], country?: string | null) => {
+    const qs = new URLSearchParams();
+    if (keywords?.length) qs.set("keywords", keywords.join(","));
+    if (country) qs.set("country", country);
+    const tail = qs.toString();
+    return req<KeywordVolumeRow[]>(`/keyword-volumes${tail ? `?${tail}` : ""}`);
+  },
+  saveKeywordVolumes: (items: { keyword: string; country_code: string | null; volume: number }[]) =>
+    req<KeywordVolumeRow[]>("/keyword-volumes", {
+      method: "PUT", body: JSON.stringify(items),
+    }),
+  getOpportunityFormula: () =>
+    req<{ formula: OpportunityFormula; defaults: OpportunityFormula }>("/settings/opportunity"),
+  saveOpportunityFormula: (formula: Partial<OpportunityFormula>) =>
+    req<{ formula: OpportunityFormula; defaults: OpportunityFormula }>("/settings/opportunity", {
+      method: "PUT", body: JSON.stringify(formula),
+    }),
+  resetOpportunityFormula: () =>
+    req<{ formula: OpportunityFormula; defaults: OpportunityFormula }>("/settings/opportunity", {
+      method: "DELETE",
+    }),
+  setRunFormula: (runId: number, formula: Partial<OpportunityFormula>) =>
+    req<{ formula: OpportunityFormula; formula_is_override: boolean }>(
+      `/runs/${runId}/opportunity`, { method: "PUT", body: JSON.stringify(formula) },
+    ),
+  clearRunFormula: (runId: number) =>
+    req<{ formula: OpportunityFormula; formula_is_override: boolean }>(
+      `/runs/${runId}/opportunity`, { method: "DELETE" },
+    ),
   exportUrl: (id: number, top: number) =>
     `${BASE}/runs/${id}/export.csv?top=${top}`,
   searchLocations: (q: string) =>

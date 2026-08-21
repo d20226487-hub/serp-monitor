@@ -56,6 +56,12 @@ class Job(Base):
     # Domain-level field selection, chosen independently of the URL-level one.
     # Empty list = domain enrichment disabled for this job.
     ahrefs_domain_metrics: Mapped[list] = mapped_column(JSON, default=list)
+    # Look up domain registration dates via DataForSEO WHOIS and feed the age
+    # to the AI judge. Its own switch rather than riding along with the domain
+    # metrics because it bills a different provider on a different basis: ~$0.12
+    # per request that needs the network, against Ahrefs units. Off by default,
+    # so no existing job starts spending on it.
+    whois_enabled: Mapped[bool] = mapped_column(default=False)
 
     runs: Mapped[list["JobRun"]] = relationship(back_populates="job", cascade="all,delete-orphan")
 
@@ -87,6 +93,24 @@ class JobRun(Base):
     # mode only). Separate from `cost` — Ahrefs bills in units off a
     # subscription quota, not dollars per call.
     ahrefs_units: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # USD actually billed by DataForSEO for this run's WHOIS lookups. Separate
+    # from `cost`, which is the SERP scrape: they are different providers on
+    # different rates, and a run that answered entirely from the domain cache
+    # legitimately spent 0.0 here while still costing money to scrape.
+    whois_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Denominators for the per-domain cost. `whois_domains` is every registrable
+    # domain the run needed; `whois_fetched` is how many of those were actually
+    # bought rather than served from the cache. Both are stored because the
+    # interesting figure changes with which one you divide by: cost per domain
+    # BOUGHT says what the request fee amortised to, cost per domain KNOWN says
+    # what the run paid for the answers it ended up with.
+    whois_domains: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    whois_fetched: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Per-run override of the opportunity formula, as JSON. NULL means "use the
+    # global one", which is not the same as storing a copy of it: a run left on
+    # the default follows Settings when the global changes, while a run that was
+    # tuned deliberately keeps what it was tuned to.
+    opportunity_formula: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     job: Mapped[Job] = relationship(back_populates="runs")
     results: Mapped[list["Result"]] = relationship(back_populates="run", cascade="all,delete-orphan")
@@ -167,6 +191,68 @@ class RunDomainMetric(Base):
     domain: Mapped[str] = mapped_column(String(255), index=True)
     metrics: Mapped[dict] = mapped_column(JSON, default=dict)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class KeywordVolume(Base):
+    """Monthly search volume for one keyword in one country — cached globally.
+
+    Global rather than per-run for the same reason DomainWhois is: a volume is
+    a fact about the keyword, not about the run that happened to need it. A
+    scheduled job would otherwise demand the numbers be re-entered every time
+    it fires.
+
+    `source` records where a figure came from. Today everything is "manual";
+    the column exists so an automated fill later can be told apart from a hand
+    -entered number, and so a later import never silently overwrites a figure
+    the user typed on purpose.
+
+    country_code is NULL for a figure that applies regardless of market, which
+    is the fallback when no row matches the run's own country.
+    """
+    __tablename__ = "keyword_volumes"
+    __table_args__ = (
+        UniqueConstraint("keyword", "country_code", name="uq_keyword_volume"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    keyword: Mapped[str] = mapped_column(String(500), index=True)
+    country_code: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    volume: Mapped[int] = mapped_column(Integer, default=0)
+    source: Mapped[str] = mapped_column(String(20), default="manual")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class DomainWhois(Base):
+    """WHOIS registration facts for one registrable domain — cached globally.
+
+    Deliberately NOT scoped to a run. A registration date is a fact about the
+    domain, not about when we looked: caching it across runs is what makes the
+    feature affordable, because DataForSEO bills ~$0.12 per REQUEST regardless
+    of how many domains it carries. A daily scheduled job therefore pays once
+    and then answers from here until an unseen domain enters its SERPs.
+
+    Keyed on the registrable domain (eTLD+1). Subdomains resolve to their
+    parent's row — `by.tribuna.com` and `ua.tribuna.com` are one registration.
+    """
+    __tablename__ = "domain_whois"
+
+    domain: Mapped[str] = mapped_column(String(255), primary_key=True)
+    created_datetime: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    changed_datetime: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    expiration_datetime: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    registrar: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    epp_status_codes: Mapped[list] = mapped_column(JSON, default=list)
+    # False when DataForSEO's database simply has no row for this domain. Cached
+    # as a real answer rather than left absent, because otherwise every run would
+    # re-pay the request fee to be told "no" again. Refreshed sooner than a hit
+    # (see WHOIS_MISS_TTL) since a domain missing today can appear later.
+    found: Mapped[bool] = mapped_column(default=False)
+    # Which lookup answered: "rdap" (free, registry-direct) or "dataforseo"
+    # (paid fallback for the ccTLDs RDAP does not serve). Recorded because the
+    # two disagree on coverage, and knowing which one produced a date is what
+    # makes a surprising age checkable.
+    source: Mapped[str | None] = mapped_column(String(20), nullable=True)
     fetched_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 

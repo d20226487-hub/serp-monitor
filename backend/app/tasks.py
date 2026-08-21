@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import timezone
 from urllib.parse import urlsplit
 from itertools import product
-from typing import Iterable
+from typing import Iterable, NamedTuple
 
 from sqlalchemy.orm import Session
 
@@ -15,6 +16,7 @@ from .app_settings import get_provider_rate
 from .config import settings
 from .db import SessionLocal
 from .models import (
+    DomainWhois,
     Job,
     JobRun,
     Result,
@@ -263,6 +265,21 @@ async def _run_ahrefs_analysis(db: Session, run_id: int, job: Job) -> int:
                 if host and host not in dseen:
                     dseen.add(host)
                     domains.append(host)
+            # Also measure the REGISTRABLE PARENT of every subdomain.
+            #
+            # Without this the two domain-level signals describe different
+            # entities: Ahrefs runs in mode=subdomains, so a result on
+            # melbet.ru.uptodown.com reports that subdomain's 1 referring
+            # domain, while its age is uptodown.com's 23.7 years. Read as one
+            # row that is nonsense. Measuring both makes the actual situation
+            # legible — an empty subdomain parked on a huge platform — and
+            # separates it from a doorway sitting on its own fresh domain.
+            from .providers.registrable import registrable_domain
+            for host in list(domains):
+                parent = registrable_domain(host)
+                if parent and parent != host and parent not in dseen:
+                    dseen.add(parent)
+                    domains.append(parent)
             for i in range(0, len(domains), BATCH_SIZE):
                 chunk = domains[i : i + BATCH_SIZE]
                 outcome = await fetch_batch_chunk(
@@ -281,6 +298,179 @@ async def _run_ahrefs_analysis(db: Session, run_id: int, job: Job) -> int:
     return total_units
 
 
+# How long a cached WHOIS row is trusted. Registration dates are immutable, so
+# a hit could arguably be cached forever; 180 days just bounds the staleness of
+# the expiry/registrar fields that ride along. A MISS expires far sooner because
+# "not in DataForSEO's database" is a statement about their coverage today, and
+# a domain absent this month may be present next.
+WHOIS_TTL_DAYS = 180
+WHOIS_MISS_TTL_DAYS = 14
+
+
+class WhoisPhase(NamedTuple):
+    """What one run's WHOIS phase cost, and over how many domains.
+
+    The counts travel with the cost because the price is mostly a fixed request
+    fee: $0.12 spread over two domains is $0.06 each, over two hundred it is
+    $0.0018. Without a denominator the dollar figure alone says nothing about
+    whether the run was efficient.
+    """
+    cost: float
+    domains: int   # registrable domains this run needed, cached ones included
+    fetched: int   # of those, how many were actually bought
+
+
+async def _run_whois(db: Session, run_id: int, job: Job) -> WhoisPhase:
+    """Analyzer phase 2b: registration dates for this run's domains.
+
+    Cost is 0.0 whenever the cache covered everything — the common case for a
+    scheduled job whose SERPs are stable.
+
+    Domain age is the one thing Ahrefs cannot tell us, and it is what separates
+    "small site with a lot of links" from "doorway registered last spring".
+    """
+    import httpx
+
+    from .app_settings import get_provider_creds
+    from .providers.dataforseo_whois import fetch_whois
+    from .providers.rdap import fetch_many as rdap_fetch_many
+    from .providers.registrable import registrable_domain
+    from .providers.url_normalize import normalize_url
+
+    # Every host this run touched, reduced to the registration it belongs to.
+    # WHOIS has no row for a subdomain, so `by.tribuna.com` has to become
+    # `tribuna.com` or the lookup silently returns nothing.
+    #
+    # Derived from the run's own results rather than from RunDomainMetric:
+    # those rows only exist when the job also asked for Ahrefs DOMAIN metrics,
+    # and domain age is its own switch. Reading them would make age silently do
+    # nothing whenever it was enabled on its own.
+    wanted: set[str] = set()
+    for (url,) in (
+        db.query(Result.url)
+        .filter(Result.run_id == run_id, Result.url.isnot(None))
+        .distinct()
+        .all()
+    ):
+        # Same normalisation the Ahrefs domain pass applies, so both phases
+        # agree on which host a result belongs to.
+        host = (urlsplit(normalize_url((url or "").strip())).hostname or "").lower()
+        reg = registrable_domain(host)
+        if reg:
+            wanted.add(reg)
+    if not wanted:
+        return WhoisPhase(0.0, 0, 0)
+
+    now = utcnow()
+    fresh: set[str] = set()
+    for row in db.query(DomainWhois).filter(DomainWhois.domain.in_(sorted(wanted))).all():
+        ttl = WHOIS_TTL_DAYS if row.found else WHOIS_MISS_TTL_DAYS
+        # utcnow() is tz-aware, but SQLite's DateTime drops the offset on write
+        # and hands back a naive value, so this subtraction has to re-attach UTC
+        # or it raises. Every timestamp in this table is written as UTC.
+        stamp = row.fetched_at
+        if stamp is not None and stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=timezone.utc)
+        age = (now - stamp).days if stamp else ttl + 1
+        if age > ttl:
+            continue
+        # A MISS recorded before RDAP existed is not evidence of anything: it
+        # only means the paid database had no row, and RDAP answers most of
+        # exactly those domains. Retry them rather than trusting a negative
+        # cached against a source that could not have known.
+        if not row.found and row.source is None:
+            continue
+        fresh.add(row.domain)
+
+    stale = sorted(wanted - fresh)
+    if not stale:
+        # Nothing to buy. This is the steady state for a recurring job and the
+        # whole reason the cache is keyed on the domain rather than the run.
+        log.info("whois: run %s fully cached (%s domains)", run_id, len(wanted))
+        return WhoisPhase(0.0, len(wanted), 0)
+
+    def store(domain: str, rec, source: str | None) -> None:
+        db.merge(DomainWhois(
+            domain=domain,
+            created_datetime=getattr(rec, "created_datetime", None),
+            changed_datetime=getattr(rec, "changed_datetime", None),
+            expiration_datetime=getattr(rec, "expiration_datetime", None),
+            registrar=getattr(rec, "registrar", None),
+            epp_status_codes=getattr(rec, "epp_status_codes", None) or [],
+            found=rec is not None,
+            source=source,
+            fetched_at=now,
+        ))
+
+    # --- RDAP first ---------------------------------------------------------
+    # Free, registry-direct, and it covers precisely what the paid database
+    # cannot: on run 68 DataForSEO had no row for 17 of 63 domains, all of them
+    # doorways on new gTLDs, and RDAP answered 15 of them — some a day old.
+    batch = await rdap_fetch_many(stale)
+    rdap_hits = batch.found
+    for domain, rec in rdap_hits.items():
+        store(domain, rec, "rdap")
+    remaining = [d for d in stale if d not in rdap_hits]
+    if rdap_hits:
+        db.commit()
+
+    if not remaining:
+        log.info(
+            "whois: run %s resolved %s via RDAP, %s cached, $0 spent",
+            run_id, len(rdap_hits), len(fresh),
+        )
+        return WhoisPhase(0.0, len(wanted), len(stale))
+
+    # --- DataForSEO for whatever RDAP could not serve ------------------------
+    # Mostly ccTLDs: .kz, .ru, .by, .am and .uz have no RDAP service.
+    creds = get_provider_creds("dataforseo")
+    login, password = creds.get("login", ""), creds.get("password", "")
+    if not login or not password:
+        # Not fatal any more: RDAP may already have answered most of the run,
+        # and losing a few ccTLD ages beats losing the whole phase.
+        log.warning(
+            "whois: run %s has %s domains RDAP could not resolve and no "
+            "DataForSEO credentials — leaving them unknown",
+            run_id, len(remaining),
+        )
+        return WhoisPhase(0.0, len(wanted), len(stale))
+
+    async with httpx.AsyncClient(timeout=60) as client:
+        outcome = await fetch_whois(client, login, password, remaining)
+
+    if outcome.error:
+        # RDAP's hits are already committed above and keep their value; only the
+        # unresolved tail is lost. Nothing is written as a miss on failure —
+        # that would cache a transient blip as "absent" for two weeks.
+        raise RuntimeError(f"WHOIS lookup failed: {outcome.error}")
+
+    for domain, rec in outcome.found.items():
+        store(domain, rec, "dataforseo")
+    for domain in outcome.missing:
+        # A domain RDAP failed on TRANSIENTLY is not known to be absent — it is
+        # unknown. Caching it as a miss would hide its age for two weeks over
+        # what may have been one timed-out request, so leave no row at all and
+        # let the next run ask again.
+        if domain in batch.transient:
+            continue
+        # Genuinely absent from both sources. Cached so the next run does not
+        # re-pay the request fee to be told the same thing.
+        db.merge(DomainWhois(
+            domain=domain, created_datetime=None, changed_datetime=None,
+            expiration_datetime=None, registrar=None, epp_status_codes=[],
+            found=False, source="dataforseo", fetched_at=now,
+        ))
+    db.commit()
+    log.info(
+        "whois: run %s — %s via RDAP (free), %s via DataForSEO, %s cached, "
+        "%s absent, %s retryable, cost $%.4f",
+        run_id, len(rdap_hits), len(outcome.found), len(fresh),
+        len(outcome.missing) - len(batch.transient), len(batch.transient),
+        outcome.cost,
+    )
+    return WhoisPhase(outcome.cost, len(wanted), len(stale))
+
+
 async def _run_ai_difficulty(db: Session, run_id: int, job: Job) -> None:
     """Analyzer phase 3: one AI verdict per keyword.
 
@@ -294,6 +484,8 @@ async def _run_ai_difficulty(db: Session, run_id: int, job: Job) -> None:
     from .app_settings import get_ai_analysis_provider
     from .ai.serp_difficulty import build_domain_table, build_serp_table, judge_keyword
     from .providers.ahrefs_batch import canonical_domain_metrics, canonical_metrics
+    from .providers.dataforseo_whois import domain_age_days, format_age
+    from .providers.registrable import registrable_domain
     from .providers.url_normalize import normalize_url
 
     provider_code = get_ai_analysis_provider()
@@ -307,6 +499,13 @@ async def _run_ai_difficulty(db: Session, run_id: int, job: Job) -> None:
         d.domain: (d.metrics or {})
         for d in db.query(RunDomainMetric).filter(RunDomainMetric.run_id == run_id).all()
     }
+
+    # Registration facts, keyed by registrable domain. Looked up per host below
+    # via the same reduction the WHOIS phase used, so a subdomain picks up its
+    # parent's row instead of coming back blank.
+    whois_rows = {}
+    if getattr(job, "whois_enabled", False):
+        whois_rows = {w.domain: w for w in db.query(DomainWhois).all()}
 
     # url -> metrics for this run.
     by_url = {
@@ -361,7 +560,28 @@ async def _run_ai_difficulty(db: Session, run_id: int, job: Job) -> None:
                 host = host[4:]
             if host and host not in dseen:
                 dseen.add(host)
-                dom_rows.append({'domain': host, 'metrics': by_domain.get(host) or {}})
+                parent = registrable_domain(host)
+                row_out = {'domain': host, 'metrics': by_domain.get(host) or {}}
+                w = whois_rows.get(parent or '') if whois_rows else None
+                if w is not None and w.found:
+                    row_out['age'] = format_age(domain_age_days(w.created_datetime))
+                    row_out['registrar'] = w.registrar
+                    # Say whose registration the age describes. Without this the
+                    # model reads uptodown.com's 23 years as the age of a
+                    # throwaway subdomain parked on it.
+                    if parent and parent != host:
+                        row_out['age_of'] = parent
+                dom_rows.append(row_out)
+                # The parent's own figures, indented beneath, so "empty
+                # subdomain on a huge platform" is distinguishable from
+                # "doorway on its own fresh domain".
+                if parent and parent != host and parent in by_domain and parent not in dseen:
+                    dseen.add(parent)
+                    dom_rows.append({
+                        'domain': parent,
+                        'metrics': by_domain.get(parent) or {},
+                        'indent': True,
+                    })
         domain_table = build_domain_table(dom_rows, domain_metrics)
 
         row = RunKeywordAnalysis(run_id=run_id, keyword=keyword)
@@ -455,6 +675,21 @@ async def run_job_async(run_id: int) -> None:
                 if not run.error:
                     run.error = redact(f"Ahrefs analysis failed: {e}")
             db.commit()
+
+            # Domain ages, before the AI phase so the judge can see them.
+            # Gated on its own job flag: this bills DataForSEO per request, not
+            # Ahrefs units, and only pays when the domain cache misses.
+            if getattr(job, "whois_enabled", False):
+                try:
+                    phase = await _run_whois(db, run.id, job)
+                    run.whois_cost = round(phase.cost, 6)
+                    run.whois_domains = phase.domains
+                    run.whois_fetched = phase.fetched
+                except Exception as e:  # noqa: BLE001
+                    log.exception("whois lookup failed for run %s", run.id)
+                    if not run.error:
+                        run.error = redact(f"Domain age lookup failed: {e}")
+                db.commit()
 
             # AI difficulty scoring. Skipped silently when no AI provider is
             # configured — the metrics table is useful on its own, and this

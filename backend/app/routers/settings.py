@@ -12,6 +12,7 @@ from ..ai.prompts import (
 )
 from ..app_settings import (
     AI_PROVIDER_FIELDS,
+    DEFAULT_OPPORTUNITY_FORMULA,
     DEFAULT_RATES,
     PROVIDER_FIELDS,
     ahrefs_status,
@@ -20,6 +21,7 @@ from ..app_settings import (
     clear_provider_creds,
     get_ahrefs_api_key,
     get_ai_analysis_provider,
+    get_opportunity_formula,
     get_provider_creds,
     get_provider_rates,
     provider_status,
@@ -28,6 +30,7 @@ from ..app_settings import (
     set_ai_analysis_provider,
     set_ai_provider_config,
     set_provider_creds,
+    set_opportunity_formula,
     set_provider_rates,
     set_serpapi_key,
 )
@@ -316,3 +319,34 @@ def update_rates(payload: RatesIn):
 @router.get("/scheduler")
 def scheduler_status():
     return {"timezone": scheduler_timezone()}
+
+# --- Opportunity formula -------------------------------------------------------
+
+@router.get("/opportunity")
+def get_opportunity():
+    """The global formula, alongside the built-in defaults.
+
+    Defaults ship with the response so the UI can show what each field would
+    revert to without duplicating the numbers in the frontend — one definition,
+    on the server.
+    """
+    return {
+        "formula": get_opportunity_formula(),
+        "defaults": dict(DEFAULT_OPPORTUNITY_FORMULA),
+    }
+
+
+@router.put("/opportunity")
+def update_opportunity(payload: dict):
+    """Save the global formula. Unknown or out-of-range fields fall back to
+    their default rather than 400-ing the whole save — see
+    coerce_opportunity_formula."""
+    saved = set_opportunity_formula(payload or {})
+    return {"formula": saved, "defaults": dict(DEFAULT_OPPORTUNITY_FORMULA)}
+
+
+@router.delete("/opportunity")
+def reset_opportunity():
+    """Drop the global override, reverting to the built-in defaults."""
+    saved = set_opportunity_formula(None)
+    return {"formula": saved, "defaults": dict(DEFAULT_OPPORTUNITY_FORMULA)}

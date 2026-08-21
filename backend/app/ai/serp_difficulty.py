@@ -109,21 +109,52 @@ def build_serp_table(rows: list[dict], metrics: list[str], *, multi_variant: boo
 
 
 def build_domain_table(domains: list[dict], metrics: list[str]) -> str:
-    """Separate table for domain-level metrics.
+    """Separate table for domain-level facts: Ahrefs metrics and registration age.
 
     Separate rather than merged into the SERP table because the relationship is
-    1:many — one domain backs several result URLs — so merging would repeat the
+    1:many - one domain backs several result URLs - so merging would repeat the
     same domain figures on every row and imply they were per-page.
+
+    Age earns its place beside the link metrics because the two only mean
+    something together: 300 referring domains is unremarkable on a ten-year-old
+    site and a red flag on one registered four months ago. Registrar rides along
+    for the same reason - a cluster of doorways registered within days of each
+    other at one registrar is a network, not a coincidence.
+
+    Renders when there is EITHER a metric selected or an age known, so turning
+    on domain age without Ahrefs domain metrics still reaches the model.
     """
-    if not metrics or not domains:
+    if not domains:
+        return ""
+    has_age = any(d.get("age") for d in domains)
+    if not metrics and not has_age:
         return ""
     headers = ["Domain"] + [_METRIC_HEADERS.get(m, m) for m in metrics]
+    if has_age:
+        headers += ["Age", "Registrar"]
     lines = ["| " + " | ".join(headers) + " |",
              "|" + "|".join("---" for _ in headers) + "|"]
     for d in domains:
         m = d.get("metrics") or {}
+        # A parent row is the registrable domain under a subdomain listed above
+        # it; the prefix keeps the two from reading as unrelated competitors.
+        name = ("|_ " if d.get("indent") else "") + _clip(d.get("domain"), 60)
+        cells = [name] + [_fmt(m.get(f)) for f in metrics]
+        if has_age:
+            age = d.get("age") or "-"
+            if d.get("age_of"):
+                age = f"{age} (of {_clip(d.get('age_of'), 40)})"
+            cells += [age, _clip(d.get("registrar"), 40) or "-"]
+        lines.append("| " + " | ".join(cells) + " |")
+    if has_age:
+        # Spelled out because a bare dash is ambiguous: without this the model
+        # cannot tell "we did not look" from "the registration is genuinely
+        # unlisted", and reads a blank as brand-new - the opposite of the truth.
+        lines.append("")
         lines.append(
-            "| " + " | ".join([_clip(d.get("domain"), 60)] + [_fmt(m.get(f)) for f in metrics]) + " |"
+            "Age is time since the domain's current WHOIS registration date. "
+            "A dash means the date is UNKNOWN, not that the domain is new. "
+            "Subdomains are shown against their parent registration."
         )
     return "\n".join(lines)
 

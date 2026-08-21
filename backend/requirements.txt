@@ -7,6 +7,11 @@ httpx==0.28.1
 apscheduler==3.10.4
 python-multipart==0.0.20
 selectolax==0.3.27
+# Public Suffix List, for reducing SERP hosts to the registrable domain a WHOIS
+# record is actually keyed on (by.tribuna.com -> tribuna.com). Pinned to the
+# snapshot bundled with the package — app/providers/registrable.py disables the
+# remote suffix-list fetch so a cold container never depends on the network.
+tldextract==5.3.2
 # Vertex AI service-account auth. Imported lazily inside app/ai/vertex.py, so
 # AI Studio and Vertex Express (API key) keep working without it.
 google-auth==2.36.0

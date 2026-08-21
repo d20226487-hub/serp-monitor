@@ -106,6 +106,47 @@ const messagesEn = {
       canceled: "canceled",
     },
   },
+  formula: {
+    title: "Opportunity formula",
+    subtitle:
+      "How keywords in a run are ranked. Set the defaults here; any run can override them.",
+    equation:
+      "Opportunity = (Volume^wv × Winnability^ww)^½ · Winnability = Bar × Soft × AI",
+    labels: {
+      ai_low: "AI: low",
+      ai_medium: "AI: medium",
+      ai_hard: "AI: hard",
+      ai_too_hard: "AI: too hard",
+      ai_unknown: "AI: no verdict",
+      bar_dr_ceiling: "Entry-bar DR ceiling",
+      soft_floor: "Soft-slot floor",
+      min_weight: "Minimum weight",
+      balance: "Default balance",
+      shortlist: "Shortlist size",
+      volume_curve: "Volume curve",
+    } as Record<string, string>,
+    hints: {
+      ai_low: "Multiplier when the judge says a SERP is winnable",
+      ai_medium: "Multiplier for a medium verdict",
+      ai_hard: "Multiplier for a hard verdict",
+      ai_too_hard: "Set to 0 to exclude these keywords outright",
+      ai_unknown: "Used when the AI never scored the keyword",
+      bar_dr_ceiling: "DR at which a SERP counts as closed. Lower = stricter",
+      soft_floor: "Lowest the soft-slot factor can go. 1 disables it",
+      min_weight: "Stops either factor dropping out at the slider extremes",
+      balance: "Where the quick-wins ↔ big-prizes slider starts",
+      shortlist: "How many top keywords get highlighted",
+      volume_curve: "sqrt tempers big keywords · linear lets them dominate · log flattens hardest",
+    } as Record<string, string>,
+    revertTo: (v: string) => `Revert to ${v}`,
+    resetGlobal: "Reset to built-in defaults",
+    runTitle: "Formula for this run",
+    runInherited: "Following the global formula",
+    runOverridden: "⚠ This run overrides the global formula",
+    runSaveOverride: "Save for this run",
+    runClearOverride: "Use global",
+    edit: "Formula",
+  },
   analysis: {
     title: "SERP analysis",
     subtitle: (depth: number, size: number, ranker: string) =>
@@ -118,6 +159,14 @@ const messagesEn = {
     colKeyword: "Keyword",
     colShape: "SERP shape",
     colSoft: "Soft slots",
+    colVolume: (market: string) => (market ? `Volume (${market})` : "Volume"),
+    volumeGeoNote: (market: string) =>
+      `Country-wide (${market}) — keyword tools report volume per country, not per city`,
+    volumeCityHint: (market: string) =>
+      `This run was targeted at a city or region, but search volume is only ever reported per country. The figure is ${market}-wide: the city is the vantage point the SERP was measured from, not the size of the market.`,
+    volumeMultiCountry: (used: string, others: string) =>
+      `⚠ This run spans ${others} as well as ${used}. Scores price demand in ${used} only — the other markets are not counted.`,
+    colOpportunity: "Opportunity",
     colCoverage: "Analysed",
     colDifficulty: "SERP difficulty",
     colComment: "AI comment",
@@ -154,6 +203,41 @@ const messagesEn = {
       `Ahrefs returned metrics for ${analysed} of the ${total} pages in this depth`,
     exportCsv: "Export table",
     exportHint: "Download these rows as CSV, at the depth shown",
+    balanceQuick: "quick wins",
+    balanceVolume: "big prizes",
+    balanceHint: (pct: number) =>
+      `Opportunity = weighted geometric mean of volume and winnability. ` +
+      `Volume weight ${pct}%, winnability ${100 - pct}%. Left favours SERPs you can take quickly; right favours the biggest traffic you could plausibly win.`,
+    volumeAdd: "+ add",
+    pasteVolumes: "Paste volumes",
+    pasteTitle: "Paste volumes from Ahrefs",
+    pasteHelp: (market: string) =>
+      `Copy the rows straight out of Keywords Explorer or a CSV export — header included. Saved for ${market || "this run's market"}.`,
+    pastePlaceholder: `Keyword	Country	Difficulty	Volume	CPC
+melbet	kz	34	20,000	0.45`,
+    pasteColumns: (kw: string, vol: string) =>
+      `Reading “${kw}” as the keyword and “${vol}” as the volume.`,
+    pasteNoHeader:
+      "No header row found — reading each line as “keyword … number”. Paste the header too if a column gets misread.",
+    pasteWrongCountry: (found: string, market: string) =>
+      `⚠ This paste is for ${found}, but the run's market is ${market}. Ahrefs volumes are per country — check you exported the right one.`,
+    pasteMatched: (n: number) => `${n} keyword(s) ready to save.`,
+    pasteUnmatched: (n: number, names: string) =>
+      `${n} not in this run, so they'll be ignored: ${names}`,
+    pasteSkipped: (n: number) => `${n} line(s) had no usable number and were skipped.`,
+    pasteMissing: (n: number, names: string) =>
+      `${n} keyword(s) in this run still have no volume: ${names}`,
+    pasteApply: (n: number) => (n ? `Save ${n} volume(s)` : "Nothing to save"),
+    volumeEmpty: "No volume entered — this keyword can't be scored. Click to add one.",
+    volumeAnyCountry: "any country",
+    volumeHint: (country: string) =>
+      `Monthly searches (${country}). Stored per keyword and reused by every run in this market — click to edit.`,
+    oppNeedsVolume: "needs volume",
+    oppNoVolume: "Enter a search volume to score this keyword",
+    oppHint: (vol: number, win: number, bar: number, soft: number, ai: number) =>
+      `Volume ${vol}% of the run's largest · winnability ${win}% ` +
+      `(entry bar ${bar}% × soft slots ${soft}% × AI verdict ×${ai}). ` +
+      `Scores are relative to this run, so they answer "which of these first", not "is this good".`,
     noneInDepth: "No results in this depth",
     bandLabels: {
       soft: "soft",
@@ -175,6 +259,22 @@ const messagesEn = {
     rawTitle: "Raw Ahrefs data for every URL in this SERP",
     rawDomainTitle: "Domain-level metrics for the sites above",
     colDomain: "Domain",
+    colAge: "Age",
+    colRegistrar: "Registrar",
+    ageHint: (created: string, registrable: string) =>
+      `Registered ${created} (${registrable})`,
+    ageSubdomainHint: (created: string, registrable: string) =>
+      `Subdomain — this is the age of ${registrable}, registered ${created}`,
+    ageUnknownHint: "DataForSEO's WHOIS database has no record for this domain",
+    whoisSpend: (usd: string, perDomain: string) => `WHOIS ${usd} · ${perDomain}/domain`,
+    whoisCached: "WHOIS cached · free",
+    whoisSpendHint: (fetched: number, cached: number, usd: string, perDomain: string) =>
+      `${fetched} domain(s) looked up${cached ? `, ${cached} already cached` : ""}. ` +
+      `DataForSEO bills a fixed ~$0.12 per request plus ~$0.0012 per domain, so ${usd} ` +
+      `works out at ${perDomain} per domain at this size. The fee is per REQUEST, not ` +
+      `per domain — the more domains share one call, the cheaper each gets.`,
+    whoisCachedHint: (domains: number) =>
+      `All ${domains} domain(s) answered from cache — registration dates don't change, so a recurring job pays only for domains it has never seen.`,
     colPos: "#",
     alsoAt: (positions: string) => `also at ${positions}`,
     analyzedAs: "analysed as",
@@ -193,6 +293,13 @@ const messagesEn = {
     ahrefsMetrics: "Ahrefs metrics",
     ahrefsMetricsHelp:
       "Which metrics to pull for each result URL. Analysed in exact-URL mode, so UR is per page rather than per domain.",
+    whois: "Domain age (WHOIS)",
+    whoisHelp:
+      "Look up when each domain was registered and give the age to the AI. A site with hundreds of referring domains and no top-10 keywords reads very differently at six months old than at ten years.",
+    whoisCost:
+      "Uses DataForSEO WHOIS. Billed per request (~$0.12), not per domain, and only when a domain isn't already cached — registration dates don't change, so a recurring job pays once and then reads the cache.",
+    whoisNoCreds:
+      "⚠ DataForSEO credentials are not set — domain age will fail for this job. Add them in Settings → DataForSEO.",
     ahrefsNoKey:
       "⚠ No Ahrefs API key configured — analyzer runs will fail. Add one in Settings → Ahrefs.",
     ahrefsUnitsEstimate: (urls: number, perUrl: number, units: number) =>
@@ -688,6 +795,47 @@ const messagesRu: Messages = {
       canceled: "отменено",
     },
   },
+  formula: {
+    title: "Формула перспективности",
+    subtitle:
+      "Как ранжируются ключевые слова в запуске. Здесь задаются значения по умолчанию; любой запуск может их переопределить.",
+    equation:
+      "Перспективность = (Частотность^wv × Шансы^ww)^½ · Шансы = Порог × Слабые × AI",
+    labels: {
+      ai_low: "AI: низкая",
+      ai_medium: "AI: средняя",
+      ai_hard: "AI: высокая",
+      ai_too_hard: "AI: очень высокая",
+      ai_unknown: "AI: без вердикта",
+      bar_dr_ceiling: "Потолок DR порога входа",
+      soft_floor: "Минимум фактора слабых позиций",
+      min_weight: "Минимальный вес",
+      balance: "Баланс по умолчанию",
+      shortlist: "Размер шорт-листа",
+      volume_curve: "Кривая частотности",
+    } as Record<string, string>,
+    hints: {
+      ai_low: "Множитель, когда AI считает выдачу берущейся",
+      ai_medium: "Множитель для средней сложности",
+      ai_hard: "Множитель для высокой сложности",
+      ai_too_hard: "Поставьте 0, чтобы полностью исключать такие слова",
+      ai_unknown: "Применяется, если AI не оценил слово",
+      bar_dr_ceiling: "DR, при котором выдача считается закрытой. Меньше — строже",
+      soft_floor: "Нижняя граница фактора слабых позиций. 1 отключает его",
+      min_weight: "Не даёт фактору обнулиться на краях ползунка",
+      balance: "Стартовое положение ползунка «быстрые победы ↔ крупные цели»",
+      shortlist: "Сколько верхних слов подсвечивать",
+      volume_curve: "sqrt сглаживает крупные слова · linear даёт им доминировать · log сглаживает сильнее всего",
+    } as Record<string, string>,
+    revertTo: (v: string) => `Вернуть ${v}`,
+    resetGlobal: "Сбросить к встроенным значениям",
+    runTitle: "Формула для этого запуска",
+    runInherited: "Используется глобальная формула",
+    runOverridden: "⚠ Этот запуск переопределяет глобальную формулу",
+    runSaveOverride: "Сохранить для запуска",
+    runClearOverride: "Вернуть глобальную",
+    edit: "Формула",
+  },
   analysis: {
     title: "Анализ выдачи",
     subtitle: (depth: number, size: number, ranker: string) =>
@@ -700,6 +848,14 @@ const messagesRu: Messages = {
     colKeyword: "Ключевое слово",
     colShape: "Профиль выдачи",
     colSoft: "Слабых позиций",
+    colVolume: (market: string) => (market ? `Частотность (${market})` : "Частотность"),
+    volumeGeoNote: (market: string) =>
+      `По стране целиком (${market}) — сервисы дают частотность по странам, а не по городам`,
+    volumeCityHint: (market: string) =>
+      `Этот запуск нацелен на город или регион, но частотность бывает только на уровне страны. Значение — по всему рынку ${market}: город здесь лишь точка съёма выдачи, а не размер рынка.`,
+    volumeMultiCountry: (used: string, others: string) =>
+      `⚠ В этом запуске есть не только ${used}, но и ${others}. Оценки считают спрос только по ${used} — остальные рынки не учитываются.`,
+    colOpportunity: "Перспективность",
     colCoverage: "Проанализировано",
     colDifficulty: "Сложность выдачи",
     colComment: "Комментарий AI",
@@ -739,6 +895,41 @@ const messagesRu: Messages = {
       `Ahrefs вернул метрики для ${analysed} из ${total} страниц на этой глубине`,
     exportCsv: "Выгрузить таблицу",
     exportHint: "Скачать эти строки в CSV на показанной глубине",
+    balanceQuick: "быстрые победы",
+    balanceVolume: "крупные цели",
+    balanceHint: (pct: number) =>
+      `Перспективность — взвешенное среднее геометрическое частотности и шансов взять выдачу. ` +
+      `Вес частотности ${pct}%, шансов — ${100 - pct}%. Влево — выдачи, которые можно взять быстро; вправо — максимум трафика, который реально выиграть.`,
+    volumeAdd: "+ добавить",
+    pasteVolumes: "Вставить частотности",
+    pasteTitle: "Вставить частотности из Ahrefs",
+    pasteHelp: (market: string) =>
+      `Скопируйте строки прямо из Keywords Explorer или CSV-экспорта — вместе с заголовком. Сохранится для рынка ${market || "этого запуска"}.`,
+    pastePlaceholder: `Keyword	Country	Difficulty	Volume	CPC
+melbet	kz	34	20 000	0,45`,
+    pasteColumns: (kw: string, vol: string) =>
+      `Ключевое слово берётся из «${kw}», частотность — из «${vol}».`,
+    pasteNoHeader:
+      "Строка заголовка не найдена — каждая строка читается как «ключевое слово … число». Вставьте заголовок, если колонка определилась неверно.",
+    pasteWrongCountry: (found: string, market: string) =>
+      `⚠ Эти данные для ${found}, а рынок запуска — ${market}. Частотность в Ahrefs даётся по странам: проверьте, ту ли страну выгрузили.`,
+    pasteMatched: (n: number) => `Готово к сохранению: ${n}.`,
+    pasteUnmatched: (n: number, names: string) =>
+      `${n} нет в этом запуске — будут пропущены: ${names}`,
+    pasteSkipped: (n: number) => `Строк без пригодного числа: ${n} — пропущены.`,
+    pasteMissing: (n: number, names: string) =>
+      `Без частотности в этом запуске осталось: ${n} — ${names}`,
+    pasteApply: (n: number) => (n ? `Сохранить: ${n}` : "Нечего сохранять"),
+    volumeEmpty: "Частотность не указана — оценить это слово нельзя. Нажмите, чтобы добавить.",
+    volumeAnyCountry: "любая страна",
+    volumeHint: (country: string) =>
+      `Показов в месяц (${country}). Хранится по ключевому слову и переиспользуется во всех запусках по этому рынку — нажмите, чтобы изменить.`,
+    oppNeedsVolume: "нужна частотность",
+    oppNoVolume: "Укажите частотность, чтобы оценить это слово",
+    oppHint: (vol: number, win: number, bar: number, soft: number, ai: number) =>
+      `Частотность — ${vol}% от максимума в запуске · шансы — ${win}% ` +
+      `(порог входа ${bar}% × слабые позиции ${soft}% × вердикт AI ×${ai}). ` +
+      `Оценки относительны внутри запуска: они отвечают на вопрос «что брать первым», а не «хорошо ли это слово».`,
     noneInDepth: "На этой глубине результатов нет",
     bandLabels: {
       soft: "слабая",
@@ -760,6 +951,22 @@ const messagesRu: Messages = {
     rawTitle: "Сырые данные Ahrefs по каждому URL этой выдачи",
     rawDomainTitle: "Метрики уровня домена для сайтов выше",
     colDomain: "Домен",
+    colAge: "Возраст",
+    colRegistrar: "Регистратор",
+    ageHint: (created: string, registrable: string) =>
+      `Зарегистрирован ${created} (${registrable})`,
+    ageSubdomainHint: (created: string, registrable: string) =>
+      `Поддомен — это возраст ${registrable}, зарегистрирован ${created}`,
+    ageUnknownHint: "В базе WHOIS DataForSEO нет записи об этом домене",
+    whoisSpend: (usd: string, perDomain: string) => `WHOIS ${usd} · ${perDomain}/домен`,
+    whoisCached: "WHOIS из кэша · бесплатно",
+    whoisSpendHint: (fetched: number, cached: number, usd: string, perDomain: string) =>
+      `Запрошено доменов: ${fetched}${cached ? `, ещё ${cached} взято из кэша` : ""}. ` +
+      `DataForSEO берёт фиксированные ~$0,12 за запрос плюс ~$0,0012 за домен, поэтому ${usd} ` +
+      `на таком объёме дают ${perDomain} за домен. Плата идёт за ЗАПРОС, а не за домен — ` +
+      `чем больше доменов в одном вызове, тем дешевле каждый.`,
+    whoisCachedHint: (domains: number) =>
+      `Все ${domains} домен(ов) взяты из кэша — даты регистрации не меняются, поэтому регулярная задача платит только за домены, которых ещё не видела.`,
     colPos: "#",
     alsoAt: (positions: string) => `также на ${positions}`,
     analyzedAs: "проанализирован как",
@@ -778,6 +985,13 @@ const messagesRu: Messages = {
     ahrefsMetrics: "Метрики Ahrefs",
     ahrefsMetricsHelp:
       "Какие метрики запрашивать для каждого URL из выдачи. Анализ идёт в режиме точного URL, поэтому UR считается по странице, а не по домену.",
+    whois: "Возраст домена (WHOIS)",
+    whoisHelp:
+      "Узнать дату регистрации каждого домена и передать возраст в AI. Сайт с сотнями ссылающихся доменов и без ключей в топ-10 читается совершенно по-разному в полгода и в десять лет.",
+    whoisCost:
+      "Используется DataForSEO WHOIS. Тарифицируется за запрос (~$0,12), а не за домен, и только если домена ещё нет в кэше — даты регистрации не меняются, поэтому регулярная задача платит один раз и дальше читает кэш.",
+    whoisNoCreds:
+      "⚠ Доступы DataForSEO не заданы — получение возраста домена для этой задачи завершится ошибкой. Добавьте их в «Настройки → DataForSEO».",
     ahrefsNoKey:
       "⚠ API-ключ Ahrefs не задан — запуски в режиме анализатора завершатся ошибкой. Добавьте ключ в «Настройки → Ahrefs».",
     ahrefsUnitsEstimate: (urls: number, perUrl: number, units: number) =>

@@ -7,7 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .db import Base, SessionLocal, engine
 from .models import SavedLocation
-from .routers import export, jobs, locations, runs, settings as settings_router
+from .routers import (
+    export, jobs, keyword_volumes, locations, runs, settings as settings_router,
+)
 from .scheduler import get_scheduler, reload_all_schedules
 from .tasks import mark_orphaned_runs_failed
 
@@ -79,6 +81,16 @@ def _migrate_sqlite_columns() -> None:
         ("jobs", "ahrefs_domain_metrics", "JSON"),
         # Ahrefs units actually billed for the run's batch-analysis phase.
         ("job_runs", "ahrefs_units", "INTEGER"),
+        # WHOIS domain-age lookups. Existing jobs default to off so nothing
+        # starts billing DataForSEO without being asked to.
+        ("jobs", "whois_enabled", "BOOLEAN NOT NULL DEFAULT 0"),
+        ("job_runs", "whois_cost", "FLOAT"),
+        ("job_runs", "whois_domains", "INTEGER"),
+        ("job_runs", "whois_fetched", "INTEGER"),
+        # NULL = inherit the global opportunity formula.
+        ("job_runs", "opportunity_formula", "JSON"),
+        # Which lookup answered a cached WHOIS row.
+        ("domain_whois", "source", "VARCHAR(20)"),
     ]
     # Values to backfill into rows that predate a column. ALTER TABLE ADD COLUMN
     # without a DEFAULT leaves existing rows NULL, which then fails response
@@ -135,6 +147,7 @@ app.include_router(jobs.router)
 app.include_router(runs.router)
 app.include_router(export.router)
 app.include_router(locations.router)
+app.include_router(keyword_volumes.router)
 app.include_router(settings_router.router)
 
 

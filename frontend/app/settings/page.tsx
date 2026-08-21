@@ -16,6 +16,8 @@ import {
 import { googleUule } from "@/lib/uule";
 import { Trash2, Pencil, Check, X, Copy } from "lucide-react";
 import { useT } from "@/lib/i18n";
+import { GlobalFormulaSection } from "@/components/opportunity-formula";
+import { OpportunityFormula } from "@/lib/opportunity";
 
 export default function SettingsPage() {
   const { t } = useT();
@@ -32,6 +34,8 @@ export default function SettingsPage() {
   // bulk import textarea
   const [bulk, setBulk] = useState("");
   const [bulkResult, setBulkResult] = useState<string | null>(null);
+  const [formula, setFormula] = useState<OpportunityFormula | null>(null);
+  const [formulaDefaults, setFormulaDefaults] = useState<OpportunityFormula | null>(null);
 
   // edit row
   const [editId, setEditId] = useState<number | null>(null);
@@ -41,6 +45,14 @@ export default function SettingsPage() {
     setItems(await api.listSavedLocations());
   }
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    // The server owns both the formula and its defaults, so the UI never has a
+    // second copy of these numbers to fall out of step.
+    api.getOpportunityFormula()
+      .then(r => { setFormula(r.formula); setFormulaDefaults(r.defaults); })
+      .catch(() => {});
+  }, []);
 
   const filtered = useMemo(() => {
     if (!filter) return items;
@@ -196,6 +208,28 @@ export default function SettingsPage() {
           onClick={addOne}
           className="px-4 py-2 rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 disabled:opacity-50"
         >{t.common.add}</button>
+      </section>
+
+      {/* Opportunity formula — the global defaults every run inherits. */}
+      <section className="border rounded-md p-4 dark:border-neutral-700 space-y-3">
+        <h2 className="font-medium">{t.formula.title}</h2>
+        <p className="text-xs text-neutral-500">{t.formula.subtitle}</p>
+        {formula && formulaDefaults ? (
+          <GlobalFormulaSection
+            initial={formula}
+            defaults={formulaDefaults}
+            onSave={async f => {
+              const r = await api.saveOpportunityFormula(f);
+              setFormula(r.formula);
+            }}
+            onReset={async () => {
+              const r = await api.resetOpportunityFormula();
+              setFormula(r.formula);
+            }}
+          />
+        ) : (
+          <div className="text-xs text-neutral-500">{t.common.loading}</div>
+        )}
       </section>
 
       {/* Bulk import */}

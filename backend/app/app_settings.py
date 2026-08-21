@@ -5,6 +5,8 @@ DB value wins; env value is used as a fallback for SerpAPI only (it's the
 historical default; Bright Data and Oxylabs have no env-var fallback)."""
 from __future__ import annotations
 
+import json
+
 from sqlalchemy.orm import Session
 
 from .config import settings
@@ -373,3 +375,118 @@ def provider_status(provider: str) -> dict:
             # Non-secret fields (zone, username) — show in full.
             masked[f] = {"configured": True, "value": v}
     return {"provider": provider, "fields": masked}
+
+# ---------------------------------------------------------------------------
+# Opportunity formula
+#
+# The score that ranks a run's keywords is a judgement call dressed as
+# arithmetic, so its constants are configuration rather than code. A brand-
+# protection sweep and a content-gap audit disagree about how much a "too hard"
+# verdict should count, and neither answer belongs hardcoded.
+#
+# Stored as one JSON blob rather than a row per field: the fields are only ever
+# read and written together, and a half-applied formula would silently score a
+# run against a mixture of old and new constants.
+# ---------------------------------------------------------------------------
+KEY_OPPORTUNITY = "opportunity_formula"
+
+DEFAULT_OPPORTUNITY_FORMULA: dict[str, float | str | int] = {
+    # Slider default: 0 favours winnability, 1 favours volume.
+    "balance": 0.5,
+    # Neither factor's exponent may reach zero, so a hopeless keyword can never
+    # top the shortlist however the slider is set.
+    "min_weight": 0.2,
+    # Entry-bar DR at which a SERP counts as closed.
+    "bar_dr_ceiling": 60.0,
+    # Floor of the soft-slot modulator: it nudges, it never vetoes.
+    "soft_floor": 0.5,
+    # How raw volume is compressed before comparison: sqrt | linear | log.
+    "volume_curve": "sqrt",
+    # What each AI verdict multiplies winnability by.
+    "ai_low": 1.0,
+    "ai_medium": 0.7,
+    "ai_hard": 0.35,
+    "ai_too_hard": 0.1,
+    # Used when the AI never returned a verdict: neither trusted nor written off.
+    "ai_unknown": 0.5,
+    # How many top-ranked keywords are highlighted as the shortlist.
+    "shortlist": 5,
+}
+
+# (minimum, maximum) per numeric field. Bounds are not cosmetic: min_weight at
+# 0.5 would make both exponents equal regardless of the slider, and a
+# bar_dr_ceiling of 0 divides by zero.
+_OPPORTUNITY_BOUNDS: dict[str, tuple[float, float]] = {
+    "balance": (0.0, 1.0),
+    "min_weight": (0.0, 0.45),
+    "bar_dr_ceiling": (1.0, 100.0),
+    "soft_floor": (0.0, 1.0),
+    "ai_low": (0.0, 1.0),
+    "ai_medium": (0.0, 1.0),
+    "ai_hard": (0.0, 1.0),
+    "ai_too_hard": (0.0, 1.0),
+    "ai_unknown": (0.0, 1.0),
+    "shortlist": (1, 50),
+}
+
+_VOLUME_CURVES = ("sqrt", "linear", "log")
+
+
+def coerce_opportunity_formula(raw: dict | None) -> dict:
+    """Merge a partial formula over the defaults, dropping anything invalid.
+
+    Tolerant on purpose: this parses both user input and JSON that has been
+    sitting in the database since before a field existed. A single unknown or
+    out-of-range value must not cost the caller a working formula, so bad
+    fields fall back to their default instead of raising.
+    """
+    out = dict(DEFAULT_OPPORTUNITY_FORMULA)
+    if not isinstance(raw, dict):
+        return out
+    for key, default in DEFAULT_OPPORTUNITY_FORMULA.items():
+        if key not in raw or raw[key] is None:
+            continue
+        value = raw[key]
+        if key == "volume_curve":
+            if isinstance(value, str) and value in _VOLUME_CURVES:
+                out[key] = value
+            continue
+        lo, hi = _OPPORTUNITY_BOUNDS[key]
+        try:
+            num = float(value)
+        except (TypeError, ValueError):
+            continue
+        if num != num or num < lo or num > hi:  # NaN fails every comparison
+            continue
+        out[key] = int(num) if isinstance(default, int) and not isinstance(default, bool) else num
+    return out
+
+
+def get_opportunity_formula() -> dict:
+    """The global formula: stored overrides merged over the built-in defaults."""
+    db = SessionLocal()
+    try:
+        raw = _get(db, KEY_OPPORTUNITY)
+    finally:
+        db.close()
+    if not raw:
+        return dict(DEFAULT_OPPORTUNITY_FORMULA)
+    try:
+        return coerce_opportunity_formula(json.loads(raw))
+    except (TypeError, ValueError):
+        # A corrupted blob must not break every analysis view.
+        return dict(DEFAULT_OPPORTUNITY_FORMULA)
+
+
+def set_opportunity_formula(values: dict | None) -> dict:
+    """Persist the global formula. None resets it to the built-in defaults."""
+    db = SessionLocal()
+    try:
+        if values is None:
+            _set(db, KEY_OPPORTUNITY, None)
+            return dict(DEFAULT_OPPORTUNITY_FORMULA)
+        merged = coerce_opportunity_formula(values)
+        _set(db, KEY_OPPORTUNITY, json.dumps(merged))
+        return merged
+    finally:
+        db.close()

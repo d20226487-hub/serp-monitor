@@ -1,11 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import (
-    Job, JobRun, Result, RunDomainMetric, RunKeywordAnalysis, RunUrlMetric,
+    DomainWhois, Job, JobRun, KeywordVolume, Result, RunDomainMetric,
+    RunKeywordAnalysis, RunUrlMetric,
+)
+from ..app_settings import (
+    DEFAULT_OPPORTUNITY_FORMULA,
+    coerce_opportunity_formula,
+    get_opportunity_formula,
 )
 from ..providers.ahrefs_batch import canonical_domain_metrics, canonical_metrics
+from ..providers.dataforseo_whois import domain_age_days
+from ..providers.registrable import registrable_domain
 from ..providers.url_normalize import normalize_url
 from ..schemas import JobRunOut, ResultOut
 
@@ -41,9 +50,17 @@ def _host_of(url: str) -> str:
     return host[4:] if host.startswith("www.") else host
 
 
-def _domain_rows(pairs, by_domain: dict, fields: list[str]) -> list[dict]:
-    """Distinct domains behind this keyword's results, with their metrics."""
-    if not fields:
+def _domain_rows(
+    pairs, by_domain: dict, fields: list[str], by_whois: dict | None = None
+) -> list[dict]:
+    """Distinct domains behind this keyword's results, with metrics and age.
+
+    Renders when EITHER Ahrefs domain metrics or WHOIS ages are available —
+    they are separate job switches, and requiring both would make domain age
+    silently do nothing when enabled on its own.
+    """
+    by_whois = by_whois or {}
+    if not fields and not by_whois:
         return []
     out, seen = [], set()
     for _original, canonical in pairs:
@@ -51,10 +68,34 @@ def _domain_rows(pairs, by_domain: dict, fields: list[str]) -> list[dict]:
         if not host or host in seen:
             continue
         seen.add(host)
+        # WHOIS is keyed on the registration, so a subdomain reads its parent's
+        # row. `registrable` travels with it so the UI can say whose date it is
+        # rather than implying the subdomain itself is that old.
+        registrable = registrable_domain(host)
+        w = by_whois.get(registrable or "")
+        # The parent's own Ahrefs figures, when this host is a subdomain and we
+        # measured the parent too. Kept as a separate field rather than merged:
+        # they are a different entity, and flattening them into one row is the
+        # confusion this exists to remove.
+        parent_metrics = (
+            by_domain.get(registrable)
+            if registrable and registrable != host
+            else None
+        )
         out.append({
             "domain": host,
             "metrics": by_domain.get(host) or {},
             "analysed": host in by_domain,
+            "parent_metrics": parent_metrics or None,
+            "registrable": registrable,
+            "is_subdomain": bool(registrable) and registrable != host,
+            "age_days": domain_age_days(w.created_datetime) if w else None,
+            "created": w.created_datetime.isoformat() if w and w.created_datetime else None,
+            "registrar": w.registrar if w else None,
+            # Distinguishes "not looked up" from "looked up, no record": a
+            # domain absent from DataForSEO's database is a fact worth showing,
+            # not an empty cell that reads like a bug.
+            "whois_checked": w is not None,
         })
     return out
 
@@ -88,6 +129,13 @@ def get_analysis(run_id: int, db: Session = Depends(get_db)):
         return {
             "mode": mode, "metrics": [], "domain_metrics": [],
             "rows": [], "ahrefs_units": None,
+            "whois_cost": None, "whois_domains": None, "whois_fetched": None,
+            "whois_enabled": False, "country": None, "countries": [],
+            "sub_national": False,
+            "formula": get_opportunity_formula(),
+            "formula_is_override": False,
+            "formula_global": get_opportunity_formula(),
+            "formula_defaults": dict(DEFAULT_OPPORTUNITY_FORMULA),
         }
 
     # url -> metrics, for this run only.
@@ -102,6 +150,92 @@ def get_analysis(run_id: int, db: Session = Depends(get_db)):
         d.domain: (d.metrics or {})
         for d in db.query(RunDomainMetric).filter(RunDomainMetric.run_id == run_id).all()
     }
+
+    # Registration facts for every domain this run touched. Loaded once per
+    # request rather than per keyword — the same domain shows up across
+    # keywords, and the cache table is global.
+    by_whois: dict[str, DomainWhois] = {}
+    if getattr(job, "whois_enabled", False):
+        hosts = {
+            registrable_domain(d.domain or "")
+            for d in db.query(RunDomainMetric.domain)
+            .filter(RunDomainMetric.run_id == run_id)
+            .all()
+        }
+        # RunDomainMetric only exists when Ahrefs domain metrics were requested,
+        # so fall back to the run's result URLs when age was enabled alone.
+        if not any(hosts):
+            hosts = {
+                registrable_domain(_host_of(normalize_url((u or "").strip())))
+                for (u,) in db.query(Result.url)
+                .filter(Result.run_id == run_id, Result.url.isnot(None))
+                .distinct()
+                .all()
+            }
+        wanted = sorted(h for h in hosts if h)
+        if wanted:
+            by_whois = {
+                w.domain: w
+                for w in db.query(DomainWhois)
+                .filter(DomainWhois.domain.in_(wanted), DomainWhois.found.is_(True))
+                .all()
+            }
+
+    # The run's primary market: the country most of its results came from.
+    # A job can span countries, and the same brand term is worth different
+    # traffic in each, so the score needs one deterministic market to price
+    # against rather than silently mixing them.
+    country_rows = (
+        db.query(Result.country_code, func.count(Result.id))
+        .filter(Result.run_id == run_id, Result.country_code.isnot(None))
+        .group_by(Result.country_code)
+        .order_by(func.count(Result.id).desc())
+        .all()
+    )
+    primary_country = (country_rows[0][0] or "").lower() or None if country_rows else None
+    # Case is inconsistent in the results table ("CA" alongside "us"), so
+    # normalise before this list is compared or displayed anywhere.
+    all_countries = sorted({(cc or "").lower() for cc, _ in country_rows if cc})
+
+    # Whether this run was aimed narrower than a country. Keyword tools report
+    # volume per COUNTRY, so a city-targeted run is measured from Almaty while
+    # its demand figure covers all of Kazakhstan. That is usually the right
+    # denominator — the city is a vantage point, not the market — but it is not
+    # something the table should leave the reader to infer.
+    sub_national = bool(
+        db.query(Result.id)
+        .filter(
+            Result.run_id == run_id,
+            Result.location.isnot(None),
+            Result.location.like("%,%"),
+        )
+        .first()
+    )
+
+    # Volumes: the country-specific figure when there is one, otherwise the
+    # country-agnostic row. Absent stays absent — a keyword with no volume is
+    # unranked rather than scored as zero demand.
+    volumes: dict[str, dict] = {}
+    kw_list = [
+        k for (k,) in db.query(Result.keyword)
+        .filter(Result.run_id == run_id).distinct().all()
+    ]
+    if kw_list:
+        for v in (
+            db.query(KeywordVolume)
+            .filter(
+                KeywordVolume.keyword.in_(kw_list),
+                KeywordVolume.country_code.in_([primary_country, None])
+                if primary_country else KeywordVolume.country_code.is_(None),
+            )
+            .all()
+        ):
+            cur = volumes.get(v.keyword)
+            # A country-specific row always beats the country-agnostic one.
+            if cur is None or (v.country_code is not None and cur["country"] is None):
+                volumes[v.keyword] = {
+                    "volume": v.volume, "country": v.country_code, "source": v.source,
+                }
 
     ai = {
         a.keyword: {
@@ -202,7 +336,10 @@ def get_analysis(run_id: int, db: Session = Depends(get_db)):
             ],
             # One entry per distinct domain in this keyword's SERP (1:many with
             # the URLs, hence its own list rather than columns on each URL row).
-            "domains": _domain_rows(pairs, by_domain, domain_selected),
+            "domains": _domain_rows(pairs, by_domain, domain_selected, by_whois),
+            "volume": (volumes.get(kw) or {}).get("volume"),
+            "volume_country": (volumes.get(kw) or {}).get("country"),
+            "volume_source": (volumes.get(kw) or {}).get("source"),
             "difficulty": (ai.get(kw) or {}).get("difficulty"),
             "comment": (ai.get(kw) or {}).get("comment"),
             "ai_error": (ai.get(kw) or {}).get("error"),
@@ -215,7 +352,59 @@ def get_analysis(run_id: int, db: Session = Depends(get_db)):
         "domain_metrics": domain_selected,
         "rows": rows,
         "ahrefs_units": run.ahrefs_units,
+        "whois_cost": getattr(run, "whois_cost", None),
+        "whois_domains": getattr(run, "whois_domains", None),
+        "whois_fetched": getattr(run, "whois_fetched", None),
+        "whois_enabled": bool(getattr(job, "whois_enabled", False)) if job else False,
+        # Which market the volumes are priced in, so the UI can label the column
+        # and write edits back against the right country.
+        "country": primary_country,
+        # Every country the run touched. More than one means the score is
+        # pricing demand in `country` alone and ignoring the rest.
+        "countries": all_countries,
+        # True when the run targeted a city or region rather than a whole
+        # country, so the UI can say the volume is country-wide.
+        "sub_national": sub_national,
+        # The formula this run is actually scored with, already resolved: the
+        # run's own override if it has one, otherwise the global. The UI never
+        # has to merge these itself, so the numbers on screen and the numbers
+        # the server thinks are in force cannot drift apart.
+        "formula": coerce_opportunity_formula(
+            getattr(run, "opportunity_formula", None) or get_opportunity_formula()
+        ),
+        # Whether that came from an override, so the UI can offer "reset to
+        # global" only when there is something to reset.
+        "formula_is_override": getattr(run, "opportunity_formula", None) is not None,
+        "formula_global": get_opportunity_formula(),
+        "formula_defaults": dict(DEFAULT_OPPORTUNITY_FORMULA),
     }
+
+
+@router.put("/{run_id}/opportunity")
+def set_run_opportunity(run_id: int, payload: dict, db: Session = Depends(get_db)):
+    """Override the opportunity formula for this run only.
+
+    Stored per run rather than per job because the tuning that makes sense is
+    a property of what you are looking at right now — a run whose SERPs are all
+    brand-owned wants a harsher "too hard" factor than one full of doorways.
+    """
+    run = db.get(JobRun, run_id)
+    if not run:
+        raise HTTPException(404)
+    run.opportunity_formula = coerce_opportunity_formula(payload or {})
+    db.commit()
+    return {"formula": run.opportunity_formula, "formula_is_override": True}
+
+
+@router.delete("/{run_id}/opportunity")
+def clear_run_opportunity(run_id: int, db: Session = Depends(get_db)):
+    """Drop this run's override so it follows the global formula again."""
+    run = db.get(JobRun, run_id)
+    if not run:
+        raise HTTPException(404)
+    run.opportunity_formula = None
+    db.commit()
+    return {"formula": get_opportunity_formula(), "formula_is_override": False}
 
 
 @router.delete("/{run_id}")

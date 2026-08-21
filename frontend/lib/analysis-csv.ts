@@ -16,6 +16,14 @@ import { Band, CohortStat, Depth } from "@/lib/serp-strength";
 /** One exported row, already reduced to the numbers the table displays. */
 export type AnalysisCsvRow = {
   keyword: string;
+  volume: number | null;
+  /** Which country the volume is priced in - always a country, never a city:
+   *  keyword tools do not report city-level demand. */
+  volumeCountry: string | null;
+  /** 0-100 opportunity score, or null when no volume was entered. */
+  score: number | null;
+  rank: number | null;
+  winnability: number;
   cohort: AnalysisUrl[];
   stats: Record<string, CohortStat>;
   bands: Record<Band, number>;
@@ -51,6 +59,14 @@ export function buildAnalysisCsv(
 ): string {
   const header = [
     "keyword",
+    // Leads with the decision columns: an export of this table is a shortlist,
+    // so the score and its rank belong where the eye lands, not after twenty
+    // diagnostic fields.
+    "opportunity",
+    "opportunity_rank",
+    "volume",
+    "volume_country",
+    "winnability",
     "depth",
     "cohort_size",
     "ranked_by",
@@ -74,6 +90,11 @@ export function buildAnalysisCsv(
   for (const r of rows) {
     lines.push([
       cell(r.keyword),
+      num(r.score),
+      cell(r.rank ?? ""),
+      cell(r.volume ?? ""),
+      cell(r.volumeCountry ?? ""),
+      num(r.winnability),
       cell(depth === 0 ? "all" : `top${depth}`),
       // Per row, not per depth: a row's cohort is smaller when too few of its
       // pages came back analysed.

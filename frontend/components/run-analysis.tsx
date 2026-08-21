@@ -23,6 +23,18 @@ import {
   buildAnalysisCsv,
   downloadCsv,
 } from "@/lib/analysis-csv";
+import {
+  Balance,
+  OpportunityParts,
+  SHORTLIST,
+  OpportunityFormula,
+  maxVolumeOf,
+  scoreRow,
+  weightsFor,
+} from "@/lib/opportunity";
+import { api } from "@/lib/api";
+import { VolumePastePanel } from "@/components/volume-paste";
+import { FormulaEditor } from "@/components/opportunity-formula";
 
 /**
  * Analyzer-mode view: one row per keyword showing the ENTRY BAR for the depth
@@ -77,6 +89,14 @@ const BAND_BAR: Record<Band, string> = {
 };
 
 const DEPTH_KEY = "analysisDepth";
+const BALANCE_KEY = "analysisBalance";
+
+/** Score colour: a shortlisted keyword should be findable without reading. */
+function scoreTone(rank: number | null, shortlist: number): string {
+  if (rank == null) return "text-neutral-400";
+  if (rank <= shortlist) return "text-emerald-700 dark:text-emerald-300 font-semibold";
+  return "text-neutral-600 dark:text-neutral-300";
+}
 
 function formatMetric(v: number | null | undefined): string {
   if (v == null) return "—";
@@ -192,9 +212,37 @@ function Ladder({
   );
 }
 
-function DomainSubTable({ row, metrics }: { row: AnalysisRow; metrics: string[] }) {
+/** Compact domain age: "12 d", "4 mo", "1.3 y", "26 y".
+ *
+ *  Mirrors the backend's format_age so the figure the AI judge was given and
+ *  the figure on screen read identically. Years carry a decimal only below ten,
+ *  where 1.2 versus 1.9 changes how a domain reads; past that it is noise. */
+function formatAge(days: number | null | undefined): string | null {
+  if (days == null) return null;
+  if (days < 31) return `${days} d`;
+  if (days < 365) return `${Math.floor(days / 30)} mo`;
+  const years = days / 365.25;
+  return years < 10 ? `${years.toFixed(1)} y` : `${years.toFixed(0)} y`;
+}
+
+/** Young domains are the whole point of showing age, so they get the emphasis.
+ *  Thresholds match the "is this a doorway" question rather than anything in
+ *  the WHOIS data: under a year is suspicious, under three is worth a look. */
+function ageTone(days: number | null | undefined): string {
+  if (days == null) return "text-neutral-400";
+  if (days < 365) return "text-red-600 dark:text-red-400 font-medium";
+  if (days < 3 * 365) return "text-amber-700 dark:text-amber-400";
+  return "text-neutral-600 dark:text-neutral-300";
+}
+
+function DomainSubTable({
+  row, metrics, showWhois,
+}: { row: AnalysisRow; metrics: string[]; showWhois: boolean }) {
   const { t } = useT();
-  if (!metrics.length || !row.domains?.length) return null;
+  // Either column set is reason enough to render: domain metrics and domain
+  // age are separate job switches, and requiring both would hide the age
+  // whenever it was enabled on its own.
+  if ((!metrics.length && !showWhois) || !row.domains?.length) return null;
   return (
     <div className="mt-3">
       <div className="text-[11px] text-neutral-500 mb-1">{t.analysis.rawDomainTitle}</div>
@@ -202,6 +250,12 @@ function DomainSubTable({ row, metrics }: { row: AnalysisRow; metrics: string[] 
         <thead>
           <tr className="text-left text-neutral-500">
             <th className="px-2 py-1 font-medium">{t.analysis.colDomain}</th>
+            {showWhois && (
+              <>
+                <th className="px-2 py-1 font-medium text-right">{t.analysis.colAge}</th>
+                <th className="px-2 py-1 font-medium">{t.analysis.colRegistrar}</th>
+              </>
+            )}
             {metrics.map(m => (
               <th key={m} className="px-2 py-1 font-medium text-right">
                 {METRIC_LABELS[m] ?? m}
@@ -210,25 +264,159 @@ function DomainSubTable({ row, metrics }: { row: AnalysisRow; metrics: string[] 
           </tr>
         </thead>
         <tbody>
-          {row.domains.map(d => (
-            <tr key={d.domain} className="border-t dark:border-neutral-800">
-              <td className="px-2 py-1 font-mono break-all">{d.domain}</td>
-              {metrics.map(m => (
-                <td key={m} className="px-2 py-1 text-right font-mono tabular-nums">
-                  {formatMetric(d.metrics[m])}
+          {row.domains.flatMap(d => {
+            const age = formatAge(d.age_days);
+            const created = d.created ? d.created.slice(0, 10) : "";
+            // A subdomain's parent gets its own indented row. The alternative —
+            // one row mixing subdomain metrics with the parent's age — reads as
+            // a single entity and is simply wrong about it.
+            // Shown for ANY subdomain, not only when the parent's metrics were
+            // fetched: the age always belongs to the parent, so the row the
+            // subdomain's "↓" points at has to exist regardless. Metrics render
+            // as "—" when the parent was not measured (runs made before the
+            // domain pass started including parents).
+            const parentRow = d.is_subdomain && d.registrable ? (
+              <tr key={`${d.domain}-parent`} className="border-t dark:border-neutral-800 text-neutral-500">
+                <td className="px-2 py-1 font-mono break-all pl-5">
+                  <span className="text-neutral-400">└ </span>{d.registrable}
                 </td>
-              ))}
-            </tr>
-          ))}
+                {showWhois && (
+                  <>
+                    <td className={`px-2 py-1 text-right font-mono tabular-nums whitespace-nowrap ${ageTone(d.age_days)}`}>
+                      {age ?? "—"}
+                    </td>
+                    <td className="px-2 py-1 break-all">{d.registrar || "—"}</td>
+                  </>
+                )}
+                {metrics.map(m => (
+                  <td key={m} className="px-2 py-1 text-right font-mono tabular-nums">
+                    {formatMetric(d.parent_metrics?.[m])}
+                  </td>
+                ))}
+              </tr>
+            ) : null;
+            return [(
+              <tr key={d.domain} className="border-t dark:border-neutral-800">
+                <td className="px-2 py-1 font-mono break-all">
+                  {d.domain}
+                  {/* A subdomain has no registration of its own, so say whose
+                      date is on the row rather than implying it is the host's. */}
+                  {showWhois && d.is_subdomain && d.registrable && (
+                    <span className="ml-1 text-neutral-400">→ {d.registrable}</span>
+                  )}
+                </td>
+                {showWhois && (
+                  <>
+                    <td
+                      className={`px-2 py-1 text-right font-mono tabular-nums whitespace-nowrap ${
+                        d.is_subdomain ? "text-neutral-400" : ageTone(d.age_days)
+                      }`}
+                      title={
+                        age
+                          ? (d.is_subdomain
+                              ? t.analysis.ageSubdomainHint(created, d.registrable ?? "")
+                              : t.analysis.ageHint(created, d.registrable ?? d.domain))
+                          : t.analysis.ageUnknownHint
+                      }
+                    >
+                      {/* A subdomain has no registration of its own, so the age
+                          sits on the parent row below rather than being shown
+                          here as though it were this host's. */}
+                      {d.is_subdomain ? "↓" : (age ?? "—")}
+                    </td>
+                    {/* Registrar belongs to the registration, same as the age
+                        — so on a subdomain row it sits on the parent below,
+                        not here where it would read as this host's own. */}
+                    <td className="px-2 py-1 text-neutral-500 break-all">
+                      {d.is_subdomain ? "" : (d.registrar || "—")}
+                    </td>
+                  </>
+                )}
+                {metrics.map(m => (
+                  <td key={m} className="px-2 py-1 text-right font-mono tabular-nums">
+                    {formatMetric(d.metrics[m])}
+                  </td>
+                ))}
+              </tr>
+            ), parentRow].filter(Boolean);
+          })}
         </tbody>
       </table>
     </div>
   );
 }
 
+/**
+ * Inline volume entry. Commits on blur or Enter, reverts on Escape.
+ *
+ * Editable in place because the numbers arrive by hand, ten at a time, off a
+ * Keyword Planner tab — a separate settings screen would mean copying keywords
+ * back and forth to match them up.
+ */
+function VolumeCell({
+  keyword, volume, country, subNational, onSave,
+}: {
+  keyword: string;
+  volume: number | null;
+  country: string | null;
+  subNational: boolean;
+  onSave: (keyword: string, volume: number) => void;
+}) {
+  const { t } = useT();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  function commit() {
+    setEditing(false);
+    const n = Number(draft.replace(/[\s,]/g, ""));
+    // A blank box means "leave it alone", not "set it to zero" — clearing a
+    // volume is a delete, not an edit, and would change the ranking silently.
+    if (!draft.trim() || !Number.isFinite(n) || n < 0) return;
+    if (n !== volume) onSave(keyword, Math.round(n));
+  }
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        inputMode="numeric"
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => {
+          if (e.key === "Enter") commit();
+          if (e.key === "Escape") setEditing(false);
+        }}
+        className="w-20 px-1 py-0.5 text-right font-mono text-sm rounded border bg-white dark:bg-neutral-900 dark:border-neutral-700"
+      />
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => { setDraft(volume == null ? "" : String(volume)); setEditing(true); }}
+      title={
+        volume == null
+          ? t.analysis.volumeEmpty
+          : subNational
+            ? t.analysis.volumeCityHint((country ?? "").toUpperCase() || t.analysis.volumeAnyCountry)
+            : t.analysis.volumeHint(country ?? t.analysis.volumeAnyCountry)
+      }
+      className={`font-mono tabular-nums hover:underline ${
+        volume == null ? "text-neutral-400" : ""
+      }`}
+    >
+      {volume == null ? t.analysis.volumeAdd : volume.toLocaleString()}
+    </button>
+  );
+}
+
 /** One keyword reduced to the numbers the table shows at the current depth. */
 type KeywordView = {
   row: AnalysisRow;
+  opp: OpportunityParts;
+  /** Position in the opportunity ranking, or null when volume is unknown. */
+  rank: number | null;
   /** The weakest pages by DR inside the depth — every metric cell averages
    *  THESE pages, so the whole row describes one pair of competitors. */
   cohort: AnalysisUrl[];
@@ -245,6 +433,19 @@ export function RunAnalysisTable({
   const [sortKey, setSortKey] = useState<SortKey>("keyword");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [depth, setDepth] = useState<Depth>(5);
+  // 0 = quick wins, 0.5 = equal, 1 = biggest prizes.
+  const [balance, setBalance] = useState<Balance>(0.5);
+  // Volume edits applied optimistically. The server is the store, but a table
+  // that waits for a round trip before showing the number you just typed feels
+  // broken when you are entering ten of them.
+  const [volumeEdits, setVolumeEdits] = useState<Record<string, number>>({});
+  const [pasting, setPasting] = useState(false);
+  const [editingFormula, setEditingFormula] = useState(false);
+  // Local draft of the effective formula. Seeded from the server, which has
+  // already resolved override-or-global, so there is nothing to merge here.
+  const [formula, setFormula] = useState<OpportunityFormula>(analysis.formula);
+  const [isOverride, setIsOverride] = useState(analysis.formula_is_override);
+  const [savingFormula, setSavingFormula] = useState(false);
 
   // Depth is a working preference, not run state — read it back after mount so
   // the server-rendered markup stays deterministic.
@@ -254,17 +455,114 @@ export function RunAnalysisTable({
       // depth here (0 = whole SERP), so a bare Number() would quietly override
       // the top-5 default for every first-time visitor.
       const saved = localStorage.getItem(DEPTH_KEY);
-      if (saved === null) return;
-      const n = Number(saved);
-      if ((DEPTHS as readonly number[]).includes(n)) setDepth(n as Depth);
+      if (saved !== null) {
+        const n = Number(saved);
+        if ((DEPTHS as readonly number[]).includes(n)) setDepth(n as Depth);
+      }
+      const b = localStorage.getItem(BALANCE_KEY);
+      if (b !== null) {
+        const n = Number(b);
+        if (Number.isFinite(n) && n >= 0 && n <= 1) setBalance(n);
+      }
     } catch {}
   }, []);
+
+  function pickBalance(b: Balance) {
+    setBalance(b);
+    try {
+      localStorage.setItem(BALANCE_KEY, String(b));
+    } catch {}
+  }
+
+  /** Write one keyword's volume to the global store, keyed on this run's
+   *  market so the figure is reused by every future run in that country. */
+  async function saveVolume(keyword: string, volume: number) {
+    setVolumeEdits(prev => ({ ...prev, [keyword]: volume }));
+    try {
+      await api.saveKeywordVolumes([
+        { keyword, country_code: analysis.country, volume },
+      ]);
+    } catch {
+      // Roll back rather than leave a number on screen that was never stored.
+      setVolumeEdits(prev => {
+        const next = { ...prev };
+        delete next[keyword];
+        return next;
+      });
+    }
+  }
 
   function pickDepth(d: Depth) {
     setDepth(d);
     try {
       localStorage.setItem(DEPTH_KEY, String(d));
     } catch {}
+  }
+
+  // Cost of the domain-age phase, expressed per domain. Divided by domains
+  // FETCHED rather than by every domain in the run: the cached ones cost
+  // nothing, and folding them in would understate what a fresh lookup actually
+  // costs — the number you need when sizing a new job.
+  const { whoisSummary, whoisHint } = useMemo(() => {
+    const cost = analysis.whois_cost ?? 0;
+    const domains = analysis.whois_domains ?? 0;
+    const fetched = analysis.whois_fetched ?? 0;
+    if (cost <= 0 || fetched <= 0) {
+      return {
+        whoisSummary: t.analysis.whoisCached,
+        whoisHint: t.analysis.whoisCachedHint(domains),
+      };
+    }
+    const usd = `$${cost.toFixed(4)}`;
+    // Four decimals hides the per-domain figure once a batch gets large
+    // ($0.0013 at 1000 domains rounds to $0.0013, but $0.00132 does not).
+    const per = cost / fetched;
+    const perDomain = `$${per < 0.001 ? per.toFixed(5) : per.toFixed(4)}`;
+    return {
+      whoisSummary: t.analysis.whoisSpend(usd, perDomain),
+      whoisHint: t.analysis.whoisSpendHint(fetched, domains - fetched, usd, perDomain),
+    };
+  }, [analysis.whois_cost, analysis.whois_domains, analysis.whois_fetched, t]);
+
+  const market = (analysis.country ?? "").toUpperCase();
+  // A run spanning several countries is priced in one of them. Say so rather
+  // than let a KZ+UZ run read as if its scores covered both.
+  const otherMarkets = (analysis.countries ?? [])
+    .filter(c => c !== analysis.country)
+    .map(c => c.toUpperCase());
+
+  async function saveRunFormula() {
+    setSavingFormula(true);
+    try {
+      const r = await api.setRunFormula(runId, formula);
+      setFormula(r.formula);
+      setIsOverride(true);
+    } finally {
+      setSavingFormula(false);
+    }
+  }
+
+  async function clearRunFormula() {
+    setSavingFormula(true);
+    try {
+      const r = await api.clearRunFormula(runId);
+      setFormula(r.formula);
+      setIsOverride(false);
+    } finally {
+      setSavingFormula(false);
+    }
+  }
+
+  /** Save a pasted batch in one request, then reflect it immediately. */
+  async function applyVolumes(rows: { keyword: string; volume: number }[]) {
+    if (!rows.length) return;
+    await api.saveKeywordVolumes(
+      rows.map(r => ({ ...r, country_code: analysis.country })),
+    );
+    setVolumeEdits(prev => ({
+      ...prev,
+      ...Object.fromEntries(rows.map(r => [r.keyword, r.volume])),
+    }));
   }
 
   const driver = useMemo(() => ladderDriver(analysis.metrics), [analysis.metrics]);
@@ -275,24 +573,36 @@ export function RunAnalysisTable({
     [analysis.rows, driver],
   );
 
-  const views: KeywordView[] = useMemo(
-    () =>
-      analysis.rows.map(row => {
-        const inDepth = withinDepth(row.urls, depth);
-        const cohort = weakestCohort(inDepth, ranker, cohortSizeFor(depth));
-        const stats: Record<string, CohortStat> = {};
-        for (const m of analysis.metrics) stats[m] = cohortAverage(cohort, m);
-        return {
-          row,
-          cohort,
-          stats,
-          bands: bandCounts(inDepth, driver),
-          analysed: inDepth.filter(u => u.analysed).length,
-          total: inDepth.length,
-        };
-      }),
-    [analysis.rows, analysis.metrics, depth, driver, ranker],
-  );
+  const views: KeywordView[] = useMemo(() => {
+    // Volume edits shadow the server payload until the next refetch.
+    const rows = analysis.rows.map(r =>
+      r.keyword in volumeEdits ? { ...r, volume: volumeEdits[r.keyword] } : r
+    );
+    const maxVolume = maxVolumeOf(rows);
+    const built = rows.map(row => {
+      const inDepth = withinDepth(row.urls, depth);
+      const cohort = weakestCohort(inDepth, ranker, cohortSizeFor(depth));
+      const stats: Record<string, CohortStat> = {};
+      for (const m of analysis.metrics) stats[m] = cohortAverage(cohort, m);
+      return {
+        row,
+        cohort,
+        stats,
+        bands: bandCounts(inDepth, driver),
+        analysed: inDepth.filter(u => u.analysed).length,
+        total: inDepth.length,
+        opp: scoreRow(row, depth, analysis.metrics, maxVolume, balance, formula),
+        rank: null as number | null,
+      };
+    });
+    // Rank once, here, so every row agrees on the shortlist regardless of the
+    // column the table happens to be sorted by.
+    const ordered = built
+      .filter(v => v.opp.score != null)
+      .sort((a, b) => (b.opp.score as number) - (a.opp.score as number));
+    ordered.forEach((v, i) => { v.rank = i + 1; });
+    return built;
+  }, [analysis.rows, analysis.metrics, depth, driver, ranker, balance, volumeEdits, formula]);
 
   const sorted = useMemo(() => {
     const arr = [...views];
@@ -304,6 +614,15 @@ export function RunAnalysisTable({
         cmp = a.analysed - b.analysed;
       } else if (sortKey === "soft") {
         cmp = a.bands.soft - b.bands.soft;
+      } else if (sortKey === "volume" || sortKey === "opportunity") {
+        const av = sortKey === "volume" ? a.row.volume : a.opp.score;
+        const bv = sortKey === "volume" ? b.row.volume : b.opp.score;
+        // Unknown sorts last in both directions: no volume entered is not the
+        // same as a low score, and burying it under "worst" would misread it.
+        if (av == null && bv == null) cmp = 0;
+        else if (av == null) return 1;
+        else if (bv == null) return -1;
+        else cmp = av - bv;
       } else {
         // Nulls always sort last regardless of direction — an unmeasured
         // keyword isn't "the weakest", it's unknown.
@@ -324,6 +643,11 @@ export function RunAnalysisTable({
     const csv = buildAnalysisCsv(
       sorted.map(v => ({
         keyword: v.row.keyword,
+        volume: v.row.volume,
+        volumeCountry: v.row.volume_country,
+        score: v.opp.score,
+        rank: v.rank,
+        winnability: v.opp.winnability,
         cohort: v.cohort,
         stats: v.stats,
         bands: v.bands,
@@ -346,7 +670,8 @@ export function RunAnalysisTable({
       // The entry bar reads most usefully lowest-first — the easiest way in.
       // Soft slots are the opposite: the keywords worth attacking are the ones
       // with the MOST displaceable positions, so lead with those.
-      setSortDir(key === "soft" ? "desc" : "asc");
+      // Volume and opportunity read best biggest-first, like soft slots.
+      setSortDir(["soft", "volume", "opportunity"].includes(key) ? "desc" : "asc");
     }
   }
 
@@ -374,12 +699,49 @@ export function RunAnalysisTable({
         <div className="ml-auto flex items-center gap-2">
           <button
             type="button"
+            onClick={() => setEditingFormula(e => !e)}
+            aria-pressed={editingFormula}
+            title={isOverride ? t.formula.runOverridden : t.formula.runInherited}
+            className={`px-2 py-0.5 text-xs rounded-md border dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 ${
+              isOverride ? "border-amber-500 dark:border-amber-500" : ""
+            }`}
+          >
+            {t.formula.edit}{isOverride ? " *" : ""}
+          </button>
+          <button
+            type="button"
+            onClick={() => setPasting(p => !p)}
+            aria-pressed={pasting}
+            className="px-2 py-0.5 text-xs rounded-md border dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+          >
+            {t.analysis.pasteVolumes}
+          </button>
+          <button
+            type="button"
             onClick={exportCsv}
             title={t.analysis.exportHint}
             className="px-2 py-0.5 text-xs rounded-md border dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800"
           >
             {t.analysis.exportCsv}
           </button>
+          {/* Quick wins vs biggest prizes. The right answer genuinely differs
+              by campaign, so it is a control rather than a constant. */}
+          <label className="flex items-center gap-1.5 text-xs text-neutral-500">
+            <span>{t.analysis.balanceQuick}</span>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.1}
+              value={balance}
+              onChange={e => pickBalance(Number(e.target.value))}
+              title={t.analysis.balanceHint(
+                Math.round(weightsFor(balance, formula.min_weight).wv / 2 * 100),
+              )}
+              className="w-24 accent-neutral-900 dark:accent-neutral-100"
+            />
+            <span>{t.analysis.balanceVolume}</span>
+          </label>
           <span className="text-xs text-neutral-500">{t.analysis.depthLabel}</span>
           <div className="inline-flex rounded-md border dark:border-neutral-700 overflow-hidden">
             {DEPTHS.map(d => (
@@ -403,8 +765,76 @@ export function RunAnalysisTable({
               {t.analysis.units(analysis.ahrefs_units)}
             </span>
           )}
+          {/* The dollar figure alone says nothing without a denominator: the
+              charge is mostly a fixed per-REQUEST fee, so the same $0.12 is
+              $0.06 a domain over two and $0.0018 over two hundred. A cached run
+              genuinely spent nothing, which is what makes this affordable on a
+              schedule. */}
+          {analysis.whois_enabled && analysis.whois_cost != null && (
+            <span className="text-xs text-neutral-500" title={whoisHint}>
+              {whoisSummary}
+            </span>
+          )}
         </div>
       </div>
+      {editingFormula && (
+        <div className="px-4 py-3 border-b dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/50 space-y-3">
+          <div className="flex items-baseline gap-2">
+            <span className="font-medium text-sm">{t.formula.runTitle}</span>
+            <span className={`text-xs ${isOverride ? "text-amber-700 dark:text-amber-300" : "text-neutral-500"}`}>
+              {isOverride ? t.formula.runOverridden : t.formula.runInherited}
+            </span>
+            <button
+              type="button"
+              onClick={() => setEditingFormula(false)}
+              className="ml-auto text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100"
+            >
+              {t.common.cancel}
+            </button>
+          </div>
+          {/* Edits re-score the table live, before anything is saved — the
+              only way to judge a weighting is to watch the ranking move. */}
+          <FormulaEditor
+            value={formula}
+            defaults={analysis.formula_global}
+            onChange={setFormula}
+            disabled={savingFormula}
+          />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={saveRunFormula}
+              disabled={savingFormula}
+              className="px-3 py-1 text-xs rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 disabled:opacity-50"
+            >
+              {t.formula.runSaveOverride}
+            </button>
+            {isOverride && (
+              <button
+                type="button"
+                onClick={clearRunFormula}
+                disabled={savingFormula}
+                className="px-3 py-1 text-xs rounded-md border dark:border-neutral-700 disabled:opacity-50"
+              >
+                {t.formula.runClearOverride}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      {pasting && (
+        <VolumePastePanel
+          runKeywords={analysis.rows.map(r => r.keyword)}
+          market={market}
+          onApply={applyVolumes}
+          onClose={() => setPasting(false)}
+        />
+      )}
+      {otherMarkets.length > 0 && (
+        <div className="px-4 py-2 border-b dark:border-neutral-800 text-[11px] text-amber-700 dark:text-amber-300">
+          {t.analysis.volumeMultiCountry(market, otherMarkets.join(", "))}
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-white dark:bg-neutral-900">
@@ -425,11 +855,25 @@ export function RunAnalysisTable({
               <th className={`${th} text-right`} onClick={() => toggle("soft")}>
                 {t.analysis.colSoft}{arrow("soft")}
               </th>
+              <th
+                className={`${th} text-right`}
+                onClick={() => toggle("volume")}
+                title={
+                  analysis.sub_national
+                    ? t.analysis.volumeCityHint(market)
+                    : t.analysis.volumeGeoNote(market)
+                }
+              >
+                {t.analysis.colVolume(market)}{arrow("volume")}
+              </th>
               <th className={`${th} text-right`} onClick={() => toggle("coverage")}>
                 {t.analysis.colCoverage}{arrow("coverage")}
               </th>
               <th className="px-3 py-2 font-medium text-neutral-500 text-right">
                 {t.analysis.colDifficulty}
+              </th>
+              <th className={`${th} text-right`} onClick={() => toggle("opportunity")}>
+                {t.analysis.colOpportunity}{arrow("opportunity")}
               </th>
               <th className="px-3 py-2 font-medium text-neutral-500">
                 {t.analysis.colComment}
@@ -447,6 +891,10 @@ export function RunAnalysisTable({
                 driver={driver}
                 ceiling={ceiling}
                 rankerLabel={rankerLabel}
+                showWhois={analysis.whois_enabled}
+                subNational={analysis.sub_national}
+                shortlist={formula.shortlist}
+                onSaveVolume={saveVolume}
               />
             ))}
           </tbody>
@@ -469,7 +917,8 @@ export function RunAnalysisTable({
 }
 
 function AnalysisTableRow({
-  view, metrics, domainMetrics, depth, driver, ceiling, rankerLabel,
+  view, metrics, domainMetrics, depth, driver, ceiling, rankerLabel, showWhois,
+  subNational, shortlist, onSaveVolume,
 }: {
   view: KeywordView;
   metrics: string[];
@@ -478,10 +927,14 @@ function AnalysisTableRow({
   driver: string | null;
   ceiling: number;
   rankerLabel: string;
+  showWhois: boolean;
+  subNational: boolean;
+  shortlist: number;
+  onSaveVolume: (keyword: string, volume: number) => void;
 }) {
   const { t } = useT();
   const [open, setOpen] = useState(false);
-  const { row, cohort, stats, bands, analysed, total } = view;
+  const { row, cohort, stats, bands, analysed, total, opp, rank } = view;
   const partial = analysed < total;
   const cohortPositions = positionsLabel(cohort.map(u => u.position).sort((a, b) => a - b));
   // Only the bands actually present, so the tooltip stays short on a SERP that
@@ -490,8 +943,9 @@ function AnalysisTableRow({
     .filter(b => bands[b] > 0)
     .map(b => t.analysis.bandCount(b, bands[b]))
     .join(", ");
-  // +6 = keyword, shape, soft, coverage, difficulty, comment around the metrics.
-  const span = metrics.length + 6;
+  // +8 = keyword, shape, soft, volume, coverage, difficulty, opportunity,
+  // comment around the metric columns.
+  const span = metrics.length + 8;
   return (
     <>
       <tr className="border-b dark:border-neutral-800">
@@ -575,6 +1029,15 @@ function AnalysisTableRow({
             <span className="text-neutral-400">0</span>
           )}
         </td>
+        <td className="px-3 py-2 text-right align-top">
+          <VolumeCell
+            keyword={row.keyword}
+            volume={row.volume}
+            country={row.volume_country}
+            subNational={subNational}
+            onSave={onSaveVolume}
+          />
+        </td>
         <td
           className={`px-3 py-2 text-right font-mono tabular-nums align-top ${
             partial ? "text-amber-700 dark:text-amber-300" : "text-neutral-500"
@@ -604,6 +1067,37 @@ function AnalysisTableRow({
             </span>
           ) : (
             <span className="text-xs text-neutral-400">{t.analysis.difficultyPending}</span>
+          )}
+        </td>
+        <td
+          className="px-3 py-2 text-right align-top whitespace-nowrap"
+          title={
+            opp.score == null
+              ? t.analysis.oppNoVolume
+              : t.analysis.oppHint(
+                  Math.round((opp.volume ?? 0) * 100),
+                  Math.round(opp.winnability * 100),
+                  Math.round(opp.bar * 100),
+                  Math.round(opp.soft * 100),
+                  opp.ai,
+                )
+          }
+        >
+          {opp.score == null ? (
+            <span className="text-xs text-neutral-400">{t.analysis.oppNeedsVolume}</span>
+          ) : (
+            <>
+              <span className={`font-mono tabular-nums ${scoreTone(rank, shortlist)}`}>
+                {opp.score.toFixed(1)}
+              </span>
+              {/* The shortlist is the deliverable: mark it, don't make them
+                  count rows. */}
+              {rank != null && rank <= shortlist && (
+                <span className="ml-1.5 text-[10px] text-emerald-700 dark:text-emerald-300">
+                  #{rank}
+                </span>
+              )}
+            </>
           )}
         </td>
         <td className="px-3 py-2 text-neutral-600 dark:text-neutral-300 min-w-[16rem] align-top">
@@ -703,7 +1197,7 @@ function AnalysisTableRow({
                 </tbody>
               </table>
             </div>
-            <DomainSubTable row={row} metrics={domainMetrics} />
+            <DomainSubTable row={row} metrics={domainMetrics} showWhois={showWhois} />
           </td>
         </tr>
       )}

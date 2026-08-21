@@ -55,7 +55,14 @@ export function JobForm({ initial, onSaved }: Props) {
   const [ahrefsDomainMetrics, setAhrefsDomainMetrics] = useState<string[]>(
     initial?.ahrefs_domain_metrics ?? []
   );
+  const [whoisEnabled, setWhoisEnabled] = useState<boolean>(
+    initial?.whois_enabled ?? false
+  );
   const [ahrefs, setAhrefs] = useState<AhrefsSettings | null>(null);
+  // Domain age bills DataForSEO, which a job may never otherwise touch — a
+  // SerpAPI job can have the toggle on and no credentials to run it with, so
+  // the form warns before the run fails.
+  const [dataforseoReady, setDataforseoReady] = useState(true);
 
   const [langOpts, setLangOpts] = useState<Option<string>[]>([]);
   const [gdOpts, setGdOpts] = useState<Option<string>[]>([]);
@@ -76,6 +83,13 @@ export function JobForm({ initial, onSaved }: Props) {
       setGdOpts(rows.map(r => ({ value: r.domain, label: r.domain, sub: r.country }))));
     api.getSchedulerStatus().then(s => setSchedTz(s.timezone)).catch(() => {});
     api.getRates().then(setRates).catch(() => {});
+    api.getProviderStatus("dataforseo")
+      .then(p => setDataforseoReady(
+        !!p.fields?.login?.configured && !!p.fields?.password?.configured
+      ))
+      // Assume configured if the check itself fails — a warning we cannot
+      // substantiate is worse than no warning.
+      .catch(() => setDataforseoReady(true));
     api.getAhrefs().then(a => {
       setAhrefs(a);
       // Seed the metric picker with Ahrefs' defaults on a NEW job only —
@@ -161,6 +175,7 @@ export function JobForm({ initial, onSaved }: Props) {
     mode,
     ahrefs_metrics: mode === "analyzer" ? ahrefsMetrics : [],
     ahrefs_domain_metrics: mode === "analyzer" ? ahrefsDomainMetrics : [],
+    whois_enabled: mode === "analyzer" ? whoisEnabled : false,
   });
 
   async function save(runAfter = false) {
@@ -326,6 +341,36 @@ export function JobForm({ initial, onSaved }: Props) {
             </div>
             {ahrefsDomainMetrics.length === 0 && (
               <div className="text-xs text-neutral-500 mt-1.5">{t.jobForm.ahrefsDomainOff}</div>
+            )}
+          </div>
+
+          {/* Domain age. Its own switch rather than part of the Ahrefs block
+              because it bills a different provider on a different basis: real
+              dollars per DataForSEO request, not Ahrefs units. */}
+          <div className="pt-2 border-t dark:border-neutral-800">
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={whoisEnabled}
+                onChange={e => setWhoisEnabled(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>
+                <span className="font-medium text-sm">{t.jobForm.whois}</span>
+                <span className="block text-xs text-neutral-500">
+                  {t.jobForm.whoisHelp}
+                </span>
+              </span>
+            </label>
+            {whoisEnabled && (
+              <div className="text-xs text-neutral-500 mt-1.5 pl-6">
+                {t.jobForm.whoisCost}
+                {!dataforseoReady && (
+                  <span className="block text-amber-700 dark:text-amber-300 mt-1">
+                    {t.jobForm.whoisNoCreds}
+                  </span>
+                )}
+              </div>
             )}
           </div>
 
