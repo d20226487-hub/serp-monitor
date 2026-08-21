@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { AnalysisDomain, AnalysisRow, JobRun, RunAnalysis } from "@/lib/api";
+import { AnalysisDomain, AnalysisRow, AnalysisUrl, JobRun, RunAnalysis } from "@/lib/api";
 import { Lang, messagesFor } from "@/lib/i18n";
 import {
   Depth,
@@ -26,6 +26,31 @@ import { downloadReportPdf } from "@/lib/report-pdf";
  * Its language is chosen here rather than inherited from the app toggle: the
  * report is produced for a Russian-speaking reader whoever generated it.
  */
+
+/**
+ * The entry bar expressed in referring domains, read off the DOMAIN-level
+ * metrics rather than the page-level ones.
+ *
+ * A doorway ranks on a page with no links of its own, so its page figure is 0
+ * and tells the reader nothing about what it would take to displace it. The
+ * referring domains behind the SITE are the number that has to be matched, and
+ * they are the number a client recognises — "we need links from ~30 domains"
+ * is a brief, "DR 25" is a rating they have to take on trust.
+ *
+ * Averaged over the same weakest-domains cohort the DR bar uses, so both bars
+ * describe the same competitors. weakestCohort keeps one page per domain, so
+ * no site can weight the average twice.
+ */
+function cohortRefdomains(row: AnalysisRow, cohort: AnalysisUrl[]): number | null {
+  const byDomain = new Map(row.domains.map(d => [d.domain, d]));
+  const found = cohort
+    .map(u => byDomain.get(u.domain)?.metrics.refdomains_dofollow)
+    .filter((v): v is number => v != null);
+  // Domain metrics are a separate job switch from page metrics, so a run can
+  // legitimately have none. Blank beats a fabricated zero.
+  if (!found.length) return null;
+  return found.reduce((a, b) => a + b, 0) / found.length;
+}
 
 const HIDE_KEY = (runId: number) => `report:${runId}:hiddenDomains`;
 const KW_KEY = (runId: number) => `report:${runId}:keywords`;
@@ -100,6 +125,9 @@ export function RunReport({
     return analysis.rows
       .map(row => {
         const inDepth = withinDepth(row.urls, depth);
+        const cohort = weakestCohort(
+          inDepth, weaknessRanker(analysis.metrics), cohortSizeFor(inDepth.length),
+        );
         return {
           row,
           inDepth,
@@ -108,12 +136,8 @@ export function RunReport({
           // factor is configured off, and would report every SERP as having no
           // soft slots at all.
           bands: bandCounts(inDepth, ladderDriver(analysis.metrics), formula),
-          cohortDr: cohortAverage(
-            weakestCohort(
-              inDepth, weaknessRanker(analysis.metrics), cohortSizeFor(inDepth.length),
-            ),
-            "domain_rating",
-          ).value,
+          cohortDr: cohortAverage(cohort, "domain_rating").value,
+          cohortRd: cohortRefdomains(row, cohort),
           opp: scoreRow(row, depth, analysis.metrics, maxVolume, formula.balance, formula),
         };
       })
@@ -193,6 +217,15 @@ export function RunReport({
   ) : "";
   const market = (analysis.country ?? "").toUpperCase();
 
+  // The three columns the reader has not met before. Built once so the printed
+  // page and the PDF cannot end up explaining them differently.
+  const legend: [string, string][] = [
+    [t.report.colDifficulty, t.report.legendDifficulty],
+    [t.report.colBar, t.report.legendBar(depth)],
+    [t.report.colBarRd, t.report.legendBarRd],
+    [t.report.colScore, t.report.legendScore],
+  ];
+
   async function download() {
     setBusy(true);
     try {
@@ -202,6 +235,7 @@ export function RunReport({
           opp: v.opp,
           bands: v.bands,
           cohortDr: v.cohortDr,
+          cohortRd: v.cohortRd,
           slots: v.inDepth.length,
           domains: visibleDomains(v.row),
         })),
@@ -219,9 +253,10 @@ export function RunReport({
           shortlistLead: t.report.shortlistLead(selected.length),
           shortlistHead: [
             t.report.colRank, t.report.colKeyword, t.report.colVolume,
-            t.report.colDifficulty, t.report.colBar, t.report.colSoft,
-            t.report.colScore,
+            t.report.colDifficulty, t.report.colBar, t.report.colBarRd,
+            t.report.colSoft, t.report.colScore,
           ],
+          legend,
           detailTitle: t.report.detailTitle,
           competitors: t.report.competitors,
           aiComment: t.report.aiComment,
@@ -353,6 +388,7 @@ export function RunReport({
                 <th className="py-1.5 pr-2 font-medium text-right">{t.report.colVolume}</th>
                 <th className="py-1.5 pr-2 font-medium">{t.report.colDifficulty}</th>
                 <th className="py-1.5 pr-2 font-medium text-right">{t.report.colBar}</th>
+                <th className="py-1.5 pr-2 font-medium text-right">{t.report.colBarRd}</th>
                 <th className="py-1.5 pr-2 font-medium text-right">{t.report.colSoft}</th>
                 <th className="py-1.5 font-medium text-right">{t.report.colScore}</th>
               </tr>
@@ -371,6 +407,12 @@ export function RunReport({
                   <td className="py-1.5 pr-2 text-right tabular-nums">
                     {v.cohortDr == null ? "—" : `DR ${v.cohortDr.toFixed(0)}`}
                   </td>
+                  {/* Whole domains: an average of two or three competitors can
+                      land on a fraction, and half a referring domain is not a
+                      thing anyone can go and build. */}
+                  <td className="py-1.5 pr-2 text-right tabular-nums">
+                    {v.cohortRd == null ? "—" : num(Math.round(v.cohortRd))}
+                  </td>
                   <td className="py-1.5 pr-2 text-right tabular-nums">
                     {v.bands.soft}/{v.inDepth.length}
                   </td>
@@ -381,6 +423,16 @@ export function RunReport({
               ))}
             </tbody>
           </table>
+          {/* Sits under the table rather than above it: someone who already
+              knows the columns should reach the keywords first. */}
+          <dl className="text-xs text-neutral-600 dark:text-neutral-400 space-y-0.5 pt-1">
+            {legend.map(([term, text]) => (
+              <div key={term} className="flex gap-1.5">
+                <dt className="font-medium whitespace-nowrap">{term} —</dt>
+                <dd>{text}</dd>
+              </div>
+            ))}
+          </dl>
         </section>
 
         <section className="space-y-4">

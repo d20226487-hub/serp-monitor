@@ -47,6 +47,7 @@ const messagesEn = {
     download: "Download",
     filter: "Filter…",
     yourTime: "your time",
+    close: "Close",
   },
   nav: {
     jobs: "Jobs",
@@ -128,8 +129,22 @@ const messagesEn = {
     colVolume: "Volume",
     colDifficulty: "SERP difficulty",
     colBar: "Entry bar",
+    colBarRd: "Entry bar (ref. domains)",
     colSoft: "Soft slots",
     colScore: "Potential",
+    // Three of the seven columns are our own constructs rather than figures the
+    // reader has met before, and the report is read without us in the room.
+    legendDifficulty:
+      "the AI verdict on the SERP as a whole — who holds the top slots and how strong those pages are.",
+    legendBar: (depth: number) =>
+      (depth === 0
+        ? "the average DR of the weakest domains in the SERP"
+        : `the average DR of the weakest domains in the top ${depth}`) +
+      " — the level you need to reach to compete for a slot.",
+    legendBarRd:
+      "the same bar in referring domains, read off the sites rather than the pages — roughly how many linking domains it takes to compete.",
+    legendScore:
+      "0-100. Demand weighted against how winnable the SERP looks, so the top of this list is where to start.",
     detailTitle: "Keyword detail",
     competitors: "Who you would have to displace",
     noDomains: "No domains selected for this keyword.",
@@ -285,6 +300,50 @@ const messagesEn = {
       `Ahrefs returned metrics for ${analysed} of the ${total} pages in this depth`,
     exportCsv: "Export table",
     exportHint: "Download these rows as CSV, at the depth shown",
+    exportNoColumns: "Pick at least one column to export",
+    csvColumns: "Columns",
+    csvColumnsTitle: "Columns to export",
+    csvColumnsHint:
+      "Ticked columns go into the CSV. The header row at the bottom shows the exact order they are written in. The choice is remembered across runs; a metric a later run adds is exported unless you untick it.",
+    csvSelectAll: "All",
+    csvSelectDefault: "Default",
+    csvSelectNone: "None",
+    csvSelected: (on: number, all: number) => `${on} of ${all}`,
+    csvHeaderPreview: "Header row",
+    csvGroupLabels: {
+      keyword: "Keyword & volume",
+      score: "Opportunity",
+      shape: "SERP shape",
+      metrics: "Entry bar",
+      slots: "Slots",
+      ai: "AI verdict",
+    } as Record<string, string>,
+    csvColumnLabels: {
+      keyword: "Keyword",
+      opportunity: "Opportunity score",
+      opportunity_rank: "Rank in shortlist",
+      volume: "Volume",
+      volume_country: "Volume country",
+      winnability: "Winnability",
+      depth: "Depth exported",
+      cohort_size: "Cohort size",
+      ranked_by: "Cohort ranked by",
+      cohort_positions: "Cohort positions",
+      cohort_domains: "Cohort domains",
+      soft_slots: "Soft slots",
+      domain_carried_slots: "Domain-carried slots",
+      moderate_slots: "Moderate slots",
+      strong_slots: "Strong slots",
+      slots_analysed: "Slots analysed",
+      slots_total: "Slots total",
+      ai_difficulty: "SERP difficulty",
+      ai_comment: "AI comment",
+    } as Record<string, string>,
+    // Deliberately long. "UR: pages averaged" reads as "UR, averaged over the
+    // pages" — which is what the column BESIDE it is — and gets ticked by
+    // mistake. Say "how many" so it cannot be read as a rating.
+    csvMetricAverage: (metric: string) => `${metric} — cohort average`,
+    csvPagesAveraged: (metric: string) => `${metric} — how many pages averaged`,
     balanceQuick: "quick wins",
     balanceVolume: "big prizes",
     balanceHint: (pct: number) =>
@@ -824,6 +883,7 @@ const messagesRu: Messages = {
     download: "Скачать",
     filter: "Фильтр…",
     yourTime: "ваше время",
+    close: "Закрыть",
   },
   nav: {
     jobs: "Задачи",
@@ -921,8 +981,20 @@ const messagesRu: Messages = {
     colVolume: "Частотность",
     colDifficulty: "Сложность SERP",
     colBar: "Порог входа",
+    colBarRd: "Порог по Refdomains",
     colSoft: "Слабых позиций",
     colScore: "Потенциал",
+    legendDifficulty:
+      "вердикт AI по выдаче целиком — кто занимает верхние позиции и насколько сильны эти страницы.",
+    legendBar: (depth: number) =>
+      (depth === 0
+        ? "средний DR самых слабых доменов в выдаче"
+        : `средний DR самых слабых доменов в топ-${depth}`) +
+      " — уровень, до которого достаточно дотянуться, чтобы бороться за позицию.",
+    legendBarRd:
+      "тот же порог в ссылающихся доменах, но по сайтам, а не по страницам — сколько примерно доноров нужно, чтобы конкурировать.",
+    legendScore:
+      "0-100. Спрос, взвешенный с тем, насколько выдачу реально взять: начинать стоит с верха списка.",
     detailTitle: "Разбор по запросам",
     competitors: "Кого предстоит подвинуть",
     noDomains: "Для этого запроса домены не выбраны.",
@@ -1081,6 +1153,47 @@ const messagesRu: Messages = {
       `Ahrefs вернул метрики для ${analysed} из ${total} страниц на этой глубине`,
     exportCsv: "Выгрузить таблицу",
     exportHint: "Скачать эти строки в CSV на показанной глубине",
+    exportNoColumns: "Выберите хотя бы один столбец для выгрузки",
+    csvColumns: "Столбцы",
+    csvColumnsTitle: "Столбцы для выгрузки",
+    csvColumnsHint:
+      "Отмеченные столбцы попадут в CSV. Строка заголовков внизу показывает точный порядок, в котором они будут записаны. Выбор запоминается между прогонами; метрика, добавленная в будущем прогоне, выгружается, пока вы её не снимете.",
+    csvSelectAll: "Все",
+    csvSelectDefault: "По умолчанию",
+    csvSelectNone: "Ничего",
+    csvSelected: (on: number, all: number) => `${on} из ${all}`,
+    csvHeaderPreview: "Строка заголовков",
+    csvGroupLabels: {
+      keyword: "Запрос и частотность",
+      score: "Перспективность",
+      shape: "Профиль выдачи",
+      metrics: "Порог входа",
+      slots: "Позиции",
+      ai: "Вердикт AI",
+    } as Record<string, string>,
+    csvColumnLabels: {
+      keyword: "Ключевое слово",
+      opportunity: "Оценка перспективности",
+      opportunity_rank: "Место в шорт-листе",
+      volume: "Частотность",
+      volume_country: "Страна частотности",
+      winnability: "Проходимость",
+      depth: "Глубина выгрузки",
+      cohort_size: "Размер когорты",
+      ranked_by: "Когорта отобрана по",
+      cohort_positions: "Позиции когорты",
+      cohort_domains: "Домены когорты",
+      soft_slots: "Слабых позиций",
+      domain_carried_slots: "Позиций за счёт домена",
+      moderate_slots: "Средних позиций",
+      strong_slots: "Сильных позиций",
+      slots_analysed: "Проанализировано позиций",
+      slots_total: "Всего позиций",
+      ai_difficulty: "Сложность выдачи",
+      ai_comment: "Комментарий AI",
+    } as Record<string, string>,
+    csvMetricAverage: (metric: string) => `${metric} — среднее по когорте`,
+    csvPagesAveraged: (metric: string) => `${metric} — по скольким страницам усреднено`,
     balanceQuick: "быстрые победы",
     balanceVolume: "крупные цели",
     balanceHint: (pct: number) =>

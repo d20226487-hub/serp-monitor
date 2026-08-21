@@ -21,6 +21,8 @@ export type ReportRow = {
   opp: OpportunityParts;
   bands: Record<Band, number>;
   cohortDr: number | null;
+  /** The same entry bar in referring domains, from the domain-level metrics. */
+  cohortRd: number | null;
   slots: number;
   domains: AnalysisDomain[];
 };
@@ -34,6 +36,8 @@ export type ReportStrings = {
   shortlistTitle: string;
   shortlistLead: string;
   shortlistHead: string[];
+  /** [column, what it means] for the columns the reader has not met before. */
+  legend: [string, string][];
   detailTitle: string;
   competitors: string;
   aiComment: string;
@@ -100,13 +104,14 @@ export function buildReportDoc(rows: ReportRow[], s: ReportStrings): any {
         headerRows: 1,
         // Measured against Roboto's own metrics at the sizes actually used,
         // taking the wider of each column's header and its widest data value:
-        //   Сложность SERP   header 72.0pt, data "очень высокая" 71.8pt -> 74
-        //   Потенциал        header 49.3pt, data "31.3" 25.5pt          -> 52
-        //   Слабых позиций   wraps; "позиций" 39.7pt                    -> 42
-        //   Частотность      header 56.2pt beats "497 000" at 40.6pt    -> 58
-        // 278pt fixed of the 515pt usable on A4, leaving 237pt for the keyword,
-        // which is ample: the longest keyword here measures under 70pt.
-        widths: [18, "*", 58, 74, 34, 42, 52],
+        //   Сложность SERP        header 72.0pt, data "очень высокая" 71.8pt -> 74
+        //   Потенциал             header 49.3pt, data "31.3" 25.5pt          -> 52
+        //   Слабых позиций        wraps; "позиций" 39.7pt                    -> 42
+        //   Частотность           header 56.2pt beats "497 000" at 40.6pt    -> 58
+        //   Порог по Refdomains   wraps; "Refdomains" 48.4pt                 -> 52
+        // 330pt fixed of the 515pt usable on A4, leaving 185pt for the keyword,
+        // which is still ample: the longest keyword here measures under 70pt.
+        widths: [18, "*", 58, 74, 34, 52, 42, 52],
         body: [
           s.shortlistHead.map(h => ({ text: h, style: "th" })),
           ...rows.map((v, i) => [
@@ -118,12 +123,25 @@ export function buildReportDoc(rows: ReportRow[], s: ReportStrings): any {
               text: v.cohortDr == null ? "—" : `DR ${v.cohortDr.toFixed(0)}`,
               style: "tdNum",
             },
+            {
+              text: v.cohortRd == null ? "—" : fmtNum(Math.round(v.cohortRd)),
+              style: "tdNum",
+            },
             { text: `${v.bands.soft}/${v.slots}`, style: "tdNum" },
             { text: (v.opp.score ?? 0).toFixed(1), style: "tdNumStrong" },
           ]),
         ],
       },
       layout: TABLE_LAYOUT,
+      margin: [0, 0, 0, 8],
+    },
+    {
+      // The PDF is the copy that gets forwarded on without us attached to it,
+      // so the three constructed columns have to explain themselves here.
+      stack: s.legend.map(([term, text]) => ({
+        text: [{ text: `${term} — `, bold: true }, text],
+        style: "caption",
+      })),
       margin: [0, 0, 0, 18],
     },
 

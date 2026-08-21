@@ -20,10 +20,15 @@ import {
   withinDepth,
 } from "@/lib/serp-strength";
 import {
+  CsvColumnOverrides,
   analysisCsvFilename,
   buildAnalysisCsv,
   downloadCsv,
+  selectedAnalysisCsvColumns,
 } from "@/lib/analysis-csv";
+import { CsvColumnPicker } from "@/components/csv-columns";
+import { ChevronDown, Columns3 } from "lucide-react";
+import { METRIC_LABELS } from "@/lib/metric-labels";
 import {
   Balance,
   OpportunityParts,
@@ -52,23 +57,6 @@ import { FormulaEditor } from "@/components/opportunity-formula";
  * come from is marked underneath it.
  */
 
-const METRIC_LABELS: Record<string, string> = {
-  url_rating: "UR",
-  domain_rating: "DR",
-  backlinks: "Backlinks",
-  backlinks_dofollow: "Backlinks (follow)",
-  refdomains: "Ref domains",
-  refdomains_dofollow: "Ref domains (follow)",
-  org_traffic: "Org. traffic",
-  org_keywords: "Org. keywords",
-  org_keywords_1_3: "Org. kw 1-3",
-  org_keywords_4_10: "Org. kw 4-10",
-  org_keywords_11_20: "Org. kw 11-20",
-  refdomains_nofollow: "Ref domains (nofollow)",
-  refips_subnets: "Ref IP subnets",
-  ahrefs_rank: "Ahrefs Rank",
-};
-
 type SortKey = string; // "keyword" | "coverage" | "soft" | a metric id
 
 // Green through red — the verdict should be readable at a glance down a column.
@@ -91,6 +79,12 @@ const BAND_BAR: Record<Band, string> = {
 
 const DEPTH_KEY = "analysisDepth";
 const BALANCE_KEY = "analysisBalance";
+// Versioned: the first cut of the picker labelled a metric's page COUNT as
+// "UR: pages averaged", which reads as "UR averaged over pages" — the column
+// beside it. Selections made under that label say the opposite of what the
+// person meant, so they are not worth migrating. Bumping the key resets them
+// once, to defaults that are now the table's own columns.
+const CSV_COLUMNS_KEY = "analysisCsvColumns.v2";
 
 /** Score colour: a shortlisted keyword should be findable without reading. */
 function scoreTone(rank: number | null, shortlist: number): string {
@@ -523,6 +517,11 @@ export function RunAnalysisTable({
   // broken when you are entering ten of them.
   const [volumeEdits, setVolumeEdits] = useState<Record<string, number>>({});
   const [pasting, setPasting] = useState(false);
+  const [pickingColumns, setPickingColumns] = useState(false);
+  // Only the CSV columns the user has explicitly ticked or unticked; the rest
+  // follow their defaults. See lib/analysis-csv for why this is stored as
+  // overrides rather than as the selected set.
+  const [csvColumns, setCsvColumns] = useState<CsvColumnOverrides>({});
   const [editingFormula, setEditingFormula] = useState(false);
   // Local draft of the effective formula. Seeded from the server, which has
   // already resolved override-or-global, so there is nothing to merge here.
@@ -554,8 +553,37 @@ export function RunAnalysisTable({
         const n = Number(b);
         if (Number.isFinite(n) && n >= 0 && n <= 1) setBalance(n);
       }
+      const cols = localStorage.getItem(CSV_COLUMNS_KEY);
+      if (cols !== null) {
+        // Anything that is not a plain id → boolean map is a stale format, not
+        // a preference: fall back to the defaults rather than exporting a file
+        // built from garbage.
+        const parsed: unknown = JSON.parse(cols);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          setCsvColumns(
+            Object.fromEntries(
+              Object.entries(parsed as Record<string, unknown>)
+                .filter(([, v]) => typeof v === "boolean"),
+            ) as CsvColumnOverrides,
+          );
+        }
+      }
     } catch {}
   }, []);
+
+  /** Persisting inside the updater rather than in an effect keeps the write
+   *  next to the change without needing a "have we hydrated yet" guard — an
+   *  effect would fire once on mount and clobber the stored value with the
+   *  empty initial state before the read above had run. */
+  function pickCsvColumns(update: (prev: CsvColumnOverrides) => CsvColumnOverrides) {
+    setCsvColumns(prev => {
+      const next = update(prev);
+      try {
+        localStorage.setItem(CSV_COLUMNS_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }
 
   function pickBalance(b: Balance) {
     setBalance(b);
@@ -728,8 +756,17 @@ export function RunAnalysisTable({
     return arr;
   }, [views, sortKey, sortDir]);
 
+  // Overrides can name metrics this run never collected — a selection made on
+  // another job. Pruning against THIS run's columns is what the count on the
+  // button and the disabled state are read from.
+  const csvSelection = useMemo(
+    () => selectedAnalysisCsvColumns(analysis.metrics, csvColumns),
+    [analysis.metrics, csvColumns],
+  );
+
   // Exports exactly what is on screen: current depth, current sort order.
   function exportCsv() {
+    if (!csvSelection.length) return;
     const csv = buildAnalysisCsv(
       sorted.map(v => ({
         keyword: v.row.keyword,
@@ -746,9 +783,8 @@ export function RunAnalysisTable({
         difficulty: v.row.difficulty,
         comment: v.row.comment,
       })),
-      analysis.metrics,
-      depth,
-      ranker ?? "",
+      csvSelection,
+      { depth, ranker: ranker ?? "" },
     );
     downloadCsv(analysisCsvFilename(runId, depth), csv);
   }
@@ -808,14 +844,45 @@ export function RunAnalysisTable({
           >
             {t.analysis.pasteVolumes}
           </button>
-          <button
-            type="button"
-            onClick={exportCsv}
-            title={t.analysis.exportHint}
-            className="px-2 py-0.5 text-xs rounded-md border dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800"
-          >
-            {t.analysis.exportCsv}
-          </button>
+          {/* A split button rather than a menu on the export: the common case
+              is downloading the same columns as last run, and burying that
+              behind a menu would cost a click every time. The right half has to
+              read as the settings half of ONE control though — as a plain word
+              beside the export it just looks like a second, unrelated button,
+              and the first thing you do is press Export and get a file. Hence
+              the icon and the caret. */}
+          <div className="inline-flex rounded-md border dark:border-neutral-700 overflow-hidden">
+            <button
+              type="button"
+              onClick={exportCsv}
+              disabled={csvSelection.length === 0}
+              title={csvSelection.length ? t.analysis.exportHint : t.analysis.exportNoColumns}
+              className="px-2 py-0.5 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-50 disabled:hover:bg-transparent"
+            >
+              {t.analysis.exportCsv}
+            </button>
+            <button
+              type="button"
+              onClick={() => setPickingColumns(c => !c)}
+              aria-pressed={pickingColumns}
+              aria-expanded={pickingColumns}
+              title={t.analysis.csvColumnsHint}
+              className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs border-l dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 ${pickingColumns ? "bg-neutral-100 dark:bg-neutral-800" : ""
+              }`}
+            >
+              <Columns3 className="w-3 h-3" aria-hidden />
+              {t.analysis.csvColumns}
+              {/* The count is the tell that this button decides what the export
+                  contains, not just how it looks. */}
+              <span className="text-neutral-500 dark:text-neutral-400 tabular-nums">
+                {csvSelection.length}
+              </span>
+              <ChevronDown
+                className={`w-3 h-3 transition-transform ${pickingColumns ? "rotate-180" : ""}`}
+                aria-hidden
+              />
+            </button>
+          </div>
           {/* Quick wins vs biggest prizes. The right answer genuinely differs
               by campaign, so it is a control rather than a constant. */}
           <label className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
@@ -928,6 +995,14 @@ export function RunAnalysisTable({
             )}
           </div>
         </div>
+      )}
+      {pickingColumns && (
+        <CsvColumnPicker
+          metrics={analysis.metrics}
+          overrides={csvColumns}
+          onChange={pickCsvColumns}
+          onClose={() => setPickingColumns(false)}
+        />
       )}
       {pasting && (
         <VolumePastePanel
