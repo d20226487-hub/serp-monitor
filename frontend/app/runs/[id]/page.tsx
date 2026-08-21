@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { api, JobRun, Result, RunAnalysis, SavedLocation } from "@/lib/api";
@@ -222,6 +223,13 @@ export default function RunPage() {
               className="ml-2 w-16 px-2 py-1 rounded border bg-white dark:bg-neutral-900 dark:border-neutral-700"
             />
           </label>
+          {/* Only analyzer runs have anything to report on. */}
+          {analysis?.mode === "analyzer" && (
+            <Link
+              href={`/runs/${id}/report`}
+              className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm"
+            >{t.report.open}</Link>
+          )}
           <a
             href={api.exportUrl(id, topExport)}
             className="px-3 py-1.5 rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm"

@@ -10,10 +10,12 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@types/pdfmake": "^0.3.3",
     "clsx": "2.1.1",
     "cmdk": "1.1.1",
     "lucide-react": "1.14.0",
     "next": "16.2.4",
+    "pdfmake": "^0.3.11",
     "react": "19.2.5",
     "react-dom": "19.2.5"
   },

@@ -28,3 +28,62 @@ body {
 body {
   overflow-x: clip;
 }
+
+/* ---------------------------------------------------------------------------
+   Printing a run report.
+
+   The app is a dark-capable dashboard; a PDF someone forwards to a client is
+   neither. So print forces the light palette, drops the chrome, and lets the
+   page flow at full width instead of inside the app's centred container.
+   --------------------------------------------------------------------------- */
+@media print {
+  /* Ink, and legibility on paper. Backgrounds are dropped rather than trusted
+     to print — most browsers omit them by default anyway, which would leave
+     white text on white. */
+  html, body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /* The app frame is not part of the document. */
+  header, nav, footer, .print\:hidden {
+    display: none !important;
+  }
+
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* A keyword's block splitting across a page boundary separates its verdict
+     from the competitors that justify it, which is the one pairing the report
+     exists to show. */
+  .report section,
+  .report table,
+  .break-inside-avoid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .report h2 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  /* Borders survive when background fills do not, so keep them dark enough to
+     read on paper. */
+  .report, .report * {
+    border-color: #bbb !important;
+  }
+
+  a[href] {
+    text-decoration: none;
+    color: #000 !important;
+  }
+
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+}

@@ -106,6 +106,50 @@ const messagesEn = {
       canceled: "canceled",
     },
   },
+  report: {
+    open: "Report",
+    title: "SERP opportunity report",
+    subtitle: (market: string, date: string) => `${market} · ${date}`,
+    lang: "Report language",
+    download: "Download PDF",
+    downloading: "Building PDF…",
+    filename: (job: string, run: number) => `${job || "report"}-run${run}.pdf`,
+    page: (current: number, total: number) => `${current} / ${total}`,
+    controls: "Report settings",
+    summary: "Summary",
+    analysed: "Keywords analysed",
+    shortlisted: "Keywords selected",
+    reachableVolume: "Monthly searches in the shortlist",
+    shortlistTitle: "Where to start",
+    shortlistLead: (n: number) =>
+      `The ${n} keywords with the best ratio of demand to how winnable the SERP looks.`,
+    colRank: "#",
+    colKeyword: "Keyword",
+    colVolume: "Volume",
+    colDifficulty: "SERP difficulty",
+    colBar: "Entry bar",
+    colSoft: "Soft slots",
+    colScore: "Potential",
+    detailTitle: "Keyword detail",
+    competitors: "Who you would have to displace",
+    noDomains: "No domains selected for this keyword.",
+    aiComment: "Analyst comment",
+    colDomain: "Domain",
+    colAge: "Age",
+    colBacklinks: "Backlinks",
+    colRefdomains: "Ref. domains",
+    colKeywordsTop: "Keywords in top 3",
+    colKeywords410: "Keywords 4-10",
+    keywordPicker: "Keywords in the report",
+    domainPicker: "Domains shown",
+    domainPickerHint:
+      "Unticked domains are hidden from every table. Majors like youtube and wikipedia are usually noise here.",
+    inKeywords: (n: number) => `${n} kw`,
+    selectAll: "All",
+    selectNone: "None",
+    footer: (job: string, run: number) => `${job} · run #${run}`,
+    empty: "Nothing to report — no keyword in this run has both a volume and a verdict.",
+  },
   aiTuning: {
     tuningTitle: "Model tuning",
     tuningHelp:
@@ -855,6 +899,50 @@ const messagesRu: Messages = {
       canceled: "отменено",
     },
   },
+  report: {
+    open: "Отчёт",
+    title: "Отчёт по точкам роста в выдаче",
+    subtitle: (market: string, date: string) => `${market} · ${date}`,
+    lang: "Язык отчёта",
+    download: "Скачать PDF",
+    downloading: "Формируем PDF…",
+    filename: (job: string, run: number) => `${job || "otchet"}-zapusk${run}.pdf`,
+    page: (current: number, total: number) => `${current} / ${total}`,
+    controls: "Настройки отчёта",
+    summary: "Кратко",
+    analysed: "Проанализировано запросов",
+    shortlisted: "Выбрано ключей",
+    reachableVolume: "Показов в месяц в шорт-листе",
+    shortlistTitle: "С чего начать",
+    shortlistLead: (n: number) =>
+      `${n} запросов с лучшим соотношением спроса и того, насколько выдачу реально взять.`,
+    colRank: "№",
+    colKeyword: "Запрос",
+    colVolume: "Частотность",
+    colDifficulty: "Сложность SERP",
+    colBar: "Порог входа",
+    colSoft: "Слабых позиций",
+    colScore: "Потенциал",
+    detailTitle: "Разбор по запросам",
+    competitors: "Кого предстоит подвинуть",
+    noDomains: "Для этого запроса домены не выбраны.",
+    aiComment: "Комментарий аналитика",
+    colDomain: "Домен",
+    colAge: "Возраст",
+    colBacklinks: "Бэклинков",
+    colRefdomains: "Ссыл. доменов",
+    colKeywordsTop: "Ключей в топ-3",
+    colKeywords410: "Ключей 4-10",
+    keywordPicker: "Запросы в отчёте",
+    domainPicker: "Показывать домены",
+    domainPickerHint:
+      "Снятые галочки убирают домен из всех таблиц. Крупные площадки вроде youtube и wikipedia обычно только шумят.",
+    inKeywords: (n: number) => `${n} зап.`,
+    selectAll: "Все",
+    selectNone: "Ничего",
+    footer: (job: string, run: number) => `${job} · запуск №${run}`,
+    empty: "Отчитываться не о чем — ни у одного запроса нет одновременно частотности и вердикта.",
+  },
   aiTuning: {
     tuningTitle: "Настройка модели",
     tuningHelp:
@@ -1520,6 +1608,12 @@ melbet	kz	34	20 000	0,45`,
 };
 
 const messages = { en: messagesEn, ru: messagesRu };
+
+/** The report picks its own language independently of the app toggle: it is
+ *  produced for a Russian-speaking reader regardless of who generated it. */
+export function messagesFor(lang: Lang): Messages {
+  return messages[lang];
+}
 
 type Ctx = {
   lang: Lang;
