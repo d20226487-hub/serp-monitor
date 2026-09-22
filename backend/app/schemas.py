@@ -93,6 +93,9 @@ class JobRunOut(BaseModel):
     triggered_by: str
     cost: float | None = None
     cost_source: str | None = None  # "actual" | "estimate" | None (pre-tracking)
+    # scrape | ahrefs | whois | ai — the phase most recently entered. NULL on
+    # runs that predate phase tracking.
+    phase: str | None = None
 
 
 class ResultOut(BaseModel):

@@ -116,6 +116,13 @@ class JobRun(Base):
     # the default follows Settings when the global changes, while a run that was
     # tuned deliberately keeps what it was tuned to.
     opportunity_formula: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # The phase this run most recently ENTERED: scrape | ahrefs | whois | ai.
+    # A running run's status alone cannot say which of four phases it is in, and
+    # the table fills in so unevenly — nothing visible for minutes while Ahrefs
+    # and WHOIS work, then one verdict at a time — that a healthy run and a
+    # stalled one look identical. Deliberately NOT cleared when the run ends: on
+    # a failed run it is the answer to "where did it stop?".
+    phase: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     job: Mapped[Job] = relationship(back_populates="runs")
     results: Mapped[list["Result"]] = relationship(back_populates="run", cascade="all,delete-orphan")

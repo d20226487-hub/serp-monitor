@@ -8,6 +8,7 @@ import { buildBrowserUrl, variantLabel } from "@/lib/browser-urls";
 import { ExternalLink } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import { RunOverview } from "@/components/run-overview";
+import { RunPhases } from "@/components/run-phases";
 import { formatUsd } from "@/lib/cost";
 
 // One color per axis. Keyword wins the header; engine/device/location/language
@@ -270,6 +271,8 @@ export default function RunPage() {
           <button onClick={copyAll} className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm">{t.common.copyAll}</button>
         </div>
       </div>
+
+      <RunPhases run={run} analysis={analysis} />
 
       {run.error && (
         <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-red-800 dark:text-red-200 rounded-md px-3 py-2 text-sm">

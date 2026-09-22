@@ -219,7 +219,12 @@ export type JobRun = {
   cost: number | null;
   /** "actual" = reported by the provider, "estimate" = queries × configured rate. */
   cost_source: "actual" | "estimate" | null;
+  /** The phase most recently ENTERED. Kept after the run ends, so on a failed
+   *  run it says where it stopped. null on runs that predate phase tracking. */
+  phase?: RunPhase | null;
 };
+
+export type RunPhase = "scrape" | "ahrefs" | "whois" | "ai";
 
 export type ProviderRates = {
   rates: Record<string, number>;

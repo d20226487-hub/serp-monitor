@@ -1,4 +1,6 @@
 import json
+import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,6 +14,38 @@ from .routers import (
 )
 from .scheduler import get_scheduler, reload_all_schedules
 from .tasks import mark_orphaned_runs_failed
+
+
+def _configure_logging() -> None:
+    """Send this app's own log lines to the container output.
+
+    Nothing configured logging before, and Python drops INFO records that reach
+    a root logger with no handler — so every phase summary in tasks.py ("whois:
+    run 74 — 169 via RDAP, 369 via DataForSEO, cost $0.55") was being written
+    and thrown away, and `docker compose logs api` showed only uvicorn's access
+    lines. A run in flight could not be inspected without querying the database.
+
+    Scoped to the `app` package rather than set on the root logger, on purpose:
+    httpx logs every request URL at INFO, and SerpAPI carries its api_key in the
+    query string. Turning the root up would print credentials into the log.
+    `propagate` is off so uvicorn's own handlers never print a line twice.
+    """
+    level = os.environ.get("LOG_LEVEL", "INFO").upper()
+    app_log = logging.getLogger("app")
+    app_log.setLevel(level)
+    app_log.propagate = False
+    # Guarded: --reload re-imports this module, and a second handler would
+    # print every line twice.
+    if not app_log.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter(
+            "%(asctime)s %(levelname)-7s %(name)s: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        ))
+        app_log.addHandler(handler)
+
+
+_configure_logging()
 
 
 def _seed_saved_locations(db) -> None:
@@ -91,6 +125,9 @@ def _migrate_sqlite_columns() -> None:
         ("job_runs", "opportunity_formula", "JSON"),
         # Which lookup answered a cached WHOIS row.
         ("domain_whois", "source", "VARCHAR(20)"),
+        # The phase a run most recently entered. Kept after the run ends, so a
+        # failed run says where it stopped rather than only that it did.
+        ("job_runs", "phase", "VARCHAR(20)"),
         # What was sent to the AI and what came back, for debugging a verdict.
         ("job_runs", "ahrefs_cached", "INTEGER"),
         ("job_runs", "ahrefs_fetched", "INTEGER"),

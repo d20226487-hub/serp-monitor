@@ -582,6 +582,16 @@ melbet	kz	34	20,000	0.45`,
       "Those keywords have no SERP, and so no metrics, no domain age and no AI verdict. Retrying re-issues only the missing queries — the rest of the run is not re-scraped or re-billed.",
     retryQueries: (n: number) => `Retry ${n}`,
     retrying: "Retrying…",
+    phases: {
+      scrape: "SERP scrape",
+      ahrefs: "Ahrefs metrics",
+      whois: "Domain age",
+      ai: "AI verdicts",
+    } as Record<string, string>,
+    phaseFailed: (n: number) => `${n} failed`,
+    phaseHint:
+      "Ahrefs and the domain-age lookups write nothing to the table until they finish, so the table can sit still for minutes on a healthy run. Verdicts then arrive one keyword at a time.",
+    stoppedDuring: (phase: string) => `Stopped during: ${phase}`,
     verify: {
       title: "Verify scraped queries",
       summary: (n: number) =>
@@ -1451,6 +1461,16 @@ melbet	kz	34	20 000	0,45`,
       "У этих ключей нет выдачи, а значит нет ни метрик, ни возраста доменов, ни вердикта AI. Повтор отправит только недостающие запросы — остальная часть прогона не пересобирается и не оплачивается заново.",
     retryQueries: (n: number) => `Повторить: ${n}`,
     retrying: "Повторяем…",
+    phases: {
+      scrape: "Сбор выдачи",
+      ahrefs: "Метрики Ahrefs",
+      whois: "Возраст доменов",
+      ai: "Вердикты AI",
+    } as Record<string, string>,
+    phaseFailed: (n: number) => `ошибок: ${n}`,
+    phaseHint:
+      "Ahrefs и проверка возраста доменов ничего не пишут в таблицу, пока не закончат, поэтому на исправном прогоне таблица может минутами стоять на месте. Затем вердикты приходят по одному запросу.",
+    stoppedDuring: (phase: string) => `Остановился на этапе: ${phase}`,
     verify: {
       title: "Проверить выполненные запросы",
       summary: (n: number) =>

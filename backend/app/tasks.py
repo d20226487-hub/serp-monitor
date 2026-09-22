@@ -760,6 +760,24 @@ async def _run_ai_difficulty(db: Session, run_id: int, job: Job) -> AiPhase:
     return AiPhase(judged=judged, skipped=skipped, failed=failed)
 
 
+# What the run page and the orphan sweep call each phase. Kept here beside the
+# code that enters them so a renamed phase cannot leave a stale label behind.
+PHASES = ("scrape", "ahrefs", "whois", "ai")
+
+
+def _enter_phase(db: Session, run: JobRun, phase: str, detail: str = "") -> None:
+    """Record that `run` has moved into `phase`, and say so in the log.
+
+    Committed immediately rather than riding along with the next write: the
+    phases between the scrape and the first verdict can take minutes without
+    writing anything the run page shows, and a phase that only became visible
+    at the end of itself would not answer "is this still going?".
+    """
+    run.phase = phase
+    db.commit()
+    log.info("run %s: %s%s", run.id, phase, f" — {detail}" if detail else "")
+
+
 async def run_job_async(run_id: int) -> None:
     """Top-level entrypoint scheduled by the API/scheduler. Owns its own DB session."""
     db = SessionLocal()
@@ -800,6 +818,10 @@ async def run_job_async(run_id: int) -> None:
         db.commit()
 
         provider_name = getattr(job, "provider", None) or "serpapi"
+        _enter_phase(
+            db, run, "scrape",
+            f"{len(variants)} queries via {provider_name} (job {job.id})",
+        )
         async with get_provider(provider_name) as provider:
             async def worker(v: dict):
                 try:
@@ -825,6 +847,11 @@ async def run_job_async(run_id: int) -> None:
         # never fail the run — the SERP data is already saved and useful on its
         # own; the error is recorded so the UI can explain the empty column.
         if (getattr(job, "mode", None) or "serp") == "analyzer":
+            _enter_phase(
+                db, run, "ahrefs",
+                f"scrape done, {run.queries_done}/{run.queries_total} queries "
+                f"({run.queries_failed} failed)",
+            )
             try:
                 phase = await _run_ahrefs_analysis(db, run.id, job)
                 if phase.units:
@@ -841,6 +868,7 @@ async def run_job_async(run_id: int) -> None:
             # Gated on its own job flag: this bills DataForSEO per request, not
             # Ahrefs units, and only pays when the domain cache misses.
             if getattr(job, "whois_enabled", False):
+                _enter_phase(db, run, "whois")
                 try:
                     phase = await _run_whois(db, run.id, job)
                     run.whois_cost = round(phase.cost, 6)
@@ -855,6 +883,7 @@ async def run_job_async(run_id: int) -> None:
             # AI difficulty scoring. Skipped silently when no AI provider is
             # configured — the metrics table is useful on its own, and this
             # phase costs tokens on every scheduled run.
+            _enter_phase(db, run, "ai")
             try:
                 ai = await _run_ai_difficulty(db, run.id, job)
                 log.info(
@@ -883,8 +912,14 @@ async def run_job_async(run_id: int) -> None:
         )
         run.finished_at = utcnow()
         db.commit()
+        log.info(
+            "run %s: %s — %s/%s queries, %s failed, cost %s",
+            run.id, run.status, run.queries_done, run.queries_total,
+            run.queries_failed,
+            "n/a" if run.cost is None else f"${run.cost:.4f}",
+        )
     except Exception as e:  # noqa: BLE001
-        log.exception("run_job_async crashed")
+        log.exception("run %s crashed", run_id)
         run = db.get(JobRun, run_id)
         if run:
             run.status = "failed"
@@ -1093,12 +1128,19 @@ def run_job_sync(run_id: int) -> None:
 
 
 def mark_orphaned_runs_failed(db: Session) -> None:
-    """On startup, any run still 'running' is from a crashed process."""
+    """On startup, any run still 'running' is from a crashed process.
+
+    The phase it was in goes into the message. Without it, run 73's error read
+    as a DataForSEO failure — the only other thing in the string — when the
+    process had in fact been restarted under it partway through the verdicts.
+    """
     stuck = db.query(JobRun).filter(JobRun.status.in_(["running", "pending"])).all()
     for r in stuck:
         r.status = "failed"
-        r.error = (r.error or "") + " | process restarted while running"
+        where = f" during {r.phase}" if r.phase else ""
+        r.error = (r.error or "") + f" | process restarted while running{where}"
         r.finished_at = utcnow()
+        log.warning("run %s: orphaned by a restart%s — marked failed", r.id, where)
     if stuck:
         db.commit()
 
