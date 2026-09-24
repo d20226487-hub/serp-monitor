@@ -89,7 +89,17 @@ function JobsList() {
   const byId = new Map(projects.map(p => [p.id, p]));
   // Folders in the order their jobs come back, so the most recently edited
   // project leads — the same ordering the flat list would have had.
-  const groups: { project: Project | null; jobs: Job[] }[] = [];
+  //
+  // `key` is the job's project_id and is what React keys the group on. It must
+  // not be taken from the resolved `project`, which is null both for a job in
+  // no project AND for a job whose project has not arrived yet: the projects
+  // list is fetched separately and lands a paint later, so on the first render
+  // EVERY group resolved to null and they all shared one key. React cannot
+  // tell same-key siblings apart, and when the ids later changed it stranded
+  // the old subtree instead of removing it — one job rendered twice, in a
+  // group with no heading, and re-rendering never cleared it.
+  type Group = { key: number | null; project: Project | null; jobs: Job[] };
+  const groups: Group[] = [];
   const seen = new Map<number | null, number>();
   for (const j of jobs) {
     const key = j.project_id ?? null;
@@ -97,7 +107,7 @@ function JobsList() {
     if (idx === undefined) {
       idx = groups.length;
       seen.set(key, idx);
-      groups.push({ project: key == null ? null : byId.get(key) ?? null, jobs: [] });
+      groups.push({ key, project: key == null ? null : byId.get(key) ?? null, jobs: [] });
     }
     groups[idx].jobs.push(j);
   }
@@ -166,26 +176,27 @@ function JobsList() {
       ) : (
         <div className="space-y-5">
           {groups.map(g => (
-            <div key={g.project?.id ?? "none"} className="space-y-2">
-              {/* Only worth a heading once a project exists to name; a list
-                  that is entirely ungrouped should not grow a "no project"
-                  header over every row. */}
-              {(projects.length > 0) && (
+            <div key={g.key ?? "none"} className="space-y-2">
+              {/* Three cases, and only two of them get a heading. A resolved
+                  project is named. A job in no project is called out as such,
+                  but only once some project exists — a list that is entirely
+                  ungrouped should not grow a "no project" header over every
+                  row. A group whose project has not loaded yet gets nothing
+                  rather than being mislabelled "no project" for a paint. */}
+              {g.project ? (
                 <div className="flex items-baseline gap-2 text-sm">
-                  {g.project ? (
-                    <>
-                      <span className="font-medium">{g.project.name}</span>
-                      <span className="text-xs text-neutral-600 dark:text-neutral-400">
-                        {t.projects.domainsCount(g.project.domains.length)}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-neutral-600 dark:text-neutral-400">
-                      {t.home.ungrouped}
-                    </span>
-                  )}
+                  <span className="font-medium">{g.project.name}</span>
+                  <span className="text-xs text-neutral-600 dark:text-neutral-400">
+                    {t.projects.domainsCount(g.project.domains.length)}
+                  </span>
                 </div>
-              )}
+              ) : g.key == null && projects.length > 0 ? (
+                <div className="flex items-baseline gap-2 text-sm">
+                  <span className="text-neutral-600 dark:text-neutral-400">
+                    {t.home.ungrouped}
+                  </span>
+                </div>
+              ) : null}
               {g.jobs.map(j => (
                 <div key={j.id} className="border rounded-md px-4 py-3 flex items-center gap-4 dark:border-neutral-700">
                   <div className="flex-1 min-w-0">
