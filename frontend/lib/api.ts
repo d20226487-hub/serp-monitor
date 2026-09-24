@@ -41,9 +41,6 @@ export type PositionCell = { position: number; url: string | null };
 
 export type PositionRow = {
   keyword: string;
-  engine: string;
-  device: string;
-  location: string | null;
   run_id: number;
   job_id: number;
   job_name: string | null;
@@ -52,16 +49,29 @@ export type PositionRow = {
   positions: Record<string, PositionCell | null>;
 };
 
+/** One results page, and every keyword measured on it.
+ *
+ *  A SERP is the whole tuple below: each field changes the page the engine
+ *  returns, so two of them never share a table. */
+export type SerpGroup = {
+  /** Stable identity of the tuple, for React keys. */
+  key: string;
+  engine: string;
+  device: string;
+  country_code: string | null;
+  language: string | null;
+  location: string | null;
+  google_domain: string | null;
+  rows: PositionRow[];
+};
+
 export type ProjectPositions = {
   project: { id: number; name: string; domains: string[] };
   runs: {
     id: number; job_id: number; job_name: string | null;
     status: string; started_at: string;
   }[];
-  rows: PositionRow[];
-  /** True when the project spans more than one engine/device/location, which
-   *  is when the variant columns are worth showing. */
-  multi_variant: boolean;
+  serps: SerpGroup[];
 };
 
 export type Job = {

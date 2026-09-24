@@ -143,7 +143,11 @@ export default function ProjectPage() {
           )}
           {positions && positions.runs.length > 0 && (
             <span className="text-xs text-neutral-600 dark:text-neutral-400">
-              {t.positions.fromRuns(positions.runs.length, positions.rows.length)}
+              {t.positions.fromRuns(
+                positions.runs.length,
+                positions.serps.reduce((n, s) => n + s.rows.length, 0),
+                positions.serps.length,
+              )}
             </span>
           )}
           {loading && (

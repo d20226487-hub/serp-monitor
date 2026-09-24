@@ -1,50 +1,81 @@
 "use client";
-import { ProjectPositions } from "@/lib/api";
+import { ProjectPositions, SerpGroup } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { variantLabel } from "@/lib/browser-urls";
 
 /**
- * Where the project's domains rank, keyword by keyword.
+ * Where the project's domains rank, one table per SERP.
  *
- * Rows are one keyword in one SERP VARIANT, not one keyword: the same term on
- * mobile in Almaty and on desktop in Astana are different SERPs holding
- * genuinely different positions, and one row averaging them would show a
- * number no page ever held. The variant columns only appear when the project
- * actually spans more than one, so the common single-market case stays a plain
- * keyword × domain grid.
+ * A SERP is the whole of (engine, device, country, language, location, google
+ * domain): every one of those changes the page the engine returns, so the same
+ * term asked of google.kz in Russian from Almaty and of google.com in Kazakh
+ * from Astana are two different results pages holding two different sets of
+ * positions. Keeping them in separate tables rather than in one table with a
+ * variant column means each table's keyword column reads straight down, and no
+ * row can quietly mix two pages together.
  *
- * A blank cell means the domain was not in the results that run captured —
+ * A blank cell means the domain was not among the positions that run captured —
  * which is "not in the top N scraped", not "not ranking anywhere". The footer
- * says so, because the difference matters when the number is going in a report.
+ * says so, because the difference matters when the number goes in a report.
  */
 export function PositionTable({ data }: { data: ProjectPositions }) {
   const { t } = useT();
   const { domains } = data.project;
 
   if (domains.length === 0) {
-    return (
-      <div className="border rounded-md p-6 text-sm text-neutral-600 dark:text-neutral-400 dark:border-neutral-700">
-        {t.positions.noDomains}
-      </div>
-    );
+    return <Empty>{t.positions.noDomains}</Empty>;
   }
-  if (data.rows.length === 0) {
-    return (
-      <div className="border rounded-md p-6 text-sm text-neutral-600 dark:text-neutral-400 dark:border-neutral-700">
-        {t.positions.noRuns}
-      </div>
-    );
+  if (data.serps.length === 0) {
+    return <Empty>{t.positions.noRuns}</Empty>;
   }
 
   return (
+    <div className="space-y-4">
+      {data.serps.map(serp => (
+        <SerpTable key={serp.key} serp={serp} domains={domains} />
+      ))}
+    </div>
+  );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="border rounded-md p-6 text-sm text-neutral-600 dark:text-neutral-400 dark:border-neutral-700">
+      {children}
+    </div>
+  );
+}
+
+function SerpTable({ serp, domains }: { serp: SerpGroup; domains: string[] }) {
+  const { t } = useT();
+  // The same label the run page puts beside a browser-check URL, so one SERP is
+  // described identically wherever it appears.
+  const label = variantLabel(
+    {
+      engine: serp.engine,
+      device: serp.device,
+      country_code: serp.country_code,
+      language: serp.language,
+      location: serp.location,
+      google_domain: serp.google_domain,
+      yandex_lr: null,
+    },
+    t.variantLabel,
+  );
+
+  return (
     <div className="border rounded-md dark:border-neutral-700 overflow-hidden">
+      <div className="px-3 py-2 bg-neutral-50 dark:bg-neutral-900/50 border-b dark:border-neutral-800 flex flex-wrap items-baseline gap-2">
+        <span className="font-medium text-sm">{label}</span>
+        <span className="text-xs text-neutral-600 dark:text-neutral-400">
+          {t.home.kwCount(serp.rows.length)}
+        </span>
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-neutral-50 dark:bg-neutral-900/50">
+          <thead>
             <tr className="text-left border-b dark:border-neutral-800">
               <th className="px-3 py-2 font-medium">{t.positions.colKeyword}</th>
-              {data.multi_variant && (
-                <th className="px-3 py-2 font-medium">{t.positions.colVariant}</th>
-              )}
               {domains.map(d => (
                 <th key={d} className="px-3 py-2 font-medium text-right font-mono text-xs">
                   {d}
@@ -54,17 +85,9 @@ export function PositionTable({ data }: { data: ProjectPositions }) {
             </tr>
           </thead>
           <tbody>
-            {data.rows.map(r => (
-              <tr
-                key={`${r.keyword}|${r.engine}|${r.device}|${r.location ?? ""}`}
-                className="border-b last:border-b-0 dark:border-neutral-800"
-              >
+            {serp.rows.map(r => (
+              <tr key={r.keyword} className="border-b last:border-b-0 dark:border-neutral-800">
                 <td className="px-3 py-2 font-medium break-all">{r.keyword}</td>
-                {data.multi_variant && (
-                  <td className="px-3 py-2 text-xs text-neutral-600 dark:text-neutral-400 whitespace-nowrap">
-                    {[r.engine, r.device, r.location].filter(Boolean).join(" · ")}
-                  </td>
-                )}
                 {domains.map(d => {
                   const cell = r.positions[d];
                   return (

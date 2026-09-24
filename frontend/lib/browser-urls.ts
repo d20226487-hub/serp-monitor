@@ -9,8 +9,10 @@
 
 import { googleUule } from "./uule";
 
-export type VariantUrlInput = {
-  keyword: string;
+/** Everything that identifies a SERP — the tuple that decides which results
+ *  page an engine returns. A keyword is asked OF one of these, so it is not
+ *  part of the identity and lives on VariantUrlInput instead. */
+export type VariantDescriptor = {
   engine: string;             // "google" | "yandex"
   device: string;             // "desktop" | "mobile"
   country_code: string | null;
@@ -19,6 +21,8 @@ export type VariantUrlInput = {
   google_domain: string | null;
   yandex_lr: number | null;
 };
+
+export type VariantUrlInput = VariantDescriptor & { keyword: string };
 
 const GOOGLE_BY_COUNTRY: Record<string, string> = {
   kz: "google.kz", ru: "google.ru", ua: "google.com.ua", by: "google.by",
@@ -77,7 +81,7 @@ export type VariantLabelStrings = {
  * strings for engine/device/geo terms; raw provider tokens (`lr=`, `uule`,
  * country codes) stay untranslated since they're protocol-level identifiers.
  */
-export function variantLabel(v: VariantUrlInput, s: VariantLabelStrings): string {
+export function variantLabel(v: VariantDescriptor, s: VariantLabelStrings): string {
   const engine = v.engine === "yandex" ? s.yandex : s.google;
   const device = v.device === "mobile" ? s.mobile : s.desktop;
 

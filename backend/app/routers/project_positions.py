@@ -7,10 +7,12 @@ track, what position does each of our domains hold?
 Three decisions worth knowing, because they are what make the numbers mean
 something:
 
-* A row is one keyword in one SERP VARIANT (engine, device, location), not one
-  keyword. The same term on google/mobile/Almaty and google/desktop/Astana are
-  different SERPs with genuinely different positions, and averaging them would
-  invent a number that no page ever held.
+* Results are split into one table per SERP, and a SERP is the whole of
+  (engine, device, country, language, location, google domain) — the same tuple
+  the run page and the browser-URL builder treat as one variant. Every one of
+  those changes the page that comes back, so two of them sharing a row would
+  average positions no single page ever held. Splitting rather than adding a
+  column also means each table's keyword column reads straight down.
 
 * Within the window, each row shows its LATEST run. A window is "where do we
   stand", so a newer measurement always replaces an older one; taking the best
@@ -35,6 +37,15 @@ from ..db import get_db
 from ..models import Job, JobRun, Project, Result
 
 router = APIRouter(prefix="/projects", tags=["projects"])
+
+#: What makes one SERP distinct from another. Every field here changes the page
+#: the engine returns, so two of them must never share a table: the same term
+#: asked of google.kz in Russian from Almaty and of google.com in Kazakh from
+#: Astana are two different results pages. Mirrors the tuple the run page and
+#: lib/browser-urls already treat as one variant.
+SERP_COLUMNS = (
+    "engine", "device", "country_code", "language", "location", "google_domain",
+)
 
 
 def _parse_stamp(value: str | None, field: str) -> datetime | None:
@@ -93,19 +104,18 @@ def project_positions(
     empty = {
         "project": {"id": project.id, "name": project.name, "domains": domains},
         "runs": [],
-        "rows": [],
-        "multi_variant": False,
+        "serps": [],
     }
     if not runs:
         return empty
 
-    # Every (keyword, variant) these runs covered, and which run is newest for
+    # Every (keyword, SERP) these runs covered, and which run is newest for
     # each. Read from results rather than from the jobs' keyword lists, so a
     # keyword added to a job after a run does not appear as a row the run never
     # actually measured.
     coverage = (
         db.query(
-            Result.keyword, Result.engine, Result.device, Result.location,
+            Result.keyword, *[getattr(Result, c) for c in SERP_COLUMNS],
             Result.run_id,
         )
         .filter(Result.run_id.in_(run_by_id.keys()))
@@ -113,8 +123,8 @@ def project_positions(
         .all()
     )
     latest: dict[tuple, int] = {}
-    for keyword, engine, device, location, run_id in coverage:
-        key = (keyword, engine, device, location)
+    for row in coverage:
+        key, run_id = tuple(row[:-1]), row[-1]
         current = latest.get(key)
         if current is None or (
             run_by_id[run_id].started_at > run_by_id[current].started_at
@@ -130,7 +140,7 @@ def project_positions(
         host_to_domain = {h: d for d in domains for h in _host_variants(d)}
         hits = (
             db.query(
-                Result.keyword, Result.engine, Result.device, Result.location,
+                Result.keyword, *[getattr(Result, c) for c in SERP_COLUMNS],
                 Result.run_id, Result.domain, Result.position, Result.url,
             )
             .filter(
@@ -139,8 +149,9 @@ def project_positions(
             )
             .all()
         )
-        for keyword, engine, device, location, run_id, host, position, url in hits:
-            key = (keyword, engine, device, location)
+        for row in hits:
+            key = tuple(row[: 1 + len(SERP_COLUMNS)])
+            run_id, host, position, url = row[-4:]
             # A result from a run this row did not pick is from an older run of
             # the same keyword; it is not this row's measurement.
             if latest.get(key) != run_id:
@@ -155,30 +166,32 @@ def project_positions(
             if prior is None or position < prior["position"]:
                 cells[cell_key] = {"position": position, "url": url}
 
-    variants = {(engine, device, location) for _, engine, device, location in latest}
-    rows = []
-    # Sorted on a key that coerces None, because location is nullable and
-    # Python refuses to order None against a string.
-    def _order(item):
-        (keyword, engine, device, location), _ = item
-        return (keyword.lower(), engine, device, location or "")
-
-    for (keyword, engine, device, location), run_id in sorted(latest.items(), key=_order):
+    # One table per SERP, keywords sorted inside it. The SERPs themselves are
+    # ordered by engine then device then place, so a project watching the same
+    # terms in two cities lists them the same way on every visit.
+    serps: dict[tuple, dict] = {}
+    for key, run_id in latest.items():
+        keyword, serp_key = key[0], key[1:]
         run = run_by_id[run_id]
-        rows.append({
+        serp = serps.get(serp_key)
+        if serp is None:
+            serp = {
+                **dict(zip(SERP_COLUMNS, serp_key)),
+                "key": "|".join("" if v is None else str(v) for v in serp_key),
+                "rows": [],
+            }
+            serps[serp_key] = serp
+        serp["rows"].append({
             "keyword": keyword,
-            "engine": engine,
-            "device": device,
-            "location": location,
             "run_id": run_id,
             "job_id": run.job_id,
             "job_name": job_names.get(run.job_id),
             "checked_at": run.started_at,
-            "positions": {
-                d: cells.get((keyword, engine, device, location, d))
-                for d in domains
-            },
+            "positions": {d: cells.get((*key, d)) for d in domains},
         })
+
+    for serp in serps.values():
+        serp["rows"].sort(key=lambda r: r["keyword"].lower())
 
     return {
         "project": {"id": project.id, "name": project.name, "domains": domains},
@@ -189,8 +202,11 @@ def project_positions(
             }
             for r in runs
         ],
-        "rows": rows,
-        # Lets the UI keep the variant columns out of the way on the common
-        # case of a project tracking one engine, one device, one place.
-        "multi_variant": len(variants) > 1,
+        "serps": [
+            serps[k] for k in sorted(
+                serps,
+                # None sorts before a string, and location is nullable.
+                key=lambda t: tuple("" if v is None else str(v) for v in t),
+            )
+        ],
     }
