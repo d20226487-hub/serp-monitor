@@ -107,7 +107,9 @@ export default function ProjectsPage() {
             ) : (
               <div key={p.id} className="border rounded-md px-4 py-3 dark:border-neutral-700">
                 <div className="flex items-center gap-3 flex-wrap">
-                  <span className="font-medium">{p.name}</span>
+                  <Link href={`/projects/${p.id}`} className="font-medium hover:underline">
+                    {p.name}
+                  </Link>
                   <span className="text-xs text-neutral-600 dark:text-neutral-400">
                     {t.projects.domainsCount(p.domains.length)} · {t.projects.jobsCount(p.job_count)}
                   </span>

@@ -185,7 +185,9 @@ function JobsList() {
                   rather than being mislabelled "no project" for a paint. */}
               {g.project ? (
                 <div className="flex items-baseline gap-2 text-sm">
-                  <span className="font-medium">{g.project.name}</span>
+                  <Link href={`/projects/${g.project.id}`} className="font-medium hover:underline">
+                    {g.project.name}
+                  </Link>
                   <span className="text-xs text-neutral-600 dark:text-neutral-400">
                     {t.projects.domainsCount(g.project.domains.length)}
                   </span>

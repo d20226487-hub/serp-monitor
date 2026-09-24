@@ -36,6 +36,34 @@ export type Project = {
   updated_at: string;
 };
 
+/** One cell of the positions grid: where a domain sits on that SERP. */
+export type PositionCell = { position: number; url: string | null };
+
+export type PositionRow = {
+  keyword: string;
+  engine: string;
+  device: string;
+  location: string | null;
+  run_id: number;
+  job_id: number;
+  job_name: string | null;
+  checked_at: string;
+  /** Keyed by project domain. null = the domain did not rank in that SERP. */
+  positions: Record<string, PositionCell | null>;
+};
+
+export type ProjectPositions = {
+  project: { id: number; name: string; domains: string[] };
+  runs: {
+    id: number; job_id: number; job_name: string | null;
+    status: string; started_at: string;
+  }[];
+  rows: PositionRow[];
+  /** True when the project spans more than one engine/device/location, which
+   *  is when the variant columns are worth showing. */
+  multi_variant: boolean;
+};
+
 export type Job = {
   id: number;
   name: string;
@@ -309,6 +337,14 @@ export const api = {
     );
   },
   listProjects: () => req<Project[]>("/projects"),
+  /** Where the project's domains rank, per keyword, over a time window.
+   *  `start`/`end` are ISO UTC; the window is half-open [start, end). */
+  projectPositions: (id: number, range?: { start: string; end: string }) => {
+    const qs = new URLSearchParams();
+    if (range) { qs.set("start", range.start); qs.set("end", range.end); }
+    const tail = qs.toString();
+    return req<ProjectPositions>(`/projects/${id}/positions${tail ? `?${tail}` : ""}`);
+  },
   getProject: (id: number) => req<Project>(`/projects/${id}`),
   createProject: (body: { name: string; domains: string[]; notes?: string | null }) =>
     req<Project>("/projects", { method: "POST", body: JSON.stringify(body) }),

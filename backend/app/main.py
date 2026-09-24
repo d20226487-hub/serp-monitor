@@ -10,8 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from .db import Base, SessionLocal, engine
 from .models import SavedLocation
 from .routers import (
-    export, jobs, keyword_volumes, locations, projects, runs,
-    settings as settings_router,
+    export, jobs, keyword_volumes, locations, project_positions, projects,
+    runs, settings as settings_router,
 )
 from .scheduler import get_scheduler, reload_all_schedules
 from .tasks import mark_orphaned_runs_failed
@@ -192,6 +192,7 @@ app.add_middleware(
 
 app.include_router(jobs.router)
 app.include_router(projects.router)
+app.include_router(project_positions.router)
 app.include_router(runs.router)
 app.include_router(export.router)
 app.include_router(locations.router)
