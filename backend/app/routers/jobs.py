@@ -2,10 +2,11 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import String, func, or_
 from sqlalchemy.orm import Session
 
-from ..db import get_db
+from ..db import IS_SQLITE, get_db
 from ..models import Job, JobRun, Project
 from ..scheduler import remove_schedule, schedule_info, scheduler_timezone, upsert_schedule, validate_cron
 from ..schemas import CostEstimate, JobCreate, JobOut, JobPage, JobRunOut, JobUpdate
+from ..search import CONTAINS_CI
 from ..tasks import create_run, estimate_queries, run_job_async
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -56,23 +57,38 @@ def list_jobs(
     """One page of jobs, newest edit first.
 
     Searching covers the name AND the keywords, because a job is as often
-    remembered by what it watches ("melbet") as by what it was called. Keywords
-    live in a JSON column, so the match is a LIKE over its serialised text: no
-    index either way at this size, and it saves loading every job into Python
-    to filter. The cost is that a search for "kz" also matches a keyword
-    containing it, which for finding a job is a feature.
+    remembered by what it watches ("melbet") as by what it was called. A search
+    for "kz" therefore also matches a keyword containing it, which for finding
+    a job is a feature.
+
+    The match runs through app.search.contains_ci rather than LOWER()/LIKE.
+    Keywords live in a JSON column that SQLAlchemy stores ASCII-escaped, so
+    "буствин" is on disk as бу..., and SQLite's own lower() does not
+    fold Cyrillic anyway — between them, no LIKE written in Russian could ever
+    match. See that module for the details.
     """
     query = db.query(Job)
     if project_id is not None:
         query = query.filter(Job.project_id == project_id)
     elif ungrouped:
         query = query.filter(Job.project_id.is_(None))
-    if q and q.strip():
-        like = f"%{q.strip().lower()}%"
-        query = query.filter(or_(
-            func.lower(Job.name).like(like),
-            func.lower(func.cast(Job.keywords, String)).like(like),
-        ))
+    term = (q or "").strip()
+    if term:
+        if IS_SQLITE:
+            match = getattr(func, CONTAINS_CI)
+            query = query.filter(or_(
+                match(Job.name, term) == 1,
+                match(func.cast(Job.keywords, String), term) == 1,
+            ))
+        else:
+            # Other backends fold Unicode correctly in LOWER() and are not
+            # required by this app; keep the plain form for them rather than
+            # shipping a function only SQLite can run.
+            like = f"%{term.lower()}%"
+            query = query.filter(or_(
+                func.lower(Job.name).like(like),
+                func.lower(func.cast(Job.keywords, String)).like(like),
+            ))
     total = query.with_entities(func.count(Job.id)).scalar() or 0
     items = (
         query.order_by(Job.updated_at.desc())
