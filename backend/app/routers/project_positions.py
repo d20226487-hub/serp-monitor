@@ -20,6 +20,12 @@ something:
   rather than per project, so a job that failed halfway only supersedes the
   keywords it actually reached.
 
+* A row carries only the domains that actually RANKED, ordered by position —
+  not a slot for every domain in the project. A project watching ten sites
+  would otherwise be a ten-column grid that is mostly dashes, and a keyword
+  where all ten rank reads better as a list in position order than as ten
+  columns the eye has to reassemble.
+
 * A domain matches a result host exactly, plus the "www." spelling of it. The
   provider writes result hosts as it finds them — 1979 of 4496 rows here carry
   a leading www. — while project domains are stored normalised. Subdomains do
@@ -164,7 +170,7 @@ def project_positions(
             # A site can hold several slots on one SERP. The best one is the
             # position it "has"; the rest are extra listings.
             if prior is None or position < prior["position"]:
-                cells[cell_key] = {"position": position, "url": url}
+                cells[cell_key] = {"domain": domain, "position": position, "url": url}
 
     # One table per SERP, keywords sorted inside it. The SERPs themselves are
     # ordered by engine then device then place, so a project watching the same
@@ -181,13 +187,19 @@ def project_positions(
                 "rows": [],
             }
             serps[serp_key] = serp
+        # Best position first: that is the one being reported, and the rest
+        # are the other places the project also holds on the same page.
+        hits = sorted(
+            (cells[(*key, d)] for d in domains if (*key, d) in cells),
+            key=lambda h: h["position"],
+        )
         serp["rows"].append({
             "keyword": keyword,
             "run_id": run_id,
             "job_id": run.job_id,
             "job_name": job_names.get(run.job_id),
             "checked_at": run.started_at,
-            "positions": {d: cells.get((*key, d)) for d in domains},
+            "hits": hits,
         })
 
     for serp in serps.values():

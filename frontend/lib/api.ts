@@ -36,8 +36,13 @@ export type Project = {
   updated_at: string;
 };
 
-/** One cell of the positions grid: where a domain sits on that SERP. */
-export type PositionCell = { position: number; url: string | null };
+/** One project domain's place on a SERP. Only ranked domains get one, so a
+ *  project watching ten sites does not carry ten nulls per keyword. */
+export type PositionHit = {
+  domain: string;
+  position: number;
+  url: string | null;
+};
 
 export type PositionRow = {
   keyword: string;
@@ -45,8 +50,9 @@ export type PositionRow = {
   job_id: number;
   job_name: string | null;
   checked_at: string;
-  /** Keyed by project domain. null = the domain did not rank in that SERP. */
-  positions: Record<string, PositionCell | null>;
+  /** What ranked, best position first. Empty = nothing of ours was in the
+   *  positions that run captured. */
+  hits: PositionHit[];
 };
 
 /** One results page, and every keyword measured on it.
