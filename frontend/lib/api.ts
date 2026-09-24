@@ -21,9 +21,26 @@ export type LocationRef = {
   target_type?: string | null;
 };
 
+/** A client or site being watched, and the domains that belong to it.
+ *  Also the folder the jobs list groups by. */
+export type Project = {
+  id: number;
+  name: string;
+  /** Normalised hosts: lowercase, no scheme or path, no leading "www.".
+   *  Subdomains are kept. Stored for position tracking to use later. */
+  domains: string[];
+  notes: string | null;
+  /** Jobs currently filed in this project. */
+  job_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Job = {
   id: number;
   name: string;
+  /** The project folder this job sits in. null = ungrouped. */
+  project_id: number | null;
   keywords: string[];
   engines: string[];
   devices: string[];
@@ -275,7 +292,34 @@ export type Result = {
 
 export const api = {
   base: BASE,
-  listJobs: () => req<Job[]>("/jobs"),
+  /** One page of jobs. `q` matches the name or any keyword. */
+  listJobs: (p?: {
+    q?: string; projectId?: number | null; ungrouped?: boolean;
+    limit?: number; offset?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (p?.q?.trim()) qs.set("q", p.q.trim());
+    if (p?.projectId != null) qs.set("project_id", String(p.projectId));
+    if (p?.ungrouped) qs.set("ungrouped", "true");
+    if (p?.limit != null) qs.set("limit", String(p.limit));
+    if (p?.offset) qs.set("offset", String(p.offset));
+    const tail = qs.toString();
+    return req<{ items: Job[]; total: number; limit: number; offset: number }>(
+      `/jobs${tail ? `?${tail}` : ""}`,
+    );
+  },
+  listProjects: () => req<Project[]>("/projects"),
+  getProject: (id: number) => req<Project>(`/projects/${id}`),
+  createProject: (body: { name: string; domains: string[]; notes?: string | null }) =>
+    req<Project>("/projects", { method: "POST", body: JSON.stringify(body) }),
+  updateProject: (
+    id: number,
+    body: Partial<{ name: string; domains: string[]; notes: string | null }>,
+  ) => req<Project>(`/projects/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteProject: (id: number) =>
+    req<{ ok: boolean; jobs_ungrouped: number }>(
+      `/projects/${id}`, { method: "DELETE" },
+    ),
   getJob: (id: number) => req<Job>(`/jobs/${id}`),
   createJob: (body: Partial<Job>) =>
     req<Job>("/jobs", { method: "POST", body: JSON.stringify(body) }),

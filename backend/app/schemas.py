@@ -9,8 +9,43 @@ class LocationRef(BaseModel):
     target_type: str | None = None
 
 
+class ProjectBase(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    # Accepted as pasted; the router normalises to bare hosts before storing.
+    domains: list[str] = Field(default_factory=list)
+    notes: str | None = None
+
+
+class ProjectCreate(ProjectBase):
+    pass
+
+
+class ProjectUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    domains: list[str] | None = None
+    notes: str | None = None
+
+
+class ProjectOut(ProjectBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    created_at: datetime
+    updated_at: datetime
+    # How many jobs sit in this project's folder. Computed per response rather
+    # than stored: the folder is derived from the association, and a counter
+    # would be one more thing to keep true.
+    job_count: int = 0
+
+    @field_validator("domains", mode="before")
+    @classmethod
+    def _none_to_empty_list(cls, v):
+        return [] if v is None else v
+
+
 class JobBase(BaseModel):
     name: str = Field(min_length=1, max_length=200)
+    # Which project folder the job belongs to. None = ungrouped.
+    project_id: int | None = None
     keywords: list[str] = Field(default_factory=list)
     engines: list[str] = Field(default_factory=list)
     devices: list[str] = Field(default_factory=list)
@@ -34,6 +69,7 @@ class JobCreate(JobBase):
 
 class JobUpdate(BaseModel):
     name: str | None = None
+    project_id: int | None = None
     keywords: list[str] | None = None
     engines: list[str] | None = None
     devices: list[str] | None = None
@@ -96,6 +132,19 @@ class JobRunOut(BaseModel):
     # scrape | ahrefs | whois | ai — the phase most recently entered. NULL on
     # runs that predate phase tracking.
     phase: str | None = None
+
+
+class JobPage(BaseModel):
+    """One page of the jobs list.
+
+    An envelope rather than a bare list because the page needs the total to
+    draw pagination, and counting client-side is exactly what pagination exists
+    to avoid.
+    """
+    items: list[JobOut]
+    total: int
+    limit: int
+    offset: int
 
 
 class ResultOut(BaseModel):

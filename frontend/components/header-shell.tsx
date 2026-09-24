@@ -14,6 +14,7 @@ export function HeaderShell() {
         </Link>
         <nav className="text-sm flex gap-4 text-neutral-600 dark:text-neutral-300">
           <Link href="/">{t.nav.jobs}</Link>
+          <Link href="/projects">{t.nav.projects}</Link>
           <Link href="/jobs/new">{t.nav.newJob}</Link>
           <Link href="/settings">{t.nav.settings}</Link>
           <Link href="/docs">{t.nav.docs}</Link>

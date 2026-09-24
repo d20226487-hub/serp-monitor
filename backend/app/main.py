@@ -10,7 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from .db import Base, SessionLocal, engine
 from .models import SavedLocation
 from .routers import (
-    export, jobs, keyword_volumes, locations, runs, settings as settings_router,
+    export, jobs, keyword_volumes, locations, projects, runs,
+    settings as settings_router,
 )
 from .scheduler import get_scheduler, reload_all_schedules
 from .tasks import mark_orphaned_runs_failed
@@ -128,6 +129,9 @@ def _migrate_sqlite_columns() -> None:
         # The phase a run most recently entered. Kept after the run ends, so a
         # failed run says where it stopped rather than only that it did.
         ("job_runs", "phase", "VARCHAR(20)"),
+        # Which project folder a job sits in. NULL = ungrouped, which is where
+        # every job created before projects existed stays.
+        ("jobs", "project_id", "INTEGER"),
         # What was sent to the AI and what came back, for debugging a verdict.
         ("job_runs", "ahrefs_cached", "INTEGER"),
         ("job_runs", "ahrefs_fetched", "INTEGER"),
@@ -187,6 +191,7 @@ app.add_middleware(
 )
 
 app.include_router(jobs.router)
+app.include_router(projects.router)
 app.include_router(runs.router)
 app.include_router(export.router)
 app.include_router(locations.router)

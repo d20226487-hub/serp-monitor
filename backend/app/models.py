@@ -18,11 +18,47 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class Project(Base):
+    """A client or site being watched, and the domains that belong to it.
+
+    The domains are what position tracking will look for in a SERP later; today
+    they are only stored, so the list is deliberately dumb — normalised hosts,
+    in the order pasted, with no per-domain metadata to migrate when tracking
+    arrives.
+
+    A project is also the folder the jobs list groups by. That grouping is
+    derived from the association rather than stored anywhere: a project with no
+    jobs simply shows no folder, and assigning the first job makes one appear.
+    """
+    __tablename__ = "projects"
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_project_name"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    # Normalised hosts: lowercase, no scheme, no path, no leading "www.".
+    # Subdomains are KEPT — a doorway on kz.example.com is a different target
+    # from example.com, and position tracking has to tell them apart.
+    domains: Mapped[list] = mapped_column(JSON, default=list)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+    jobs: Mapped[list["Job"]] = relationship(back_populates="project")
+
+
 class Job(Base):
     __tablename__ = "jobs"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(200))
+    # Which project's folder this job sits in. NULL = ungrouped, which is what
+    # every job created before projects existed stays. ON DELETE SET NULL:
+    # deleting a project must not take a year of run history with it.
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
@@ -64,6 +100,7 @@ class Job(Base):
     whois_enabled: Mapped[bool] = mapped_column(default=False)
 
     runs: Mapped[list["JobRun"]] = relationship(back_populates="job", cascade="all,delete-orphan")
+    project: Mapped["Project | None"] = relationship(back_populates="jobs")
 
 
 class JobRun(Base):

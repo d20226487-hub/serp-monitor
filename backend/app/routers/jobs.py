@@ -1,10 +1,11 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from sqlalchemy import String, func, or_
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import Job, JobRun
+from ..models import Job, JobRun, Project
 from ..scheduler import remove_schedule, schedule_info, scheduler_timezone, upsert_schedule, validate_cron
-from ..schemas import CostEstimate, JobCreate, JobOut, JobRunOut, JobUpdate
+from ..schemas import CostEstimate, JobCreate, JobOut, JobPage, JobRunOut, JobUpdate
 from ..tasks import create_run, estimate_queries, run_job_async
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -32,14 +33,60 @@ def _validate_cron_or_400(cron: str | None) -> None:
         )
 
 
-@router.get("", response_model=list[JobOut])
-def list_jobs(db: Session = Depends(get_db)):
-    return db.query(Job).order_by(Job.updated_at.desc()).all()
+def _check_project(db: Session, project_id: int | None) -> None:
+    """A job may only be filed in a project that exists.
+
+    Without this a typo in the id files the job into a folder the jobs list
+    will never draw, and the job disappears from the UI while still running on
+    its schedule.
+    """
+    if project_id is not None and not db.get(Project, project_id):
+        raise HTTPException(400, f"project {project_id} does not exist")
+
+
+@router.get("", response_model=JobPage)
+def list_jobs(
+    q: str | None = Query(None, description="Substring of the name or a keyword"),
+    project_id: int | None = Query(None, description="Only this project's folder"),
+    ungrouped: bool = Query(False, description="Only jobs in no project"),
+    limit: int = Query(25, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    """One page of jobs, newest edit first.
+
+    Searching covers the name AND the keywords, because a job is as often
+    remembered by what it watches ("melbet") as by what it was called. Keywords
+    live in a JSON column, so the match is a LIKE over its serialised text: no
+    index either way at this size, and it saves loading every job into Python
+    to filter. The cost is that a search for "kz" also matches a keyword
+    containing it, which for finding a job is a feature.
+    """
+    query = db.query(Job)
+    if project_id is not None:
+        query = query.filter(Job.project_id == project_id)
+    elif ungrouped:
+        query = query.filter(Job.project_id.is_(None))
+    if q and q.strip():
+        like = f"%{q.strip().lower()}%"
+        query = query.filter(or_(
+            func.lower(Job.name).like(like),
+            func.lower(func.cast(Job.keywords, String)).like(like),
+        ))
+    total = query.with_entities(func.count(Job.id)).scalar() or 0
+    items = (
+        query.order_by(Job.updated_at.desc())
+        .limit(limit)
+        .offset(offset)
+        .all()
+    )
+    return JobPage(items=items, total=total, limit=limit, offset=offset)
 
 
 @router.post("", response_model=JobOut)
 def create_job(payload: JobCreate, db: Session = Depends(get_db)):
     _validate_cron_or_400(payload.cron)
+    _check_project(db, payload.project_id)
     data = _to_orm_data(payload.model_dump())
     job = Job(**data)
     db.add(job)
@@ -64,6 +111,8 @@ def update_job(job_id: int, payload: JobUpdate, db: Session = Depends(get_db)):
         raise HTTPException(404)
     if "cron" in payload.model_fields_set:
         _validate_cron_or_400(payload.cron)
+    if "project_id" in payload.model_fields_set:
+        _check_project(db, payload.project_id)
     data = _to_orm_data(payload.model_dump(exclude_unset=True))
     for k, v in data.items():
         setattr(job, k, v)

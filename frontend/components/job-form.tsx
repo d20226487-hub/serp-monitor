@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { AhrefsSettings, api, Job, LocationRef, ProviderRates, SavedLocation } from "@/lib/api";
+import { useRouter, useSearchParams } from "next/navigation";
+import { AhrefsSettings, api, Job, LocationRef, Project, ProviderRates, SavedLocation } from "@/lib/api";
 import { MultiCombobox, Option } from "./multi-combobox";
 import { useT } from "@/lib/i18n";
 import { formatUsd, billingUnits } from "@/lib/cost";
@@ -27,6 +27,7 @@ type Props = {
 export function JobForm({ initial, onSaved }: Props) {
   const { t } = useT();
   const router = useRouter();
+  const params = useSearchParams();
 
   const ENGINES: Option<string>[] = [
     { value: "google", label: t.jobForm.engineOptions.google },
@@ -43,6 +44,13 @@ export function JobForm({ initial, onSaved }: Props) {
   ];
 
   const [name, setName] = useState(initial?.name ?? "");
+  // Preselected from ?project= when arriving via "New job" on a project, so
+  // the common path from the projects page files the job without a second
+  // decision. Falls back to whatever the job already had when editing.
+  const [projectId, setProjectId] = useState<number | null>(
+    initial?.project_id ?? (params.get("project") ? Number(params.get("project")) : null),
+  );
+  const [projects, setProjects] = useState<Project[]>([]);
   const [keywordsText, setKeywordsText] = useState(
     initial?.keywords?.join("\n") ?? ""
   );
@@ -176,8 +184,13 @@ export function JobForm({ initial, onSaved }: Props) {
     };
   }, [ahrefsMetrics, ahrefsDomainMetrics, ahrefs, estimate, topN]);
 
+  useEffect(() => {
+    api.listProjects().then(setProjects).catch(() => {});
+  }, []);
+
   const buildPayload = (): Partial<Job> => ({
     name: name.trim(),
+    project_id: projectId,
     keywords,
     engines,
     devices,
@@ -237,6 +250,28 @@ export function JobForm({ initial, onSaved }: Props) {
           placeholder={t.jobForm.namePlaceholder}
           className="w-full px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700"
         />
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium">
+          {t.jobForm.project}{" "}
+          <span className="text-neutral-600 dark:text-neutral-400 text-xs">
+            {t.common.optional}
+          </span>
+        </label>
+        <select
+          value={projectId ?? ""}
+          onChange={e => setProjectId(e.target.value ? Number(e.target.value) : null)}
+          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700"
+        >
+          <option value="">{t.jobForm.noProject}</option>
+          {projects.map(p => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+        <div className="text-xs text-neutral-600 dark:text-neutral-400">
+          {projects.length === 0 ? t.jobForm.projectNoneYet : t.jobForm.projectHint}
+        </div>
       </div>
 
       <div className="space-y-1.5">
