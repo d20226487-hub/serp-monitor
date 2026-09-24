@@ -46,6 +46,21 @@ describe("rangeFor", () => {
     expect(localIso(r.end)).toBe("2026-09-24 00:00:00");
   });
 
+  it("this year is the calendar year to date", () => {
+    const r = rangeFor("year", NOW);
+    expect(localIso(r.start)).toBe("2026-01-01 00:00:00");
+    expect(localIso(r.end)).toBe("2026-09-24 00:00:00");
+  });
+
+  it("this year on 1 January is a single day so far", () => {
+    // The boundary case: a year-to-date window on its first day must not
+    // reach back into last year.
+    const newYear = new Date(2026, 0, 1, 8, 0, 0);
+    const r = rangeFor("year", newYear);
+    expect(localIso(r.start)).toBe("2026-01-01 00:00:00");
+    expect(localIso(r.end)).toBe("2026-01-02 00:00:00");
+  });
+
   it("sends UTC, having computed the window locally", () => {
     // The whole point: "today" is a claim about the clock in front of you, but
     // run timestamps are UTC, so the boundary converts rather than being taken

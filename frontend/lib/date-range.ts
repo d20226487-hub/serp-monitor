@@ -9,10 +9,11 @@
 // tomorrow. That makes consecutive presets abut exactly, with no run able to
 // fall in both or in neither.
 
-export type RangePreset = "today" | "yesterday" | "week" | "month" | "custom";
+export type RangePreset =
+  | "today" | "yesterday" | "week" | "month" | "year" | "custom";
 
 export const RANGE_PRESETS: RangePreset[] = [
-  "today", "yesterday", "week", "month", "custom",
+  "today", "yesterday", "week", "month", "year", "custom",
 ];
 
 export type DateRange = {
@@ -60,6 +61,13 @@ export function rangeFor(preset: RangePreset, now: Date = new Date()): DateRange
     case "month":
       return {
         start: new Date(today.getFullYear(), today.getMonth(), 1),
+        end: addDays(today, 1),
+      };
+    case "year":
+      // Calendar year to date, matching week and month: these presets all end
+      // at the end of today rather than running a rolling window backwards.
+      return {
+        start: new Date(today.getFullYear(), 0, 1),
         end: addDays(today, 1),
       };
     case "custom":
