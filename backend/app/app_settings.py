@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .db import SessionLocal
 from .models import AppSetting
+from .visibility import DEFAULT_WEIGHTS as DEFAULT_VISIBILITY_WEIGHTS
 
 KEY_SERPAPI = "serpapi_key"
 KEY_BRIGHTDATA_TOKEN = "brightdata_token"
@@ -513,6 +514,80 @@ def set_opportunity_formula(values: dict | None) -> dict:
         return merged
     finally:
         db.close()
+
+# ---------------------------------------------------------------------------
+# Visibility weights
+#
+# What each SERP slot is worth, as a share of the page. Configuration rather
+# than code for the same reason the opportunity formula is: how much more #1 is
+# worth than #3 is a judgement about a market, and a brand query and a research
+# query do not agree. The arithmetic that uses these lives in app/visibility.py.
+#
+# Stored as a JSON list, position 1 first. Any positive scale works — every
+# figure is divided by the weight in play on the page being scored — so the
+# list is not required to sum to anything in particular.
+# ---------------------------------------------------------------------------
+KEY_VISIBILITY = "visibility_weights"
+
+#: A page deeper than this is past the point where slot weights mean anything,
+#: and the editor has to stop somewhere.
+MAX_VISIBILITY_SLOTS = 50
+
+
+def coerce_visibility_weights(raw: object) -> list[float]:
+    """A weight per position, or the defaults if the input cannot be one.
+
+    All-or-nothing, unlike the opportunity formula, which repairs itself field
+    by field. Here position is carried by ORDER: dropping one bad entry would
+    shift every weight below it up a slot and silently change what all of them
+    mean. A list that cannot be trusted whole cannot be trusted in part.
+    """
+    if not isinstance(raw, (list, tuple)) or not raw:
+        return list(DEFAULT_VISIBILITY_WEIGHTS)
+    out: list[float] = []
+    for value in raw[:MAX_VISIBILITY_SLOTS]:
+        try:
+            num = float(value)
+        except (TypeError, ValueError):
+            return list(DEFAULT_VISIBILITY_WEIGHTS)
+        if num != num or num < 0 or num > 1_000_000:  # NaN fails every comparison
+            return list(DEFAULT_VISIBILITY_WEIGHTS)
+        out.append(round(num, 4))
+    # All zeroes would divide every score by nothing, which is not a curve.
+    if sum(out) <= 0:
+        return list(DEFAULT_VISIBILITY_WEIGHTS)
+    return out
+
+
+def get_visibility_weights() -> list[float]:
+    """The global curve: the stored override, or the built-in defaults."""
+    db = SessionLocal()
+    try:
+        raw = _get(db, KEY_VISIBILITY)
+    finally:
+        db.close()
+    if not raw:
+        return list(DEFAULT_VISIBILITY_WEIGHTS)
+    try:
+        return coerce_visibility_weights(json.loads(raw))
+    except (TypeError, ValueError):
+        # A corrupted blob must not take the positions view down with it.
+        return list(DEFAULT_VISIBILITY_WEIGHTS)
+
+
+def set_visibility_weights(values: object | None) -> list[float]:
+    """Persist the global curve. None resets it to the built-in defaults."""
+    db = SessionLocal()
+    try:
+        if values is None:
+            _set(db, KEY_VISIBILITY, None)
+            return list(DEFAULT_VISIBILITY_WEIGHTS)
+        merged = coerce_visibility_weights(values)
+        _set(db, KEY_VISIBILITY, json.dumps(merged))
+        return merged
+    finally:
+        db.close()
+
 
 # ---------------------------------------------------------------------------
 # Ahrefs metric cache TTL

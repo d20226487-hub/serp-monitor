@@ -17,6 +17,7 @@ from ..ai.prompts import (
 from ..app_settings import (
     AI_PROVIDER_FIELDS,
     DEFAULT_OPPORTUNITY_FORMULA,
+    DEFAULT_VISIBILITY_WEIGHTS,
     DEFAULT_RATES,
     PROVIDER_FIELDS,
     ahrefs_status,
@@ -37,6 +38,7 @@ from ..app_settings import (
     get_ai_temperature,
     get_ai_thinking_budget,
     get_opportunity_formula,
+    get_visibility_weights,
     get_provider_creds,
     get_provider_rates,
     provider_status,
@@ -50,6 +52,7 @@ from ..app_settings import (
     set_ai_temperature,
     set_ai_thinking_budget,
     set_opportunity_formula,
+    set_visibility_weights,
     set_provider_rates,
     set_serpapi_key,
 )
@@ -65,6 +68,7 @@ from ..providers.ahrefs_batch import (
     verify_api_key,
 )
 from ..scheduler import scheduler_timezone
+from ..visibility import cumulative
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -419,3 +423,39 @@ def reset_opportunity():
     """Drop the global override, reverting to the built-in defaults."""
     saved = set_opportunity_formula(None)
     return {"formula": saved, "defaults": dict(DEFAULT_OPPORTUNITY_FORMULA)}
+
+
+# --- Visibility weights --------------------------------------------------------
+
+def _visibility_payload(weights: list[float]) -> dict:
+    """The curve, its running totals, and what it would revert to.
+
+    The running totals ship with it because they are what a reader checks the
+    curve against — "positions 1-3 hold 80% of the page" — and computing them
+    on the server keeps one definition of the arithmetic rather than a second
+    copy in the UI that can drift.
+    """
+    return {
+        "weights": weights,
+        "cumulative": cumulative(weights),
+        "defaults": list(DEFAULT_VISIBILITY_WEIGHTS),
+    }
+
+
+@router.get("/visibility")
+def get_visibility():
+    return _visibility_payload(get_visibility_weights())
+
+
+@router.put("/visibility")
+def update_visibility(payload: dict):
+    """Save the global curve. A list that cannot be read as weights falls back
+    to the defaults whole rather than being repaired entry by entry — position
+    is carried by order, so a partial repair changes what every weight means."""
+    return _visibility_payload(set_visibility_weights((payload or {}).get("weights")))
+
+
+@router.delete("/visibility")
+def reset_visibility():
+    """Drop the global override, reverting to the built-in curve."""
+    return _visibility_payload(set_visibility_weights(None))
