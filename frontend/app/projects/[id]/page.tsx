@@ -172,7 +172,7 @@ export default function ProjectPage() {
         </StatTile>
       </div>
 
-      <section className="space-y-3">
+      <section className="space-y-6">
         <div className="flex flex-wrap items-center gap-2">
           <SectionTitle icon="activity">{t.positions.title}</SectionTitle>
           <div className="inline-flex overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700">

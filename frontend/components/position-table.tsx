@@ -73,7 +73,7 @@ export function PositionTable({ data }: { data: ProjectPositions }) {
         </label>
       )}
       {engines.map(engine => (
-        <section key={engine} className="space-y-4">
+        <section key={engine} className="space-y-5">
           <h3 className="flex items-center gap-2 border-b border-slate-200 pb-2 text-lg font-semibold tracking-tight dark:border-slate-800">
             <span className="grid h-7 w-7 place-items-center rounded-lg bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300">
               <Icon name="globe" className="h-4 w-4" />
@@ -84,8 +84,9 @@ export function PositionTable({ data }: { data: ProjectPositions }) {
             </span>
           </h3>
           {/* Roomier than the gap inside a table so the eye groups these as
-              one engine's set rather than as unrelated blocks. */}
-          <div className="space-y-6">
+              one engine's set rather than as unrelated blocks — but wide
+              enough that two stacked tables never read as one. */}
+          <div className="space-y-8">
             {(byEngine.get(engine) ?? []).map(serp => (
               <SerpTable key={serp.key} serp={serp} showRaw={showRaw} />
             ))}
