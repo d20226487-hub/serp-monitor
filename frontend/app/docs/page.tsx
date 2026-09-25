@@ -7,20 +7,20 @@ export const metadata: Metadata = {
 
 /* Утилитарные стили: типографика для длинного текста на чистом Tailwind
    (без плагина @tailwindcss/typography). */
-const H2 = "text-2xl font-semibold pt-10 mt-2 border-t dark:border-slate-800 pt-8 scroll-mt-20";
-const H3 = "text-lg font-semibold mt-6 mb-2";
-const H4 = "text-base font-semibold mt-4 mb-1";
-const P = "text-sm leading-7 text-slate-700 dark:text-slate-300";
-const UL = "list-disc list-outside ml-6 space-y-1 text-sm leading-7 text-slate-700 dark:text-slate-300";
-const OL = "list-decimal list-outside ml-6 space-y-1 text-sm leading-7 text-slate-700 dark:text-slate-300";
-const TABLE = "w-full text-sm border-collapse my-3";
-const TH = "text-left font-semibold border-b dark:border-slate-700 px-3 py-2 align-top";
-const TD = "border-b dark:border-slate-800 px-3 py-2 align-top text-slate-700 dark:text-slate-300";
+const H2 = "text-[28px] font-semibold tracking-tight pt-10 mt-2 border-t border-slate-200 dark:border-slate-800 pt-8 scroll-mt-20";
+const H3 = "text-xl font-semibold tracking-tight mt-7 mb-2";
+const H4 = "text-lg font-semibold mt-5 mb-1";
+const P = "text-base leading-7 text-slate-800 dark:text-slate-200 my-3";
+const UL = "list-disc list-outside ml-6 space-y-1.5 text-base leading-7 text-slate-800 dark:text-slate-200 my-3";
+const OL = "list-decimal list-outside ml-6 space-y-1.5 text-base leading-7 text-slate-800 dark:text-slate-200 my-3";
+const TABLE = "w-full text-[15px] border-collapse my-4";
+const TH = "text-left font-semibold border-b border-slate-200 dark:border-slate-700 px-3 py-2.5 align-top";
+const TD = "border-b border-slate-100 dark:border-slate-800 px-3 py-2.5 align-top leading-relaxed text-slate-800 dark:text-slate-200";
 const CODE = "font-mono text-[0.85em] bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded";
-const PRE = "font-mono text-xs bg-slate-100 dark:bg-slate-800 rounded p-3 overflow-x-auto my-3 leading-relaxed";
-const CALLOUT_NOTE = "border-l-4 border-blue-400 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30 px-4 py-3 my-3 text-sm leading-7 text-slate-700 dark:text-slate-300";
-const CALLOUT_WARN = "border-l-4 border-amber-400 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 my-3 text-sm leading-7 text-slate-700 dark:text-slate-300";
-const CALLOUT_TIP = "border-l-4 border-emerald-400 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 px-4 py-3 my-3 text-sm leading-7 text-slate-700 dark:text-slate-300";
+const PRE = "font-mono text-[13px] bg-slate-100 dark:bg-slate-800 rounded-lg p-3.5 overflow-x-auto my-4 leading-relaxed";
+const CALLOUT_NOTE = "border-l-4 border-sky-400 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/30 rounded-r-lg px-4 py-3.5 my-4 text-base leading-7 text-slate-800 dark:text-slate-200";
+const CALLOUT_WARN = "border-l-4 border-amber-400 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 rounded-r-lg px-4 py-3.5 my-4 text-base leading-7 text-slate-800 dark:text-slate-200";
+const CALLOUT_TIP = "border-l-4 border-emerald-400 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 rounded-r-lg px-4 py-3.5 my-4 text-base leading-7 text-slate-800 dark:text-slate-200";
 
 const TOC: { id: string; title: string }[] = [
   { id: "intro", title: "Что делает SERP Monitor" },
@@ -31,16 +31,26 @@ const TOC: { id: string; title: string }[] = [
   { id: "create-job", title: "Создание задачи" },
   { id: "cron", title: "Расписание (cron) и примеры" },
   { id: "results", title: "Просмотр результатов" },
+  { id: "analyzer", title: "Анализатор выдачи (режим 2)" },
+  { id: "projects", title: "Проекты и отслеживание позиций" },
+  { id: "visibility", title: "Видимость и монополизация" },
+  { id: "shown-host", title: "AMP, CDN и подменённые хосты" },
   { id: "verify", title: "Проверка корректности (Verify scraped queries)" },
   { id: "troubleshooting", title: "Частые проблемы" },
 ];
 
+/** Номер раздела берётся из порядка в оглавлении, а не проставляется руками:
+ *  вставка раздела в середину иначе молча расходится с содержанием. */
+const NUM: Record<string, number> = Object.fromEntries(
+  TOC.map((s, i) => [s.id, i + 1]),
+);
+
 export default function DocsPage() {
   return (
-    <article className="max-w-3xl mx-auto pb-20">
+    <article className="mx-auto max-w-4xl pb-20">
       <header className="mb-6">
-        <h1 className="text-3xl font-bold">Документация</h1>
-        <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+        <h1 className="text-3xl font-bold tracking-tight">Документация</h1>
+        <p className="mt-1.5 text-base text-slate-600 dark:text-slate-400">
           Подробное руководство по работе с SERP Monitor — на русском, единое для обоих
           языков интерфейса.
         </p>
@@ -51,11 +61,11 @@ export default function DocsPage() {
         aria-label="Содержание"
         className="my-6 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/40"
       >
-        <div className="text-sm font-semibold mb-2">Содержание</div>
-        <ol className="list-decimal list-outside ml-5 space-y-1 text-sm">
+        <div className="mb-2.5 text-base font-semibold">Содержание</div>
+        <ol className="ml-5 list-outside list-decimal space-y-1.5 text-base">
           {TOC.map((s) => (
             <li key={s.id}>
-              <a href={`#${s.id}`} className="text-blue-700 dark:text-blue-300 hover:underline">
+              <a href={`#${s.id}`} className="text-sky-700 hover:underline dark:text-sky-300">
                 {s.title}
               </a>
             </li>
@@ -65,17 +75,19 @@ export default function DocsPage() {
 
       {/* ───────────────────────── Что делает SERP Monitor ───────────────────────── */}
       <section id="intro">
-        <h2 className={H2}>1. Что делает SERP Monitor</h2>
+        <h2 className={H2}>{NUM["intro"]}. Что делает SERP Monitor</h2>
         <p className={P}>
           SERP Monitor — внутренний инструмент мониторинга поисковой выдачи Google и
           Яндекса. Он позволяет:
         </p>
         <ul className={UL}>
-          <li>Создавать задачи (jobs) с десятками ключевых слов и снимать SERP по разным комбинациям параметров;</li>
+          <li>Создавать задачи (jobs) с сотнями ключевых слов и снимать SERP по разным комбинациям параметров;</li>
           <li>Запускать задачи вручную или по расписанию (cron);</li>
           <li>Сохранять результаты в локальной БД и экспортировать в CSV;</li>
           <li>Сравнивать выдачу из разных гео и на разных устройствах (desktop / mobile);</li>
-          <li>Подключать трёх провайдеров: <strong>SerpAPI</strong>, <strong>Bright Data</strong>, <strong>Oxylabs</strong> — на выбор для каждой задачи.</li>
+          <li>Подключать четырёх провайдеров: <strong>SerpAPI</strong>, <strong>Bright Data</strong>, <strong>Oxylabs</strong>, <strong>DataForSEO</strong> — на выбор для каждой задачи;</li>
+          <li><strong>Анализировать выдачу</strong> (режим 2): метрики Ahrefs по каждому URL и домену, возраст доменов, вердикт AI о сложности — см. раздел «Анализатор выдачи»;</li>
+          <li><strong>Отслеживать позиции проекта</strong>: набор доменов, позиции по периодам, монополизация выдачи и видимость — см. «Проекты и отслеживание позиций».</li>
         </ul>
         <p className={P}>
           Один запуск задачи раскрывается в декартово произведение по осям{" "}
@@ -86,7 +98,7 @@ export default function DocsPage() {
 
       {/* ───────────────────────── Быстрый старт ───────────────────────── */}
       <section id="quickstart">
-        <h2 className={H2}>2. Быстрый старт</h2>
+        <h2 className={H2}>{NUM["quickstart"]}. Быстрый старт</h2>
         <p className={P}>
           Если вы только что развернули инструмент, эти 5 шагов проведут вас от пустой базы
           до первого результата:
@@ -125,7 +137,7 @@ export default function DocsPage() {
 
       {/* ───────────────────────── Провайдеры ───────────────────────── */}
       <section id="providers">
-        <h2 className={H2}>3. Настройка провайдеров</h2>
+        <h2 className={H2}>{NUM["providers"]}. Настройка провайдеров</h2>
         <p className={P}>
           Каждый провайдер настраивается на странице <strong>Настройки → Провайдеры</strong>.
           Все три провайдера сохраняются независимо; в задачах на форме «Провайдер»
@@ -327,7 +339,7 @@ export default function DocsPage() {
 
       {/* ───────────────────────── Концепции ───────────────────────── */}
       <section id="concepts">
-        <h2 className={H2}>4. <code className={CODE}>canonical_name</code>, <code className={CODE}>yandex_lr</code> и <code className={CODE}>uule</code></h2>
+        <h2 className={H2}>{NUM["concepts"]}. <code className={CODE}>canonical_name</code>, <code className={CODE}>yandex_lr</code> и <code className={CODE}>uule</code></h2>
         <p className={P}>
           Три ключевых идентификатора, без понимания которых легко получить выдачу не из
           того региона.
@@ -423,7 +435,7 @@ w+CAIQICIfQWxtYXR5LEFsbWF0eSBQcm92aW5jZSxLYXpha2hzdGFu`}
 
       {/* ───────────────────────── Локации ───────────────────────── */}
       <section id="locations">
-        <h2 className={H2}>5. Управление локациями (раздел «Настройки»)</h2>
+        <h2 className={H2}>{NUM["locations"]}. Управление локациями (раздел «Настройки»)</h2>
         <p className={P}>
           Сохранённые локации — единственный источник истины для городского таргетинга.
           Сидер при первом запуске на пустой БД заполняет ~30 городов СНГ/Евразии. Все
@@ -477,7 +489,7 @@ Bishkek,Bishkek,Kyrgyzstan | Bishkek | kg | City | 28658`}
 
       {/* ───────────────────────── Создание задачи ───────────────────────── */}
       <section id="create-job">
-        <h2 className={H2}>6. Создание задачи — что заполнять</h2>
+        <h2 className={H2}>{NUM["create-job"]}. Создание задачи — что заполнять</h2>
         <p className={P}>
           Открывается со страницы <strong>Новая задача</strong>. Все поля связаны;
           под формой в реальном времени отображается оценка количества запросов
@@ -486,8 +498,11 @@ Bishkek,Bishkek,Kyrgyzstan | Bishkek | kg | City | 28658`}
 
         <h3 className={H3}>Поля формы</h3>
         <ol className={OL}>
+          <li><strong>Режим</strong> — <strong>1 · Мониторинг выдачи</strong> (только снять SERP) или <strong>2 · Анализатор выдачи</strong> (снять и разобрать: метрики, возраст доменов, вердикт AI). Режим определяет, какие поля формы появятся ниже.</li>
           <li><strong>Название</strong> — любое короткое осмысленное (например, «Бренд X — KZ/RU»).</li>
-          <li><strong>Ключевые слова</strong> — по одному на строку, <strong>не более 100</strong>. Лишние молча отбрасываются. Регистр и пунктуация сохраняются как написано.</li>
+          <li><strong>Проект</strong> (необязательно) — задача попадёт в папку проекта и начнёт питать его страницу позиций. См. «Проекты и отслеживание позиций».</li>
+          <li><strong>Ключевые слова</strong> — по одному на строку, <strong>не более 1000</strong>. Строки сверх лимита не сохраняются, и форма об этом предупреждает. Регистр и пунктуация сохраняются как написано.</li>
+          <li><strong>Приводить AMP и CDN к показанному сайту</strong> — считать, что ранжируется сайт, который поисковик <em>напечатал</em>, а не тот, куда ведёт ссылка. Подробно и с предостережением — в разделе «AMP, CDN и подменённые хосты».</li>
           <li><strong>Провайдер</strong> — выберите того, у кого заполнены учётные данные на странице Настроек.</li>
           <li><strong>Поисковики</strong> — Google и/или Яндекс (можно оба сразу).</li>
           <li><strong>Устройства</strong> — desktop и/или mobile.</li>
@@ -535,7 +550,9 @@ Yandex:  ключевые × устройства × локации × язык�
             <li>
               <strong>Не выбирайте все локации сразу.</strong> 100 ключевых × 2 устройства ×
               30 локаций × 2 языка = 12 000 запросов на одну задачу. Большинство тарифов
-              этого не выдержат за один прогон.
+              этого не выдержат за один прогон. Верхний предел на прогон —
+              <code className={CODE}>MAX_QUERIES_PER_RUN</code> (по умолчанию 2000);
+              форма его не проверяет, поэтому считайте сами.
             </li>
             <li>
               <strong>Bright Data + Yandex без zone_raw</strong> — задача упадёт с ошибкой{" "}
@@ -575,7 +592,7 @@ Yandex:  ключевые × устройства × локации × язык�
 
       {/* ───────────────────────── Cron ───────────────────────── */}
       <section id="cron">
-        <h2 className={H2}>7. Расписание (cron) — формат и примеры</h2>
+        <h2 className={H2}>{NUM["cron"]}. Расписание (cron) — формат и примеры</h2>
 
         <h3 className={H3}>Формат cron-выражения</h3>
         <p className={P}>Пять полей, разделённых пробелами:</p>
@@ -689,7 +706,7 @@ Yandex:  ключевые × устройства × локации × язык�
 
       {/* ───────────────────────── Результаты ───────────────────────── */}
       <section id="results">
-        <h2 className={H2}>8. Просмотр результатов запуска</h2>
+        <h2 className={H2}>{NUM["results"]}. Просмотр результатов запуска</h2>
 
         <h3 className={H3}>Структура страницы</h3>
         <ul className={UL}>
@@ -729,9 +746,305 @@ brand-monitoring_05-05-2026_3.42.18-PM_run17_top10.csv`}
         </p>
       </section>
 
+      {/* ───────────────────────── Анализатор ───────────────────────── */}
+      <section id="analyzer">
+        <h2 className={H2}>{NUM["analyzer"]}. Анализатор выдачи (режим 2)</h2>
+        <p className={P}>
+          Второй режим задачи отвечает на другой вопрос. Мониторинг показывает,
+          <em>кто</em> стоит в выдаче; анализатор — <em>насколько тяжело туда попасть</em>.
+          Сначала выдача снимается как обычно, затем по каждому найденному URL
+          запрашиваются метрики, и по каждому ключевому слову считается порог входа.
+        </p>
+
+        <h3 className={H3}>Что подключается на форме задачи</h3>
+        <ul className={UL}>
+          <li>
+            <strong>Метрики Ahrefs по страницам</strong> — UR, DR, беклинки (dofollow),
+            ссылающиеся домены (dofollow). Запрашиваются в режиме точного URL, поэтому
+            UR считается по странице, а не по домену.
+          </li>
+          <li>
+            <strong>Метрики уровня домена</strong> — отдельный проход в режиме
+            <code className={CODE}>subdomains</code>. Именно они отличают слабую страницу
+            на <em>сильном</em> сайте от слабой страницы на слабом: по метрикам страницы
+            это не видно. Домены дедуплицируются гораздо сильнее URL, поэтому проход
+            заметно дешевле основного.
+          </li>
+          <li>
+            <strong>Возраст домена (WHOIS)</strong> — дата регистрации через DataForSEO.
+            Тарифицируется за <em>запрос</em> (~$0,12), а не за домен, и только если
+            домена ещё нет в кэше: даты регистрации не меняются, поэтому регулярная
+            задача платит один раз.
+          </li>
+          <li>
+            <strong>Вердикт AI</strong> — «сложность выдачи» по каждому ключевому слову.
+            Провайдер, модель и сам промпт настраиваются в Настройках; для метрик уровня
+            домена есть отдельный промпт.
+          </li>
+        </ul>
+
+        <h3 className={H3}>Как читать таблицу</h3>
+        <p className={P}>
+          Строка — ключевое слово. Метрики в ней — это <strong>среднее по когорте самых
+          слабых доменов</strong> в выбранной глубине (топ-3 / топ-5 / топ-10), а не
+          среднее по всей выдаче. Вопрос анализатора — «какой порог входа», а не «какие
+          тут есть сильные сайты»: сильные ничего не говорят о том, можно ли влезть.
+        </p>
+        <ul className={UL}>
+          <li><strong>Профиль выдачи</strong> — полоски по слотам глубины: сколько из них слабые страницы, сколько «вытянуты доменом», сколько сильные.</li>
+          <li><strong>Слабых позиций</strong> — сколько слотов занимают слабые страницы на слабых доменах. Это реалистичные цели.</li>
+          <li><strong>Проанализировано</strong> — по скольким из слотов глубины Ahrefs вообще вернул метрики.</li>
+          <li><strong>Сложность выдачи</strong> — вердикт AI, <strong>Перспектива</strong> — итоговая оценка возможности.</li>
+        </ul>
+        <p className={P}>
+          <strong>Перспектива</strong> — взвешенное геометрическое среднее частотности и
+          «выигрываемости». Ползунок под таблицей смещает вес: слева — быстрые победы,
+          справа — крупные цели. Константы формулы меняются глобально в
+          Настройках → «Формула перспективы»; прогон можно посчитать и по своей формуле,
+          не трогая глобальную.
+        </p>
+
+        <h3 className={H3}>Частотность</h3>
+        <p className={P}>
+          Частотность не приходит из выдачи — её вставляют. Кнопка{" "}
+          <strong>«Вставить частотности»</strong> принимает строки прямо из Ahrefs
+          Keywords Explorer или из CSV-выгрузки, вместе с шапкой. Частотность привязана
+          к стране, и если в выгрузке указана не та страна, форма об этом предупредит.
+        </p>
+
+        <h3 className={H3}>Экспорт</h3>
+        <p className={P}>
+          <strong>«Выгрузить таблицу»</strong> сохраняет CSV на выбранной глубине.
+          Кнопка <strong>«Столбцы»</strong> открывает список колонок: отмеченные
+          попадают в файл, а нижняя строка показывает точный порядок, в котором они
+          будут записаны. Выбор запоминается между прогонами — метрика, которую добавит
+          более поздний прогон, экспортируется, пока её не снять.
+        </p>
+
+        <div className={CALLOUT_NOTE}>
+          <strong>Юниты Ahrefs.</strong> Каждый <em>запрос</em> тарифицируется как
+          max(50, строк × за_строку) юнитов. Минимум в 50 юнитов за запрос означает, что
+          на небольшом прогоне дополнительные метрики фактически бесплатны — они
+          укладываются в тот же минимум.
+        </div>
+
+        <h3 className={H3}>Если прогон оборвался</h3>
+        <ul className={UL}>
+          <li>
+            <strong>Нет части выдачи.</strong> На странице запуска появится
+            «Повторить: N» — отправятся только недостающие запросы, остальной прогон не
+            пересобирается и не оплачивается заново.
+          </li>
+          <li>
+            <strong>Нет вердиктов AI.</strong> Над таблицей появится оранжевая полоса со
+            счётчиком и кнопкой <strong>«Оценить оставшиеся: N»</strong>. Судятся только
+            ключи без вердикта, выдача и метрики берутся уже снятые — платите только за
+            токены на недостающее.
+          </li>
+        </ul>
+      </section>
+
+      {/* ───────────────────────── Проекты ───────────────────────── */}
+      <section id="projects">
+        <h2 className={H2}>{NUM["projects"]}. Проекты и отслеживание позиций</h2>
+        <p className={P}>
+          Проект — это <strong>набор доменов</strong> плюс папка для задач. Домены
+          вставляются списком (по одному на строку или через запятую); схема, путь,{" "}
+          <code className={CODE}>www.</code> и мусор вокруг отрезаются, дубликаты
+          схлопываются. У задачи есть необязательное поле «Проект»: её прогоны начинают
+          питать страницу позиций этого проекта.
+        </p>
+
+        <h3 className={H3}>Страница проекта</h3>
+        <p className={P}>
+          Сверху — плитки: домены, отслеживаемые запросы, задачи, локации, поисковики.
+          Сами домены не перечисляются намеренно: проект, собранный из перестановок
+          бренда, доходит до сотен почти одинаковых хостов, и их список хоронил под собой
+          то, ради чего страницу открывают. Полный список — в форме редактирования
+          проекта.
+        </p>
+        <p className={P}>
+          Позиции идут первыми. Период выбирается чипами:{" "}
+          <strong>Сегодня / Вчера / Эта неделя / Этот месяц / Этот год / Свой период</strong>.
+          Интервал полуоткрытый: <code className={CODE}>[начало, конец)</code>, границы
+          считаются по локальному времени и переводятся в UTC.
+        </p>
+
+        <h3 className={H3}>Отдельная таблица на каждую выдачу</h3>
+        <p className={P}>
+          Выдача — это вся шестёрка: <strong>поисковик, устройство, страна, язык,
+          локация, домен Google</strong>. Любое из этих полей меняет страницу, которую
+          возвращает поисковик, поэтому две выдачи никогда не делят одну таблицу: иначе
+          в одной строке усреднились бы позиции, которых не было ни на одной реальной
+          странице. Таблицы сгруппированы по поисковику — Google и Яндекс это разные
+          продукты с разными результатами.
+        </p>
+
+        <h3 className={H3}>Два вида одного периода</h3>
+        <table className={TABLE}>
+          <thead>
+            <tr>
+              <th className={TH}>Вид</th>
+              <th className={TH}>Что показывает</th>
+              <th className={TH}>Главная колонка</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className={TD}><strong>Последние</strong></td>
+              <td className={TD}>Где запрос стоит сейчас: последний прогон каждого запроса внутри периода. Более новое измерение всегда вытесняет старое — «лучшее за период» скрыло бы падение.</td>
+              <td className={TD}>Монополизация</td>
+            </tr>
+            <tr>
+              <td className={TD}><strong>Средние</strong></td>
+              <td className={TD}>Как держались за период: строка на пару «запрос — домен» по всем прогонам этой выдачи.</td>
+              <td className={TD}>Видимость</td>
+            </tr>
+          </tbody>
+        </table>
+        <p className={P}>
+          <strong>Средняя позиция считается только по тем прогонам, где домен
+          присутствовал.</strong> У отсутствия нет позиции, которую можно усреднить:
+          глубина снятия — свойство прогона, а не домена, и подставлять «глубина + 1»
+          значило бы придумать число, которое меняется от того, как глубоко мы в тот день
+          снимали. Поэтому присутствие показано отдельной парой колонок —
+          «Присутствие» и «Отсутствие» в процентах от числа прогонов.
+        </p>
+
+        <h3 className={H3}>Пометки в ячейках</h3>
+        <ul className={UL}>
+          <li><strong>⇄</strong> — результат засчитан <em>показанному</em> хосту, а не тому, куда ведёт ссылка (см. следующий раздел);</li>
+          <li><strong>≈</strong> — среднее смешивает прогоны разных провайдеров, а они по-разному нумеруют выдачу;</li>
+          <li><strong>?</strong> — у части прогонов провайдер не записан (они сделаны до того, как это стало сохраняться), либо поисковик не сообщил показанный хост, хотя задача просила его использовать.</li>
+        </ul>
+        <div className={CALLOUT_NOTE}>
+          Ни одна из пометок не прячет число — они говорят, <em>насколько ему можно
+          верить</em>. Молчаливая подстановка хуже видимого пробела.
+        </div>
+      </section>
+
+      {/* ───────────────────────── Видимость ───────────────────────── */}
+      <section id="visibility">
+        <h2 className={H2}>{NUM["visibility"]}. Видимость и монополизация</h2>
+        <p className={P}>
+          Позиция — это ранг, а не количество. То, что #1 и #2 отличаются на единицу,
+          ничего не говорит о том, во сколько раз первая ценнее второй. Чтобы из ранга
+          получилось количество, каждой позиции назначается <strong>вес</strong>, и тогда
+          несколько позиций можно складывать.
+        </p>
+
+        <h3 className={H3}>Две величины</h3>
+        <ul className={UL}>
+          <li>
+            <strong>Монополизация</strong> (вид «Последние») — какую часть этой страницы
+            занимают домены проекта вместе. Считаются <em>все</em> занятые ими позиции,
+            каждая по своему весу. Рядом стоит счёт «N из M позиций»: процент без него
+            нечем проверить.
+          </li>
+          <li>
+            <strong>Видимость</strong> (вид «Средние») — та же доля страницы, усреднённая
+            по всем прогонам периода, <em>включая те, где домена не было</em>: они
+            считаются нулём. Это позиция и присутствие в одном числе.
+          </li>
+        </ul>
+
+        <h3 className={H3}>Настройка весов</h3>
+        <p className={P}>
+          <strong>Настройки → Веса видимости.</strong> По умолчанию кривая резкая —
+          50 / 20 / 10 / 7 / 5 / 3 / 2 / 1 / 1 / 1 — потому что инструмент следит за
+          брендовыми запросами, где первый результат забирает долю, немыслимую для
+          информационного запроса. В редакторе рядом с каждым весом показаны его доля и
+          накопленный итог («топ-N держит столько-то»).
+        </p>
+        <ul className={UL}>
+          <li><strong>Важны только соотношения.</strong> 5 / 2 / 1 означает то же, что 50 / 20 / 10: каждая оценка делится на вес, задействованный на измеряемой странице. Сумма не обязана быть сотней.</li>
+          <li><strong>Длина списка — это тоже настройка.</strong> Позиция ниже последней строки не стоит ничего, то есть кривая задаёт, до какой глубины выдача вообще считается видимой.</li>
+        </ul>
+
+        <h3 className={H3}>Короткая выдача и пропуски</h3>
+        <p className={P}>
+          Если прогон снял меньше результатов, чем позиций в кривой, те же 100% делятся
+          между теми позициями, что есть: на странице из семи результатов семь слотов
+          держат её целиком. Такие строки помечены <strong>⚠</strong> — и вот почему это
+          важно: <em>так выглядит и по-настоящему короткая выдача, и неполное снятие</em>.
+          Различить их позволяет только счёт позиций рядом с процентом.
+        </p>
+        <p className={P}>
+          <strong>Пропуски не перераспределяются.</strong> DataForSEO отдаёт{" "}
+          <code className={CODE}>rank_absolute</code>, поэтому органический результат
+          может стоять на #4, а #3 занимать реклама, которую мы не сохраняем. Это
+          внимание ушло рекламе, и раздавать его остальным было бы неправдой: знаменатель
+          считается до самой глубокой снятой позиции, а не по тем, что есть.
+        </p>
+        <div className={CALLOUT_WARN}>
+          Изменение кривой пересчитывает все представления сразу, <strong>включая прошлые
+          прогоны</strong>. Это способ читать измерения, а не часть самих измерений —
+          в отличие от формулы перспективы, которую прогон может зафиксировать за собой.
+        </div>
+      </section>
+
+      {/* ───────────────────────── Показанный хост ───────────────────────── */}
+      <section id="shown-host">
+        <h2 className={H2}>{NUM["shown-host"]}. AMP, CDN и подменённые хосты</h2>
+        <p className={P}>
+          Поисковик печатает над ссылкой один хост, а ссылка может вести на другой.
+          Честный случай — AMP и CDN: над ссылкой на <code className={CODE}>cloudfront.net</code>{" "}
+          напечатано <code className={CODE}>by.tribuna.com</code>, и с точки зрения
+          читателя ранжируется именно издатель. Нечестный — дорвей, печатающий чужой
+          бренд.
+        </p>
+
+        <h3 className={H3}>Откуда берётся показанный хост</h3>
+        <table className={TABLE}>
+          <thead>
+            <tr>
+              <th className={TH}>Провайдер</th>
+              <th className={TH}>Поле</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td className={TD}>DataForSEO</td><td className={TD}><code className={CODE}>breadcrumb</code>, <code className={CODE}>website_name</code></td></tr>
+            <tr><td className={TD}>SerpAPI</td><td className={TD}><code className={CODE}>displayed_link</code></td></tr>
+            <tr><td className={TD}>Oxylabs</td><td className={TD}><code className={CODE}>url_shown</code></td></tr>
+            <tr><td className={TD}>Bright Data</td><td className={TD}><code className={CODE}>display_link</code></td></tr>
+            <tr><td className={TD}>Яндекс (свой парсер)</td><td className={TD}>разметка пути в HTML</td></tr>
+          </tbody>
+        </table>
+        <p className={P}>
+          Значение сохраняется всегда и <strong>отдельно</strong> от хоста ссылки.
+          <code className={CODE}>NULL</code> означает «провайдер ничего не сообщил» и
+          никогда — «то же, что ссылка»: различать эти два случая и есть весь смысл.
+          Название сайта, которое не является адресом («Отзовик»), хостом не считается.
+        </p>
+
+        <h3 className={H3}>Опция задачи</h3>
+        <p className={P}>
+          <strong>«Приводить AMP и CDN к показанному сайту»</strong> — с ней результат
+          засчитывается показанному сайту. Подменённые результаты помечены <strong>⇄</strong>,
+          а исходный хост доступен в один клик: галочка над таблицей позиций показывает,
+          куда на самом деле ведёт каждая такая ссылка.
+        </p>
+        <div className={CALLOUT_WARN}>
+          <strong>Это то же поле, которое подделывает дорвей.</strong> Результат,
+          печатающий чужой бренд, будет засчитан этому бренду. Включайте опцию, когда
+          следите за издателями, и помните про неё, когда следите за дорвеями.
+        </div>
+
+        <h3 className={H3}>Дорвеи не редиректят</h3>
+        <p className={P}>
+          Проверено на живом примере: странный URL из выдачи отдаёт{" "}
+          <code className={CODE}>200</code> без единого редиректа — ни HTTP, ни{" "}
+          <code className={CODE}>meta refresh</code>, ни JS. Это полный клон контента,
+          у которого <code className={CODE}>title</code> и{" "}
+          <code className={CODE}>description</code> совпадают с оригиналом, а показанный
+          хост подменён. Поэтому «пройти по редиректам и подставить настоящий адрес» не
+          сработало бы: редиректа нет, подделан именно показанный хост.
+        </p>
+      </section>
+
       {/* ───────────────────────── Verify scraped queries ───────────────────────── */}
       <section id="verify">
-        <h2 className={H2}>9. Проверка корректности (раздел «Проверить выполненные запросы»)</h2>
+        <h2 className={H2}>{NUM["verify"]}. Проверка корректности (раздел «Проверить выполненные запросы»)</h2>
 
         <p className={P}>
           Это <strong>самый важный инструмент контроля</strong>. После каждого запуска,
@@ -904,7 +1217,7 @@ https://yandex.kz/search/?text=acme&lr=162&lang=ru`}
 
       {/* ───────────────────────── Troubleshooting ───────────────────────── */}
       <section id="troubleshooting">
-        <h2 className={H2}>10. Частые проблемы</h2>
+        <h2 className={H2}>{NUM["troubleshooting"]}. Частые проблемы</h2>
 
         <h3 className={H3}>Яндекс возвращает пустой результат</h3>
         <ul className={UL}>
@@ -913,6 +1226,34 @@ https://yandex.kz/search/?text=acme&lr=162&lang=ru`}
           <li>Oxylabs: проверьте, что в учётных данных правильный <em>SERP-суб-аккаунт</em>, а не основной аккаунт.</li>
           <li>Логи: <code className={CODE}>docker compose logs api --since=10m | findstr /i yandex</code> (Windows) или <code className={CODE}>| grep -i yandex</code> (Linux/Mac).</li>
         </ul>
+
+        <h3 className={H3}>Позиции «прыгают», хотя выдача не менялась</h3>
+        <p className={P}>
+          Почти всегда это смена провайдера, а не движение в выдаче.{" "}
+          <strong>DataForSEO пишет <code className={CODE}>rank_absolute</code></strong> —
+          номер с учётом рекламы и AI-блоков, поэтому органические результаты идут с
+          дырами (#1 #2 _ #4 #5). <strong>SerpAPI пишет органический номер</strong> —
+          он всегда подряд. Один и тот же слот на одной и той же странице приходит как
+          #9 и как #7.
+        </p>
+        <ul className={UL}>
+          <li>Сравнивайте прогоны <em>одного</em> провайдера. Провайдер записан у каждого прогона отдельно, потому что смена провайдера у задачи иначе переписала бы всю её историю.</li>
+          <li>В виде «Средние» такие ячейки помечены <strong>≈</strong>, а прогоны, сделанные до того, как провайдер стал сохраняться, — <strong>?</strong>.</li>
+        </ul>
+
+        <h3 className={H3}>Прогон завершился успешно, но результатов почти нет</h3>
+        <p className={P}>
+          Прогон может отчитаться «выполнено, 0 ошибок» и при этом сохранить единицы
+          строк на запрос. Проверьте число результатов у соседних прогонов той же задачи
+          на других провайдерах: если у одного их 27, а у другого 2, дело не в выдаче.
+        </p>
+        <div className={CALLOUT_WARN}>
+          Такой прогон <strong>искажает доли</strong>: монополизация и видимость делятся
+          на вес позиций, реально снятых на странице, поэтому на странице из двух
+          результатов одна позиция #1 прочитается как 70%+ страницы. Строки, посчитанные
+          от короткой страницы, помечены <strong>⚠</strong> — смотрите на счёт «N из M
+          позиций» рядом с процентом.
+        </div>
 
         <h3 className={H3}>Расписание не запускается</h3>
         <ul className={UL}>
@@ -974,7 +1315,7 @@ docker compose up -d web`}
         </pre>
       </section>
 
-      <footer className="mt-16 pt-6 border-t dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400">
+      <footer className="mt-16 border-t border-slate-200 pt-6 text-sm text-slate-600 dark:border-slate-800 dark:text-slate-400">
         <p>
           Не нашли ответа на свой вопрос? Откройте логи API через{" "}
           <code className={CODE}>docker compose logs api --since=15m</code> — большинство проблем
