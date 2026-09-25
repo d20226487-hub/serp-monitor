@@ -17,6 +17,7 @@ import { googleUule } from "@/lib/uule";
 import { Trash2, Pencil, Check, X, Copy } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import { GlobalFormulaSection } from "@/components/opportunity-formula";
+import { VisibilitySection } from "@/components/visibility-weights";
 import { OpportunityFormula } from "@/lib/opportunity";
 
 export default function SettingsPage() {
@@ -158,6 +159,9 @@ export default function SettingsPage() {
 
       {/* Cost rates */}
       <RatesSection onError={setErr} />
+
+      {/* What a SERP slot is worth */}
+      <VisibilitySection onError={setErr} />
 
       {/* Add one */}
       <section className="border rounded-md p-4 dark:border-slate-700 space-y-3">

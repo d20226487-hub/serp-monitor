@@ -2,11 +2,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { api, Job, Project, ProjectPositions } from "@/lib/api";
+import { api, Job, Project, ProjectAverages, ProjectPositions } from "@/lib/api";
 import { useT } from "@/lib/i18n";
-import { PositionTable } from "@/components/position-table";
+import { AveragePositionTable, PositionTable } from "@/components/position-table";
 import { Button, Card, Empty, ErrorNote, SectionTitle, StatTile } from "@/components/ui";
 import { Icon } from "@/components/icons";
+import { Tip } from "@/components/tip";
 import {
   RANGE_PRESETS, RangePreset, customRange, rangeFor, toInputValue, toQuery,
 } from "@/lib/date-range";
@@ -19,6 +20,10 @@ import {
  * "which jobs exist". The jobs and keywords below are what explains the table:
  * which schedules feed it and which terms it can possibly cover.
  */
+/** Which reading of the window is on screen. */
+type PositionView = "latest" | "average";
+const VIEWS: PositionView[] = ["latest", "average"];
+
 /** The names behind a count, small and wrapped. Capped because a project can
  *  watch more cities than a tile can show without becoming the wall of text
  *  this row replaced. */
@@ -52,6 +57,12 @@ export default function ProjectPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [positions, setPositions] = useState<ProjectPositions | null>(null);
+  const [averages, setAverages] = useState<ProjectAverages | null>(null);
+  // Where things stand, or how they have held up. Two readings of the same
+  // window rather than two tables stacked on one page: they cover the same
+  // SERPs and the same keywords, so showing both at once doubles the scrolling
+  // to say one thing twice.
+  const [view, setView] = useState<PositionView>("latest");
   const [preset, setPreset] = useState<RangePreset>("today");
   const [from, setFrom] = useState(() => toInputValue(new Date()));
   const [to, setTo] = useState(() => toInputValue(new Date()));
@@ -64,20 +75,24 @@ export default function ProjectPage() {
     [preset, from, to],
   );
 
-  const loadPositions = useCallback(async () => {
+  // Only the view being looked at is fetched: the averaged one reads every run
+  // in the range rather than the latest per row, and most visits never open it.
+  // Switching back re-fetches rather than showing what was cached a while ago.
+  const load = useCallback(async () => {
     if (!range) return;
     setLoading(true);
     try {
-      setPositions(await api.projectPositions(id, toQuery(range)));
+      if (view === "average") setAverages(await api.projectAverages(id, toQuery(range)));
+      else setPositions(await api.projectPositions(id, toQuery(range)));
       setErr(null);
     } catch (e: any) {
       setErr(e?.message ?? String(e));
     } finally {
       setLoading(false);
     }
-  }, [id, range]);
+  }, [id, range, view]);
 
-  useEffect(() => { loadPositions(); }, [loadPositions]);
+  useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
     api.getProject(id).then(setProject).catch(e => setErr(e?.message ?? String(e)));
@@ -123,6 +138,36 @@ export default function ProjectPage() {
     for (const j of jobs) for (const e of j.engines) seen.add(e);
     return [...seen].sort();
   }, [jobs]);
+
+  // Counted off whichever view is on screen, so the line under the controls
+  // always describes the table beneath it.
+  const summary = useMemo(() => {
+    // Spelled out per view rather than over a union: the two payloads carry
+    // different row types, and collapsing them here to save six lines only
+    // moves the cast somewhere less obvious.
+    if (view === "latest") {
+      return positions && {
+        runs: positions.runs.length,
+        rows: positions.serps.reduce((n, s) => n + s.rows.length, 0),
+        serps: positions.serps.length,
+      };
+    }
+    return averages && {
+      runs: averages.runs.length,
+      rows: averages.serps.reduce((n, s) => n + s.rows.length, 0),
+      serps: averages.serps.length,
+    };
+  }, [view, positions, averages]);
+
+  // A row is one measurement in the latest view and a whole window's worth in
+  // the averaged one, so the two are counted in different words rather than
+  // both being called measurements.
+  const summaryText =
+    summary && summary.runs > 0
+      ? view === "latest"
+        ? t.positions.fromRuns(summary.runs, summary.rows, summary.serps)
+        : t.positions.fromRunsAvg(summary.runs, summary.rows, summary.serps)
+      : null;
 
   if (!project && err) return <ErrorNote>{err}</ErrorNote>;
   if (!project) {
@@ -175,7 +220,33 @@ export default function ProjectPage() {
       <section className="space-y-6">
         <div className="flex flex-wrap items-center gap-2">
           <SectionTitle icon="activity">{t.positions.title}</SectionTitle>
-          <div className="inline-flex overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700">
+          <div
+            role="group"
+            aria-label={t.positions.view}
+            className="inline-flex overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700"
+          >
+            {VIEWS.map(v => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setView(v)}
+                aria-pressed={view === v}
+                title={v === "latest" ? t.positions.viewLatestHint : t.positions.viewAverageHint}
+                className={`border-l px-2.5 py-1 text-xs transition first:border-l-0 dark:border-slate-700 ${
+                  view === v
+                    ? "bg-slate-900 font-medium text-white dark:bg-slate-100 dark:text-slate-900"
+                    : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                }`}
+              >
+                {v === "latest" ? t.positions.viewLatest : t.positions.viewAverage}
+              </button>
+            ))}
+          </div>
+          {/* Pushed to the right, away from the title and the view toggle:
+              which reading you are looking at belongs beside the heading, when
+              it was taken is a separate choice and reads better as its own
+              group at the far end. */}
+          <div className="ml-auto inline-flex overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700">
             {RANGE_PRESETS.map(p => (
               <button
                 key={p}
@@ -209,21 +280,18 @@ export default function ProjectPage() {
               />
             </span>
           )}
-          {positions && positions.runs.length > 0 && (
-            <span className="text-xs text-slate-500 dark:text-slate-400">
-              {t.positions.fromRuns(
-                positions.runs.length,
-                positions.serps.reduce((n, s) => n + s.rows.length, 0),
-                positions.serps.length,
-              )}
-            </span>
-          )}
-          {loading && (
-            <span className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-              <Icon name="refresh" className="h-3 w-3 animate-spin" />
-              {t.common.loading}
-            </span>
-          )}
+          {/* Folded behind an ⓘ: how many rows came from how many runs is
+              worth being able to check, but it is not worth a sentence of
+              prose between the controls and the table. */}
+          <div className="flex items-center gap-2">
+            {loading && (
+              <span className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                <Icon name="refresh" className="h-3 w-3 animate-spin" />
+                {t.common.loading}
+              </span>
+            )}
+            {summaryText && <Tip text={summaryText} label={summaryText} />}
+          </div>
         </div>
 
         {preset === "custom" && !range && (
@@ -232,7 +300,9 @@ export default function ProjectPage() {
           </div>
         )}
         {err && <ErrorNote>{err}</ErrorNote>}
-        {positions && <PositionTable data={positions} />}
+        {view === "latest"
+          ? positions && <PositionTable data={positions} />
+          : averages && <AveragePositionTable data={averages} />}
       </section>
 
       <section className="space-y-2">

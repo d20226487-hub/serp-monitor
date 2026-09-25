@@ -46,7 +46,13 @@ export type Project = {
  *  project watching ten sites does not carry ten nulls per keyword. */
 export type PositionHit = {
   domain: string;
+  /** The best slot this domain holds — the position it "has". */
   position: number;
+  /** Every slot it holds on this page, ascending. A site with three listings
+   *  has taken three slots off the page, which is what a share counts. */
+  positions: number[];
+  /** What those slots are worth together, as a share of the page. */
+  share: number;
   url: string | null;
   /** The host the link actually opens. */
   linked_host: string | null;
@@ -67,16 +73,27 @@ export type PositionRow = {
   job_id: number;
   job_name: string | null;
   checked_at: string;
+  /** How much of this page the project holds between all its domains, and the
+   *  raw count behind it — "44%" means nothing without "3 of 8". */
+  share: number;
+  slots: number;
+  slots_total: number;
+  /** The page was shorter than the weight curve, so the missing slots' weight
+   *  was spread over the ones that were there and every share on this row is
+   *  larger than it would be on a full page. A genuinely short SERP and a
+   *  scrape that came back thin both land here; the slot count tells them
+   *  apart. */
+  short_page: boolean;
   /** What ranked, best position first. Empty = nothing of ours was in the
    *  positions that run captured. */
   hits: PositionHit[];
 };
 
-/** One results page, and every keyword measured on it.
+/** One results page.
  *
  *  A SERP is the whole tuple below: each field changes the page the engine
  *  returns, so two of them never share a table. */
-export type SerpGroup = {
+export type SerpIdentity = {
   /** Stable identity of the tuple, for React keys. */
   key: string;
   engine: string;
@@ -85,16 +102,91 @@ export type SerpGroup = {
   language: string | null;
   location: string | null;
   google_domain: string | null;
+};
+
+/** One results page, and every keyword measured on it. */
+export type SerpGroup = SerpIdentity & {
+  /** How much of this SERP the project holds on an average keyword. Averaged
+   *  rather than summed: each keyword is its own page. */
+  share: number;
   rows: PositionRow[];
+};
+
+/** One project domain's record on one keyword, across a window of runs. */
+export type AverageHit = {
+  domain: string;
+  /** Mean of the runs where it RANKED. Absences have no position to average,
+   *  so they are counted below instead of folded into this number. */
+  avg_position: number;
+  best: number;
+  worst: number;
+  /** How many runs it appeared in, out of how many measured the keyword. */
+  ranked_in: number;
+  runs: number;
+  /** The same pair as a share. Presence is not rank. */
+  present_pct: number;
+  absent_pct: number;
+  /** Share of the page this domain held, averaged over every run including
+   *  the ones it was absent from. Position and presence on one scale. */
+  visibility: number;
+  /** Who measured the runs behind this average. */
+  providers: string[];
+  /** Two providers number the same slot differently — DataForSEO counts ads
+   *  and AI blocks, SerpAPI does not — so this average blends two rulers. */
+  mixed_providers: boolean;
+  /** Readings from runs made before the provider was recorded. Not proof of a
+   *  mix, but not proof against one either. */
+  unknown_providers: number;
+  /** How many of the readings were credited to the host the engine displayed
+   *  rather than the one the link opens. */
+  substituted_in: number;
+};
+
+export type AverageRow = {
+  keyword: string;
+  /** Runs that measured this keyword on this SERP. */
+  runs: number;
+  /** How much of this page the project holds between all its domains. Shares
+   *  are fractions of one page, so they add up: owning every slot is 100. */
+  visibility: number;
+  /** What ranked at least once, best average first. Empty = nothing of ours
+   *  appeared in any run of the window. */
+  hits: AverageHit[];
+};
+
+export type AverageSerpGroup = SerpIdentity & { runs: number; rows: AverageRow[] };
+
+type RunRef = {
+  id: number; job_id: number; job_name: string | null;
+  status: string; started_at: string;
+  /** Which provider produced the run. null on runs from before this was
+   *  recorded — positions are not comparable across providers. */
+  provider: string | null;
 };
 
 export type ProjectPositions = {
   project: { id: number; name: string; domains: string[] };
-  runs: {
-    id: number; job_id: number; job_name: string | null;
-    status: string; started_at: string;
-  }[];
+  runs: RunRef[];
   serps: SerpGroup[];
+};
+
+/** The visibility curve: one weight per SERP position, position 1 first.
+ *
+ *  Any positive scale works — every score is divided by the weight in play on
+ *  the page being measured — so the list need not sum to anything. The running
+ *  totals come from the server so there is one definition of the arithmetic. */
+export type VisibilityWeights = {
+  weights: number[];
+  cumulative: number[];
+  defaults: number[];
+};
+
+/** The same window, averaged per (keyword, domain) instead of reduced to its
+ *  most recent run. */
+export type ProjectAverages = {
+  project: { id: number; name: string; domains: string[] };
+  runs: RunRef[];
+  serps: AverageSerpGroup[];
 };
 
 export type Job = {
@@ -381,6 +473,27 @@ export const api = {
     const tail = qs.toString();
     return req<ProjectPositions>(`/projects/${id}/positions${tail ? `?${tail}` : ""}`);
   },
+  /** The same window averaged per (keyword, domain) rather than reduced to the
+   *  latest run. Fetched separately because it reads every run in the range,
+   *  and most visits only want where things stand. */
+  projectAverages: (id: number, range?: { start: string; end: string }) => {
+    const qs = new URLSearchParams();
+    if (range) { qs.set("start", range.start); qs.set("end", range.end); }
+    const tail = qs.toString();
+    return req<ProjectAverages>(
+      `/projects/${id}/positions/average${tail ? `?${tail}` : ""}`,
+    );
+  },
+  /** What each SERP slot is worth, as a share of the page, plus its running
+   *  totals and the built-in curve to revert to. */
+  getVisibility: () => req<VisibilityWeights>("/settings/visibility"),
+  setVisibility: (weights: number[]) =>
+    req<VisibilityWeights>("/settings/visibility", {
+      method: "PUT",
+      body: JSON.stringify({ weights }),
+    }),
+  resetVisibility: () =>
+    req<VisibilityWeights>("/settings/visibility", { method: "DELETE" }),
   getProject: (id: number) => req<Project>(`/projects/${id}`),
   createProject: (body: { name: string; domains: string[]; notes?: string | null }) =>
     req<Project>("/projects", { method: "POST", body: JSON.stringify(body) }),

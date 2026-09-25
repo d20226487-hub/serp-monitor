@@ -498,7 +498,25 @@ melbet	kz	34	20,000	0.45`,
       `${rows} measurement(s) across ${serps} SERP(s), from ${runs} run(s) in this range`,
     colKeyword: "Keyword",
     colOurPositions: "Our positions",
+    colShare: "Monopolisation",
     colChecked: "Checked",
+    shareWhat:
+      "How much of this results page the project's domains occupy between them. 100% would be the whole page.\n\n" +
+      "Every slot they hold counts, and each counts for its own weight — so this is not simply the proportion of rows taken, and the list of positions beside it cannot be added up by eye.\n\n" +
+      "What a position is worth is set in Settings → Visibility weights. If a run captured fewer results than the curve has slots, the same 100% is divided between the slots that were there.",
+    shareSlots: (held: number, total: number) => `${held} of ${total} slot(s)`,
+    shareHint: (held: number, total: number) =>
+      `The project holds ${held} of the ${total} result(s) this run captured. Each of those slots counts for its own weight rather than for one row, which is why this is a percentage and not ${held}/${total}.`,
+    slotsHint: (held: number, total: number) =>
+      `${held} of the ${total} result(s) this run captured belong to a project domain. This is the raw count behind the percentage above, which weights the same slots by position.`,
+    shortPageHint: (total: number) =>
+      `⚠ This run captured only ${total} result(s), so the weight of the missing slots is spread over the ones that were there and every figure on this row is measured against a smaller page. A genuinely short SERP and a scrape that came back thin both look like this — the count is what tells them apart.`,
+    multiSlot: (n: number) => `${n} slots`,
+    multiSlotHint: (positions: string, share: number) =>
+      `This domain holds ${positions} on this page — worth ${share}% of it between them. The pill shows its best slot; the others count towards monopolisation too.`,
+    serpShare: (share: string) => `Monopolisation ${share}`,
+    serpShareHint:
+      "Averaged over the keywords on this SERP: on a typical one, this much of the page belongs to the project's domains. Each keyword is its own page, so these are averaged rather than added up. Taken from the most recent run of each keyword inside the range.",
     showRaw: (n: number) => `Show the host each link actually opens (${n} differ)`,
     serpCount: (n: number) => `${n} SERP(s)`,
     substituted: "displayed under a different host",
@@ -510,7 +528,50 @@ melbet	kz	34	20,000	0.45`,
     notRanking: "not in the captured results",
     ranking: (ranking: number, total: number) =>
       `ranking for ${ranking} of ${total} keyword(s)`,
-    footnote: "Each row shows its most recent run inside the range, listing every project domain that ranked, best position first. A keyword with nothing listed had no project domain among the positions that run captured — which is not the same as not ranking at all.",
+    footnote: "Each row shows its most recent run inside the range, listing every project domain that ranked, best position first. Monopolisation is how much of that page the project holds between all its domains, weighting each slot by position. A keyword with nothing listed had no project domain among the positions that run captured, which is not the same as not ranking at all.",
+
+    view: "View",
+    viewLatest: "Latest",
+    viewLatestHint: "Where each keyword stands now: its most recent run inside the range.",
+    viewAverage: "Average",
+    viewAverageHint: "Every run in the range, averaged per keyword and domain.",
+    avgFootnote: "One row per keyword and domain, over every run of that SERP in the range, sorted by visibility. The average position covers only the runs where the domain was actually present — an absence has no position to average — so presence is reported beside it as its own figure. Visibility combines the two: the share of the page the domain held, averaged over every run including the ones it missed. Best and worst bound the average; a wide spread over few runs is a weak reading, not a position.",
+    visibilityWhat:
+      "The share of the page this domain held, averaged over every run in the range — including the runs where it did not appear at all, which count as zero.\n\n" +
+      "Position and presence in one number: a domain that ranks rarely but high and one that is always there but lower are put on the same scale. Which of them comes out ahead depends on the weights.\n\n" +
+      "What a position is worth is set in Settings → Visibility weights.",
+    visibilityHint: (share: number, ranked: number, runs: number) =>
+      `${share}% of this page, averaged over all ${runs} run(s) — the ones it was absent from count as zero. Present on ${ranked} of them. Each slot is worth a share of the page you set in Settings, and a page with fewer results divides the same total between the slots it has.`,
+    projectShare: (share: string) => `${share} of this page`,
+    projectShareHint:
+      "What the project holds on this page between all its domains. Shares are fractions of one page, so they add up — holding every slot would be exactly 100%.",
+    colDomain: "Domain",
+    colVisibility: "Visibility",
+    colAvgPosition: "Avg. position",
+    colSpread: "Best – worst",
+    colPresent: "Present",
+    colAbsent: "Absent",
+    colRuns: "Runs",
+    fromRunsAvg: (runs: number, rows: number, serps: number) =>
+      `${rows} keyword row(s) across ${serps} SERP(s), averaged over ${runs} run(s) in this range`,
+    serpRuns: (n: number) => `${n} run(s) in range`,
+    presentHint: (ranked: number, runs: number) =>
+      `In the results on ${ranked} of ${runs} run(s)`,
+    absentHint: (missed: number, runs: number) =>
+      `Missing from the captured results on ${missed} of ${runs} run(s)`,
+    avgHint: (ranked: number, runs: number) =>
+      `Mean of ${ranked} run(s) where it ranked, out of ${runs} that measured it`,
+    neverRanked: (runs: number) =>
+      `Not in the captured results on any of ${runs} run(s)`,
+    substitutedIn: (n: number, runs: number) =>
+      `Credited to the host the engine displayed on ${n} of ${runs} run(s)`,
+    unknownProvider: "Averaged over runs of unrecorded provenance",
+    unknownProviderHint: (n: number, runs: number) =>
+      `${n} of the ${runs} run(s) behind this average predate per-run provider recording. Providers number a SERP differently, so this average may blend two scales without being able to say which.`,
+    mixedProviders: "Averaged across providers",
+    mixedProvidersHint: (providers: string) =>
+      `These runs came from ${providers}, which number a SERP differently — DataForSEO counts ads and AI blocks in a position, SerpAPI does not. The average blends the two, so treat it as approximate and compare like with like.`,
+    noAverages: "No runs in this range to average. Run one of the project's jobs, or widen the range.",
     noDomains: "This project has no domains yet. Add some by editing the project, and their positions will appear here.",
     noRuns: "No runs in this range. Run one of the project's jobs, or widen the range.",
     geos: "Locations",
@@ -877,6 +938,22 @@ melbet	kz	34	20,000	0.45`,
           api_key: { label: "Express API key (alternative)", placeholder: "AIza…" },
         },
       },
+    },
+    visibility: {
+      title: "Visibility weights",
+      help:
+        "What each SERP slot is worth, as a share of the page. Used for the Visibility column on a project's averaged positions. The defaults are steep — half the page in the first slot — because this tool watches branded queries, where #1 takes a share it never would on a research query.",
+      colPosition: "Position",
+      colWeight: "Weight",
+      colShare: "Share of page",
+      colCumulative: "Top N hold",
+      addSlot: "+ slot",
+      removeSlot: "− slot",
+      depth: (n: number) => `${n} slot(s) — anything below #${n} counts as invisible`,
+      allZero: "At least one weight has to be above zero, or nothing on the page is worth anything.",
+      reset: "Restore defaults",
+      footnote:
+        "Only the ratios matter: 5/2/1 says the same as 50/20/10, because every score is divided by the weight in play on the page being measured. That also calibrates short pages — a SERP with seven results divides the same total between those seven slots. Gaps left by ads are not redistributed: that attention went to the ad. Changing the curve re-scores every view immediately, including past runs — this is a way of reading the measurements, not part of them.",
     },
     rates: {
       title: "Cost rates",
@@ -1459,7 +1536,26 @@ melbet	kz	34	20 000	0,45`,
       `замеров: ${rows} по выдачам: ${serps}, прогонов за период: ${runs}`,
     colKeyword: "Запрос",
     colOurPositions: "Наши позиции",
+    colShare: "Монополизация",
     colChecked: "Проверено",
+    shareWhat:
+      "Какую часть этой страницы выдачи занимают домены проекта вместе. 100% — это вся страница.\n\n" +
+      "Учитываются все занятые ими позиции, и каждая — со своим весом. Поэтому это не просто доля занятых строк, и список позиций слева нельзя сложить на глаз.\n\n" +
+      "Сколько стоит позиция, задаётся в «Настройки → Веса видимости». Если прогон снял меньше результатов, чем позиций в кривой, те же 100% делятся между теми, что есть.",
+    shareSlots: (held: number, total: number) =>
+      `${held} из ${total} ${pluralRu(total, ["позиции", "позиций", "позиций"])}`,
+    shareHint: (held: number, total: number) =>
+      `Проект занимает ${held} из ${total} результатов, снятых этим прогоном. Каждая из этих позиций считается по своему весу, а не как одна строка, — поэтому здесь процент, а не ${held}/${total}.`,
+    slotsHint: (held: number, total: number) =>
+      `${held} из ${total} результатов, снятых этим прогоном, принадлежат доменам проекта. Это исходный счёт, стоящий за процентом выше, где те же позиции взвешены по их месту на странице.`,
+    shortPageHint: (total: number) =>
+      `⚠ Этот прогон снял всего ${total} ${pluralRu(total, ["результат", "результата", "результатов"])}, поэтому вес недостающих позиций распределён между теми, что есть, и все показатели в этой строке считаются от меньшей страницы. Так выглядит и по-настоящему короткая выдача, и неполное снятие — различить их позволяет именно количество.`,
+    multiSlot: (n: number) => `Позиций: ${n}`,
+    multiSlotHint: (positions: string, share: number) =>
+      `Этот домен занимает на странице позиции ${positions} — вместе это ${share}% страницы. В плашке показана лучшая из них, но в монополизацию входят все.`,
+    serpShare: (share: string) => `Монополизация ${share}`,
+    serpShareHint:
+      "Среднее по запросам этой выдачи: на типичном запросе столько страницы принадлежит доменам проекта. Каждый запрос — это своя страница, поэтому значения усредняются, а не складываются. Берётся последний прогон каждого запроса внутри периода.",
     showRaw: (n: number) => `Показать хост, на который ведёт ссылка (отличается: ${n})`,
     serpCount: (n: number) => `выдач: ${n}`,
     substituted: "показан под другим хостом",
@@ -1471,7 +1567,51 @@ melbet	kz	34	20 000	0,45`,
     notRanking: "нет в снятых результатах",
     ranking: (ranking: number, total: number) =>
       `ранжируется по ${ranking} из ${total} запросов`,
-    footnote: "В каждой строке — последний прогон внутри периода: перечислены все домены проекта, которые ранжируются, начиная с лучшей позиции. Если у запроса ничего не указано, ни одного домена проекта не было среди снятых позиций этого прогона, а это не то же самое, что «не ранжируется вовсе».",
+    footnote: "В каждой строке — последний прогон внутри периода: перечислены все домены проекта, которые ранжируются, начиная с лучшей позиции. «Монополизация» — какую часть этой страницы занимает проект всеми своими доменами, с учётом веса каждой позиции. Если у запроса ничего не указано, ни одного домена проекта не было среди снятых позиций этого прогона, а это не то же самое, что «не ранжируется вовсе».",
+
+    view: "Вид",
+    viewLatest: "Последние",
+    viewLatestHint: "Где запрос стоит сейчас: последний прогон внутри периода.",
+    viewAverage: "Средние",
+    viewAverageHint: "Все прогоны периода, усреднённые по запросу и домену.",
+    avgFootnote: "По строке на каждую пару «запрос — домен», по всем прогонам этой выдачи за период, отсортировано по видимости. В среднюю позицию входят только те прогоны, где домен действительно присутствовал: у отсутствия нет позиции, которую можно усреднить, поэтому присутствие показано отдельной величиной. Видимость объединяет то и другое: это доля страницы, которую занимал домен, усреднённая по всем прогонам, включая те, где его не было. Лучшая и худшая позиции ограничивают среднее: большой разброс на нескольких прогонах — это слабое измерение, а не позиция.",
+    visibilityWhat:
+      "Доля страницы, которую занимал этот домен, усреднённая по всем прогонам за период — включая те, где его вообще не было: они считаются нулём.\n\n" +
+      "Позиция и присутствие в одном числе: домен, который ранжируется редко, но высоко, и домен, который есть всегда, но ниже, попадают на одну шкалу. Кто из них окажется выше, зависит от весов.\n\n" +
+      "Сколько стоит позиция, задаётся в «Настройки → Веса видимости».",
+    visibilityHint: (share: number, ranked: number, runs: number) =>
+      `${share}% этой страницы — среднее по всем прогонам (${runs}); те, где домена не было, считаются нулём. Присутствует в ${ranked} из них. Каждая позиция стоит долю страницы, которая задаётся в настройках, а если результатов меньше, та же сумма делится между теми позициями, что есть.`,
+    projectShare: (share: string) => `${share} этой страницы`,
+    projectShareHint:
+      "Сколько проект занимает на этой странице всеми своими доменами. Доли — это части одной страницы, поэтому они складываются: занять все позиции — ровно 100%.",
+    colDomain: "Домен",
+    colVisibility: "Видимость",
+    colAvgPosition: "Средняя позиция",
+    colSpread: "Лучшая – худшая",
+    colPresent: "Присутствие",
+    colAbsent: "Отсутствие",
+    colRuns: "Прогонов",
+    fromRunsAvg: (runs: number, rows: number, serps: number) =>
+      `Строк: ${rows} по ${serps} выдачам, среднее по ${runs} ${pluralRu(runs, ["прогону", "прогонам", "прогонам"])} за период`,
+    serpRuns: (n: number) =>
+      `${n} ${pluralRu(n, ["прогон", "прогона", "прогонов"])} за период`,
+    presentHint: (ranked: number, runs: number) =>
+      `Есть в результатах в ${ranked} из ${runs} ${pluralRu(runs, ["прогона", "прогонов", "прогонов"])}`,
+    absentHint: (missed: number, runs: number) =>
+      `Нет в снятых результатах в ${missed} из ${runs} ${pluralRu(runs, ["прогона", "прогонов", "прогонов"])}`,
+    avgHint: (ranked: number, runs: number) =>
+      `Среднее по ${ranked} ${pluralRu(ranked, ["прогону", "прогонам", "прогонам"])}, где домен ранжировался, из ${runs} снятых`,
+    neverRanked: (runs: number) =>
+      `Нет в снятых результатах ни в одном из ${runs} ${pluralRu(runs, ["прогона", "прогонов", "прогонов"])}`,
+    substitutedIn: (n: number, runs: number) =>
+      `Засчитано показанному хосту в ${n} из ${runs} ${pluralRu(runs, ["прогона", "прогонов", "прогонов"])}`,
+    unknownProvider: "Среднее по прогонам с неизвестным провайдером",
+    unknownProviderHint: (n: number, runs: number) =>
+      `У ${n} из ${runs} ${pluralRu(runs, ["прогона", "прогонов", "прогонов"])} в этом среднем провайдер не записан — такие прогоны сделаны до того, как это стало сохраняться. Провайдеры нумеруют выдачу по-разному, так что среднее может смешивать две шкалы и не может это показать.`,
+    mixedProviders: "Среднее по разным провайдерам",
+    mixedProvidersHint: (providers: string) =>
+      `Прогоны сняты через ${providers}, а они нумеруют выдачу по-разному: DataForSEO учитывает рекламу и AI-блоки в номере позиции, SerpAPI — нет. Среднее смешивает две шкалы, поэтому считайте его приблизительным и сравнивайте однородные данные.`,
+    noAverages: "За этот период нечего усреднять. Запустите задачу проекта или расширьте период.",
     noDomains: "У проекта пока нет доменов. Добавьте их в настройках проекта — и здесь появятся позиции.",
     noRuns: "За этот период прогонов не было. Запустите задачу проекта или расширьте период.",
     geos: "Локации",
@@ -1849,6 +1989,22 @@ melbet	kz	34	20 000	0,45`,
           api_key: { label: "Express API-ключ (альтернатива)", placeholder: "AIza…" },
         },
       },
+    },
+    visibility: {
+      title: "Веса видимости",
+      help:
+        "Сколько стоит каждая позиция выдачи — как доля страницы. Используется для колонки «Видимость» в средних позициях проекта. Значения по умолчанию резкие: половина страницы приходится на первую позицию, потому что инструмент следит за брендовыми запросами, где первый результат забирает долю, немыслимую для информационного запроса.",
+      colPosition: "Позиция",
+      colWeight: "Вес",
+      colShare: "Доля страницы",
+      colCumulative: "Топ-N держит",
+      addSlot: "+ позиция",
+      removeSlot: "− позиция",
+      depth: (n: number) => `Позиций: ${n} — всё ниже #${n} считается невидимым`,
+      allZero: "Хотя бы один вес должен быть больше нуля, иначе на странице ничего не стоит ничего.",
+      reset: "Вернуть по умолчанию",
+      footnote:
+        "Важны только соотношения: 5/2/1 означает то же, что 50/20/10, потому что каждая оценка делится на вес, задействованный на измеряемой странице. Это же калибрует короткую выдачу: если результатов семь, та же сумма делится между этими семью позициями. Пропуски от рекламы не перераспределяются — это внимание ушло рекламе. Изменение кривой сразу пересчитывает все представления, включая прошлые прогоны: это способ читать измерения, а не часть самих измерений.",
     },
     rates: {
       title: "Стоимость запросов",
