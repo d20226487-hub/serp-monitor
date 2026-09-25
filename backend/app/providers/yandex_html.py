@@ -17,7 +17,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from selectolax.parser import HTMLParser
 
-from .base import ProviderError, ResultRow, domain_of
+from .base import ProviderError, ResultRow, domain_of, shown_host
 
 log = logging.getLogger(__name__)
 
@@ -104,12 +104,23 @@ def _extract_one(item) -> ResultRow | None:
     )
     description = _text(desc_node)
 
+    # The address Yandex PRINTS above the title. The API providers hand this
+    # over as a field; here it has to come out of the markup, which makes it
+    # the one source that can break quietly when Yandex reshuffles its class
+    # names — hence three selectors and a None when none of them match.
+    path_node = (
+        item.css_first(".Path-Item")
+        or item.css_first(".OrganicUrl-Path")
+        or item.css_first(".organic__path")
+    )
+
     return {
         "position": 0,  # filled in by caller
         "url": href,
         "title": title,
         "description": description,
         "domain": domain_of(href),
+        "shown_host": shown_host(_text(path_node)) if path_node is not None else None,
     }
 
 

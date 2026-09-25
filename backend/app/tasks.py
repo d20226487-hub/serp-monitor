@@ -157,6 +157,7 @@ def _persist_results(db: Session, run_id: int, variant: dict, rows: list[dict]) 
             google_domain=variant["google_domain"],
             position=r["position"],
             url=r.get("url"),
+            shown_host=r.get("shown_host"),
             title=r.get("title"),
             description=r.get("description"),
             domain=r.get("domain"),
@@ -818,6 +819,10 @@ async def run_job_async(run_id: int) -> None:
         db.commit()
 
         provider_name = getattr(job, "provider", None) or "serpapi"
+        # Pinned to the run before anything is fetched: the job's own
+        # provider is a live setting and will not still describe this run
+        # once someone switches it.
+        run.provider = provider_name
         _enter_phase(
             db, run, "scrape",
             f"{len(variants)} queries via {provider_name} (job {job.id})",

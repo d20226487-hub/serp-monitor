@@ -38,7 +38,10 @@ import httpx
 
 from .._redact import redact
 from ..app_settings import get_provider_creds
-from .base import ProviderConfigError, ProviderError, ResultRow, SerpProvider, domain_of
+from .base import (
+    ProviderConfigError, ProviderError, ResultRow, SerpProvider, domain_of,
+    shown_host,
+)
 
 BASE_URL = "https://api.dataforseo.com"
 GOOGLE_LIVE_URL = f"{BASE_URL}/v3/serp/google/organic/live/regular"
@@ -114,6 +117,15 @@ def _parse_organic(payload: dict, top_n: int) -> list[ResultRow]:
             "description": it.get("description"),
             # DataForSEO gives us `domain` directly; fall back to parsing the URL.
             "domain": it.get("domain") or domain_of(url),
+            # What Google PRINTS as the address. `breadcrumb` is that address;
+            # `website_name` is the site's name, which is a host only when the
+            # site has no name, so it is the fallback rather than the first
+            # choice. Usually the result's own host — when it is not, the
+            # result is displaying someone else's brand.
+            "shown_host": (
+                shown_host(it.get("breadcrumb"))
+                or shown_host(it.get("website_name"))
+            ),
         })
         if len(rows) >= top_n:
             break

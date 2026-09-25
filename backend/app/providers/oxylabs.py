@@ -31,7 +31,10 @@ import httpx
 
 from .._redact import redact
 from ..app_settings import get_provider_creds
-from .base import ProviderConfigError, ProviderError, ResultRow, SerpProvider, domain_of
+from .base import (
+    ProviderConfigError, ProviderError, ResultRow, SerpProvider, domain_of,
+    shown_host,
+)
 from .yandex_html import parse_yandex_html
 
 log = logging.getLogger(__name__)
@@ -174,6 +177,8 @@ def _organic_from_oxylabs(payload: dict, top_n: int, *, context: str = "") -> li
             "url": url,
             "title": r.get("title"),
             "description": r.get("desc") or r.get("snippet") or r.get("description"),
+            # Oxylabs: "the short-hand URL visible just below the description".
+            "shown_host": shown_host(r.get("url_shown")),
             "domain": domain_of(url),
         })
     return rows

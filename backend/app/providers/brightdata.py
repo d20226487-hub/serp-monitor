@@ -17,7 +17,10 @@ import httpx
 
 from .._redact import redact
 from ..app_settings import get_provider_creds
-from .base import ProviderConfigError, ProviderError, ResultRow, SerpProvider, domain_of
+from .base import (
+    ProviderConfigError, ProviderError, ResultRow, SerpProvider, domain_of,
+    shown_host,
+)
 from .uule import google_uule
 from .yandex_html import parse_yandex_html
 
@@ -98,6 +101,8 @@ def _parse_results(payload: dict, top_n: int) -> list[ResultRow]:
             "title": r.get("title"),
             "description": r.get("snippet") or r.get("description") or r.get("desc"),
             "domain": domain_of(url),
+            # Bright Data's name for the address Google prints.
+            "shown_host": shown_host(r.get("display_link")),
         })
     return rows
 

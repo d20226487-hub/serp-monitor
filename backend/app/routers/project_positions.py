@@ -31,12 +31,19 @@ something:
   a leading www. — while project domains are stored normalised. Subdomains do
   NOT match their parent: kz.example.com is a different target from
   example.com, which is exactly why the project stores them separately.
+
+* Which host a result COUNTS as depends on its job's `prefer_shown_host`. With
+  it on, a result the engine printed as by.tribuna.com over a cloudfront.net
+  link counts as by.tribuna.com, because that is what ranked as far as anyone
+  reading the page is concerned. The raw host travels alongside in every case,
+  so a substitution is always visible and never destroys the measurement.
 """
 from __future__ import annotations
 
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..db import get_db
@@ -93,11 +100,14 @@ def project_positions(
     started_to = _parse_stamp(end, "end")
 
     job_rows = (
-        db.query(Job.id, Job.name)
+        db.query(Job.id, Job.name, Job.prefer_shown_host)
         .filter(Job.project_id == project_id)
         .all()
     )
-    job_names = {jid: name for jid, name in job_rows}
+    job_names = {jid: name for jid, name, _ in job_rows}
+    # Per job, not per project: two jobs in one folder can legitimately disagree
+    # about whether an AMP result counts as its publisher.
+    prefers_shown = {jid: bool(pref) for jid, _, pref in job_rows}
 
     runs_q = db.query(JobRun).filter(JobRun.job_id.in_(job_names.keys() or [-1]))
     if started_from is not None:
@@ -144,25 +154,37 @@ def project_positions(
     if domains:
         wanted_hosts = [h for d in domains for h in _host_variants(d)]
         host_to_domain = {h: d for d in domains for h in _host_variants(d)}
+        # Both hosts are candidates, so the filter cannot be a plain IN on
+        # `domain` any more: a result whose LINK is a cloudfront host still
+        # matches when the engine displayed the publisher.
         hits = (
             db.query(
                 Result.keyword, *[getattr(Result, c) for c in SERP_COLUMNS],
                 Result.run_id, Result.domain, Result.position, Result.url,
+                Result.shown_host,
             )
             .filter(
                 Result.run_id.in_({rid for rid in latest.values()}),
-                Result.domain.in_(wanted_hosts),
+                or_(
+                    Result.domain.in_(wanted_hosts),
+                    Result.shown_host.in_(wanted_hosts),
+                ),
             )
             .all()
         )
         for row in hits:
             key = tuple(row[: 1 + len(SERP_COLUMNS)])
-            run_id, host, position, url = row[-4:]
+            run_id, host, position, url, displayed = row[-5:]
             # A result from a run this row did not pick is from an older run of
             # the same keyword; it is not this row's measurement.
             if latest.get(key) != run_id:
                 continue
-            domain = host_to_domain.get((host or "").lower())
+            linked_host = (host or "").lower()
+            use_displayed = prefers_shown.get(run_by_id[run_id].job_id, False)
+            # The host this result counts as. Only the displayed one when the
+            # job asked for that AND the engine actually reported one.
+            counted = (displayed or linked_host) if use_displayed else linked_host
+            domain = host_to_domain.get(counted)
             if domain is None:
                 continue
             cell_key = (*key, domain)
@@ -170,7 +192,25 @@ def project_positions(
             # A site can hold several slots on one SERP. The best one is the
             # position it "has"; the rest are extra listings.
             if prior is None or position < prior["position"]:
-                cells[cell_key] = {"domain": domain, "position": position, "url": url}
+                cells[cell_key] = {
+                    "domain": domain,
+                    "position": position,
+                    "url": url,
+                    # Raw values travel with every hit, so the table can reveal
+                    # what was really linked without another request.
+                    "linked_host": linked_host or None,
+                    "shown_host": displayed,
+                    # True when the two differ: an AMP publisher, a CDN, or a
+                    # doorway printing someone else's brand.
+                    "substituted": bool(
+                        displayed and linked_host and displayed != linked_host
+                    ),
+                    # The job asked for the displayed host and the engine gave
+                    # none, so this hit fell back to the raw link. Marked rather
+                    # than left looking resolved: a silent fallback is a quiet
+                    # wrong answer, which is worse than a visible gap.
+                    "unresolved": bool(use_displayed and not displayed),
+                }
 
     # One table per SERP, keywords sorted inside it. The SERPs themselves are
     # ordered by engine then device then place, so a project watching the same

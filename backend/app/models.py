@@ -98,6 +98,21 @@ class Job(Base):
     # per request that needs the network, against Ahrefs units. Off by default,
     # so no existing job starts spending on it.
     whois_enabled: Mapped[bool] = mapped_column(default=False)
+    # Treat the host the engine DISPLAYS as the host that ranked.
+    #
+    # An AMP or CDN result links to a delivery host while the engine prints
+    # the publisher: by.tribuna.com displayed over a cloudfront.net link. To
+    # anyone reading the SERP the publisher is what ranked, so this makes the
+    # tool agree with the page.
+    #
+    # It cuts both ways, which is why it is a per-job switch and not the
+    # default: the same field is what a doorway spoofs. begin-kz-boostwin.icu
+    # prints betboostwin.net, and with this on it is REPORTED as
+    # betboostwin.net. The raw host is never overwritten — `shown_host` and
+    # `domain` are both stored on every result either way — so the substitution
+    # is a reading of the data, reversible by unticking this or by revealing
+    # the raw hosts in any table that applies it.
+    prefer_shown_host: Mapped[bool] = mapped_column(default=False)
 
     runs: Mapped[list["JobRun"]] = relationship(back_populates="job", cascade="all,delete-orphan")
     project: Mapped["Project | None"] = relationship(back_populates="jobs")
@@ -160,6 +175,12 @@ class JobRun(Base):
     # stalled one look identical. Deliberately NOT cleared when the run ends: on
     # a failed run it is the answer to "where did it stop?".
     phase: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Which provider actually produced this run. Recorded per RUN because
+    # the job only carries its CURRENT provider: switching a job from
+    # SerpAPI to Oxylabs silently relabelled every run it had ever made, and
+    # positions are not comparable across providers, so history has to keep
+    # its own answer. NULL on runs from before this was recorded.
+    provider: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     job: Mapped[Job] = relationship(back_populates="runs")
     results: Mapped[list["Result"]] = relationship(back_populates="run", cascade="all,delete-orphan")
@@ -390,5 +411,11 @@ class Result(Base):
     title: Mapped[str | None] = mapped_column(Text, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     domain: Mapped[str | None] = mapped_column(String(255), index=True, nullable=True)
+    # The host the engine DISPLAYED for this result, when the engine reported
+    # one. Kept beside `domain` rather than replacing it: a result can be
+    # printed under one brand and link to another, and collapsing the two
+    # would hide exactly the case worth seeing. NULL means the provider
+    # reported nothing — never "same as the link".
+    shown_host: Mapped[str | None] = mapped_column(String(255), index=True, nullable=True)
 
     run: Mapped[JobRun] = relationship(back_populates="results")

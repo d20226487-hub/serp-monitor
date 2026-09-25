@@ -132,6 +132,14 @@ def _migrate_sqlite_columns() -> None:
         # Which project folder a job sits in. NULL = ungrouped, which is where
         # every job created before projects existed stays.
         ("jobs", "project_id", "INTEGER"),
+        # The host the engine displayed, when it differs from the link.
+        ("results", "shown_host", "VARCHAR(255)"),
+        # The provider that produced a run, so changing a job's provider
+        # stops rewriting what its old runs were measured with.
+        ("job_runs", "provider", "VARCHAR(20)"),
+        # Report the displayed host as the one that ranked (AMP/CDN results).
+        # Off for every existing job, so nothing starts reading differently.
+        ("jobs", "prefer_shown_host", "BOOLEAN NOT NULL DEFAULT 0"),
         # What was sent to the AI and what came back, for debugging a verdict.
         ("job_runs", "ahrefs_cached", "INTEGER"),
         ("job_runs", "ahrefs_fetched", "INTEGER"),

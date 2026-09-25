@@ -61,6 +61,9 @@ class JobBase(BaseModel):
     ahrefs_metrics: list[str] = Field(default_factory=list)
     ahrefs_domain_metrics: list[str] = Field(default_factory=list)
     whois_enabled: bool = False
+    # Report the host the engine displayed (AMP/CDN publisher) instead of the
+    # delivery host. Raw values stay stored either way.
+    prefer_shown_host: bool = False
 
 
 class JobCreate(JobBase):
@@ -85,6 +88,7 @@ class JobUpdate(BaseModel):
     ahrefs_metrics: list[str] | None = None
     ahrefs_domain_metrics: list[str] | None = None
     whois_enabled: bool | None = None
+    prefer_shown_host: bool | None = None
 
 
 class JobOut(JobBase):
@@ -109,7 +113,7 @@ class JobOut(JobBase):
     def _default_mode(cls, v):
         return v or "serp"
 
-    @field_validator("whois_enabled", mode="before")
+    @field_validator("whois_enabled", "prefer_shown_host", mode="before")
     @classmethod
     def _none_to_false(cls, v):
         return False if v is None else v

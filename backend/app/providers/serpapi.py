@@ -8,7 +8,10 @@ import httpx
 
 from .._redact import redact
 from ..app_settings import get_serpapi_key
-from .base import ProviderConfigError, ProviderError, ResultRow, SerpProvider, domain_of
+from .base import (
+    ProviderConfigError, ProviderError, ResultRow, SerpProvider, domain_of,
+    shown_host,
+)
 
 SEARCH_URL = "https://serpapi.com/search.json"
 ACCOUNT_URL = "https://serpapi.com/account"
@@ -24,6 +27,8 @@ def _parse_organic(data: dict, top_n: int) -> list[ResultRow]:
             "title": r.get("title"),
             "description": r.get("snippet") or r.get("description"),
             "domain": domain_of(url),
+            # SerpAPI's name for the address Google prints under the title.
+            "shown_host": shown_host(r.get("displayed_link")),
         })
     return rows
 
