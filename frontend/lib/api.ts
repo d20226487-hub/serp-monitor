@@ -30,8 +30,14 @@ export type Project = {
    *  Subdomains are kept. Stored for position tracking to use later. */
   domains: string[];
   notes: string | null;
-  /** Jobs currently filed in this project. */
+  /** What this project's jobs add up to, computed per response — the jobs
+   *  decide all of it, so a stored copy would drift. */
   job_count: number;
+  keyword_count: number;
+  /** Locations its jobs target, deduplicated. */
+  geos: string[];
+  /** Engines its jobs run on. */
+  engines: string[];
   created_at: string;
   updated_at: string;
 };

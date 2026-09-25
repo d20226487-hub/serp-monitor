@@ -1,11 +1,11 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { api, Project } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { ProjectForm } from "@/components/project-form";
 import { Button, Card, Empty, ErrorNote } from "@/components/ui";
-import { Icon } from "@/components/icons";
+import { Icon, type IconName } from "@/components/icons";
 
 /**
  * Projects: a client or site, the domains watched for it, and the jobs filed
@@ -15,6 +15,25 @@ import { Icon } from "@/components/icons";
  * shown here — a project with no jobs draws no folder over there, and seeing
  * "0 jobs" is how you find out why.
  */
+/** One fact about a project. The domains themselves are deliberately not here:
+ *  a project built from permutations runs to hundreds of near-identical hosts,
+ *  and eight of them plus "849 more" told the reader nothing the count did not.
+ *  What a project IS — how much it watches, where, and on which engines — is
+ *  what distinguishes one row from the next. */
+function Fact({
+  icon, children, title,
+}: { icon: IconName; children: ReactNode; title?: string }) {
+  return (
+    <span
+      title={title}
+      className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 dark:bg-slate-800"
+    >
+      <Icon name={icon} className="h-3 w-3" />
+      {children}
+    </span>
+  );
+}
+
 export default function ProjectsPage() {
   const { t } = useT();
   const [projects, setProjects] = useState<Project[] | null>(null);
@@ -117,13 +136,23 @@ export default function ProjectsPage() {
                   >
                     {p.name}
                   </Link>
-                  <span className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-                    <span className="rounded-md bg-slate-100 px-1.5 py-0.5 dark:bg-slate-800">
-                      {t.projects.domainsCount(p.domains.length)}
-                    </span>
-                    <span className="rounded-md bg-slate-100 px-1.5 py-0.5 dark:bg-slate-800">
-                      {t.projects.jobsCount(p.job_count)}
-                    </span>
+                  <span className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                    <Fact icon="globe">{t.projects.domainsCount(p.domains.length)}</Fact>
+                    <Fact icon="keywords">{t.home.kwCount(p.keyword_count)}</Fact>
+                    <Fact icon="list">{t.projects.jobsCount(p.job_count)}</Fact>
+                    {p.geos.length > 0 && (
+                      <Fact icon="flag" title={p.geos.join(", ")}>
+                        {p.geos.slice(0, 2).join(", ")}
+                        {p.geos.length > 2 && ` +${p.geos.length - 2}`}
+                      </Fact>
+                    )}
+                    {p.engines.length > 0 && (
+                      <Fact icon="search">
+                        {p.engines
+                          .map(e => (e === "yandex" ? t.variantLabel.yandex : t.variantLabel.google))
+                          .join(", ")}
+                      </Fact>
+                    )}
                   </span>
                   <div className="ml-auto flex items-center gap-1.5">
                     {/* Straight into the job form with the folder preselected —
@@ -153,23 +182,7 @@ export default function ProjectsPage() {
                 {p.notes && (
                   <div className="mt-1.5 text-sm text-slate-700 dark:text-slate-300">{p.notes}</div>
                 )}
-                {p.domains.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {p.domains.slice(0, 8).map(d => (
-                      <span
-                        key={d}
-                        className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-                      >
-                        {d}
-                      </span>
-                    ))}
-                    {p.domains.length > 8 && (
-                      <span className="px-1 py-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-                        {t.projects.andMore(p.domains.length - 8)}
-                      </span>
-                    )}
-                  </div>
-                )}
+
               </div>
             )
           ))}

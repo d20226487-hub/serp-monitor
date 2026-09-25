@@ -12,6 +12,8 @@ last one stops.
 """
 from __future__ import annotations
 
+from typing import NamedTuple
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -24,20 +26,65 @@ from ..schemas import ProjectCreate, ProjectOut, ProjectUpdate
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 
-def _job_counts(db: Session, project_ids: list[int]) -> dict[int, int]:
-    """Jobs per project, in one query rather than one per row."""
+class _Summary(NamedTuple):
+    """What a project's jobs add up to: how many, how many distinct keywords,
+    and where and on what they are measured.
+
+    Derived rather than stored, because the jobs are the only thing that
+    decides any of it — a copy kept on the project would drift the moment a
+    job changed. Keywords are COUNTED here rather than returned: a project can
+    hold thousands, and the list page needs the number, not the words.
+    """
+    jobs: int = 0
+    keywords: int = 0
+    geos: list[str] = []
+    engines: list[str] = []
+
+
+def _summaries(db: Session, project_ids: list[int]) -> dict[int, _Summary]:
+    """One query for every listed project, not one per row."""
     if not project_ids:
         return {}
     rows = (
-        db.query(Job.project_id, func.count(Job.id))
+        db.query(Job.project_id, Job.keywords, Job.locations, Job.engines)
         .filter(Job.project_id.in_(project_ids))
-        .group_by(Job.project_id)
         .all()
     )
-    return {pid: n for pid, n in rows if pid is not None}
+    acc: dict[int, dict] = {}
+    for pid, keywords, locations, engines in rows:
+        if pid is None:
+            continue
+        bucket = acc.setdefault(
+            pid, {"jobs": 0, "keywords": set(), "geos": {}, "engines": set()},
+        )
+        bucket["jobs"] += 1
+        for k in keywords or []:
+            # Case-insensitively: the same term entered in two jobs is one
+            # thing being tracked, not two.
+            term = str(k).strip().lower()
+            if term:
+                bucket["keywords"].add(term)
+        for loc in locations or []:
+            if not isinstance(loc, dict):
+                continue
+            name = (loc.get("name") or loc.get("canonical_name") or "").split(",")[0].strip()
+            if name:
+                bucket["geos"].setdefault(name.lower(), name)
+        for e in engines or []:
+            if e:
+                bucket["engines"].add(str(e))
+    return {
+        pid: _Summary(
+            jobs=b["jobs"],
+            keywords=len(b["keywords"]),
+            geos=sorted(b["geos"].values(), key=str.lower),
+            engines=sorted(b["engines"]),
+        )
+        for pid, b in acc.items()
+    }
 
 
-def _out(project: Project, job_count: int) -> ProjectOut:
+def _out(project: Project, summary: _Summary) -> ProjectOut:
     return ProjectOut(
         id=project.id,
         name=project.name,
@@ -45,7 +92,10 @@ def _out(project: Project, job_count: int) -> ProjectOut:
         notes=project.notes,
         created_at=project.created_at,
         updated_at=project.updated_at,
-        job_count=job_count,
+        job_count=summary.jobs,
+        keyword_count=summary.keywords,
+        geos=summary.geos,
+        engines=summary.engines,
     )
 
 
@@ -61,8 +111,8 @@ def _name_taken(db: Session, name: str, *, exclude_id: int | None = None) -> boo
 @router.get("", response_model=list[ProjectOut])
 def list_projects(db: Session = Depends(get_db)):
     projects = db.query(Project).order_by(func.lower(Project.name)).all()
-    counts = _job_counts(db, [p.id for p in projects])
-    return [_out(p, counts.get(p.id, 0)) for p in projects]
+    summaries = _summaries(db, [p.id for p in projects])
+    return [_out(p, summaries.get(p.id, _Summary())) for p in projects]
 
 
 @router.post("", response_model=ProjectOut)
@@ -78,7 +128,7 @@ def create_project(payload: ProjectCreate, db: Session = Depends(get_db)):
     db.add(project)
     db.commit()
     db.refresh(project)
-    return _out(project, 0)
+    return _out(project, _Summary())
 
 
 @router.get("/{project_id}", response_model=ProjectOut)
@@ -86,7 +136,7 @@ def get_project(project_id: int, db: Session = Depends(get_db)):
     project = db.get(Project, project_id)
     if not project:
         raise HTTPException(404)
-    return _out(project, _job_counts(db, [project_id]).get(project_id, 0))
+    return _out(project, _summaries(db, [project_id]).get(project_id, _Summary()))
 
 
 @router.patch("/{project_id}", response_model=ProjectOut)
@@ -108,7 +158,7 @@ def update_project(
         project.notes = payload.notes or None
     db.commit()
     db.refresh(project)
-    return _out(project, _job_counts(db, [project_id]).get(project_id, 0))
+    return _out(project, _summaries(db, [project_id]).get(project_id, _Summary()))
 
 
 @router.delete("/{project_id}")

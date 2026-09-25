@@ -31,10 +31,13 @@ class ProjectOut(ProjectBase):
     id: int
     created_at: datetime
     updated_at: datetime
-    # How many jobs sit in this project's folder. Computed per response rather
-    # than stored: the folder is derived from the association, and a counter
-    # would be one more thing to keep true.
+    # What the project's jobs add up to. All computed per response rather than
+    # stored: the jobs decide every one of these, and a stored copy would drift
+    # the moment one changed.
     job_count: int = 0
+    keyword_count: int = 0
+    geos: list[str] = Field(default_factory=list)
+    engines: list[str] = Field(default_factory=list)
 
     @field_validator("domains", mode="before")
     @classmethod
