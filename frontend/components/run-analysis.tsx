@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnalysisRow, AnalysisUrl, RunAnalysis } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { Button } from "@/components/ui";
 import {
   Band,
   BandThresholds,
@@ -455,17 +456,15 @@ function PromptInspector({ row }: { row: AnalysisRow }) {
           {row.ai_prompt ? (
             <>
               <div className="flex items-center gap-2">
-                <button
+                <Button variant="ghost" size="sm"
                   type="button"
-                  onClick={copy}
-                  className="px-2 py-0.5 text-xs rounded-md border dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
-                >
+                  onClick={copy}>
                   {copied ? t.analysis.promptCopied : t.analysis.promptCopy}
-                </button>
+                </Button>
               </div>
               {/* Monospace and pre-wrap: the markdown table only reads as a
                   table if its column alignment survives. */}
-              <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-96 overflow-y-auto p-2 rounded border dark:border-slate-800 bg-white dark:bg-slate-950">
+              <pre className="max-h-96 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-slate-200 bg-white p-2 font-mono text-xs dark:border-slate-800 dark:bg-slate-950">
                 {row.ai_prompt}
               </pre>
               {row.ai_raw && (
@@ -847,14 +846,14 @@ export function RunAnalysisTable({
 
   if (analysis.rows.length === 0) {
     return (
-      <div className="border rounded-md p-6 dark:border-slate-700 text-sm text-slate-600 dark:text-slate-400">
+      <div className="rounded-xl border border-slate-200 p-6 text-sm text-slate-600 dark:border-slate-800 dark:text-slate-400">
         {t.analysis.empty}
       </div>
     );
   }
 
   return (
-    <div className="border rounded-md dark:border-slate-700 overflow-hidden">
+    <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
       <div className="px-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 border-b dark:border-slate-800 flex flex-wrap items-center gap-x-3 gap-y-2">
         <span className="font-medium text-sm">{t.analysis.title}</span>
         <span className="text-xs text-slate-600 dark:text-slate-400">
@@ -874,14 +873,12 @@ export function RunAnalysisTable({
           >
             {t.formula.edit}{isOverride ? " *" : ""}
           </button>
-          <button
+          <Button variant="ghost" size="sm"
             type="button"
             onClick={() => setPasting(p => !p)}
-            aria-pressed={pasting}
-            className="px-2 py-0.5 text-xs rounded-md border dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
-          >
+            aria-pressed={pasting}>
             {t.analysis.pasteVolumes}
-          </button>
+          </Button>
           {/* A split button rather than a menu on the export: the common case
               is downloading the same columns as last run, and burying that
               behind a menu would cost a click every time. The right half has to
@@ -889,7 +886,7 @@ export function RunAnalysisTable({
               beside the export it just looks like a second, unrelated button,
               and the first thing you do is press Export and get a file. Hence
               the icon and the caret. */}
-          <div className="inline-flex rounded-md border dark:border-slate-700 overflow-hidden">
+          <div className="inline-flex overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700">
             <button
               type="button"
               onClick={exportCsv}
@@ -940,7 +937,7 @@ export function RunAnalysisTable({
             <span>{t.analysis.balanceVolume}</span>
           </label>
           <span className="text-xs text-slate-600 dark:text-slate-400">{t.analysis.depthLabel}</span>
-          <div className="inline-flex rounded-md border dark:border-slate-700 overflow-hidden">
+          <div className="inline-flex overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700">
             {DEPTHS.map(d => (
               <button
                 key={d}
@@ -1013,23 +1010,19 @@ export function RunAnalysisTable({
             disabled={savingFormula}
           />
           <div className="flex items-center gap-2">
-            <button
+            <Button variant="primary" size="sm"
               type="button"
               onClick={saveRunFormula}
-              disabled={savingFormula}
-              className="px-3 py-1 text-xs rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 disabled:opacity-50"
-            >
+              disabled={savingFormula}>
               {t.formula.runSaveOverride}
-            </button>
+            </Button>
             {isOverride && (
-              <button
+              <Button variant="ghost" size="sm"
                 type="button"
                 onClick={clearRunFormula}
-                disabled={savingFormula}
-                className="px-3 py-1 text-xs rounded-md border dark:border-slate-700 disabled:opacity-50"
-              >
+                disabled={savingFormula}>
                 {t.formula.runClearOverride}
-              </button>
+              </Button>
             )}
           </div>
         </div>

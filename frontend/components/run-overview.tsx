@@ -36,7 +36,7 @@ export function RunOverview({ results, runId }: { results: Result[]; runId: numb
   }
 
   return (
-    <details className="border rounded-md dark:border-slate-700 group" open>
+    <details className="group rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900" open>
       <summary className="cursor-pointer select-none px-4 py-2.5 flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-900/40">
         <span className="text-slate-600 dark:text-slate-300 group-open:rotate-90 transition-transform">▶</span>
         <span className="font-medium text-sm">{t.run.overview.title}</span>

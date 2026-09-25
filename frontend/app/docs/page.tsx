@@ -49,7 +49,7 @@ export default function DocsPage() {
       {/* Содержание */}
       <nav
         aria-label="Содержание"
-        className="border rounded-md p-4 my-6 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40"
+        className="my-6 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/40"
       >
         <div className="text-sm font-semibold mb-2">Содержание</div>
         <ol className="list-decimal list-outside ml-5 space-y-1 text-sm">

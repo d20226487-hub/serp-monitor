@@ -2,6 +2,7 @@
 import { useMemo, useState } from "react";
 import { Project } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { Button, inputClass } from "@/components/ui";
 import { parseDomains } from "@/lib/domain-paste";
 
 /**
@@ -52,7 +53,7 @@ export function ProjectForm({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3 border rounded-md p-4 dark:border-slate-700">
+    <form onSubmit={submit} className="min-w-0 space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="space-y-1.5">
         <label className="text-sm font-medium">{t.projects.name}</label>
         <input
@@ -60,7 +61,7 @@ export function ProjectForm({
           value={name}
           onChange={e => setName(e.target.value)}
           placeholder={t.projects.namePlaceholder}
-          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700"
+          className={inputClass}
         />
       </div>
 
@@ -76,7 +77,7 @@ export function ProjectForm({
           onChange={e => setDomainsText(e.target.value)}
           rows={8}
           placeholder={t.projects.domainsPlaceholder}
-          className="w-full px-3 py-2 rounded-md border font-mono text-sm bg-white dark:bg-slate-900 dark:border-slate-700"
+          className={`${inputClass} font-mono`}
         />
         <div className="text-xs space-y-0.5">
           <div className="text-slate-600 dark:text-slate-400">
@@ -105,27 +106,23 @@ export function ProjectForm({
         <input
           value={notes}
           onChange={e => setNotes(e.target.value)}
-          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700"
+          className={inputClass}
         />
       </div>
 
       {error && <div className="text-sm text-red-600 dark:text-red-400">{error}</div>}
 
       <div className="flex items-center gap-2">
-        <button
+        <Button variant="primary"
           type="submit"
-          disabled={busy}
-          className="px-3 py-1.5 rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-sm disabled:opacity-50"
-        >
+          disabled={busy}>
           {initial ? t.common.save : t.projects.create}
-        </button>
-        <button
+        </Button>
+        <Button variant="ghost"
           type="button"
-          onClick={onCancel}
-          className="px-3 py-1.5 rounded-md border dark:border-slate-700 text-sm"
-        >
+          onClick={onCancel}>
           {t.common.cancel}
-        </button>
+        </Button>
       </div>
     </form>
   );

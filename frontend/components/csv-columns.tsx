@@ -1,6 +1,7 @@
 "use client";
 import { useMemo } from "react";
 import { useT } from "@/lib/i18n";
+import { Button } from "@/components/ui";
 import { metricLabel } from "@/lib/metric-labels";
 import {
   AnalysisCsvColumn,
@@ -84,27 +85,21 @@ export function CsvColumnPicker({
           {t.analysis.csvSelected(selected.length, columns.length)}
         </span>
         <div className="flex items-center gap-1.5 ml-2">
-          <button
+          <Button variant="ghost" size="sm"
             type="button"
-            onClick={() => setEvery(true)}
-            className="px-2 py-0.5 text-xs rounded-md border dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
-          >
+            onClick={() => setEvery(true)}>
             {t.analysis.csvSelectAll}
-          </button>
-          <button
+          </Button>
+          <Button variant="ghost" size="sm"
             type="button"
-            onClick={() => setEvery(false)}
-            className="px-2 py-0.5 text-xs rounded-md border dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
-          >
+            onClick={() => setEvery(false)}>
             {t.analysis.csvSelectNone}
-          </button>
-          <button
+          </Button>
+          <Button variant="ghost" size="sm"
             type="button"
-            onClick={() => onChange(() => ({}))}
-            className="px-2 py-0.5 text-xs rounded-md border dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
-          >
+            onClick={() => onChange(() => ({}))}>
             {t.analysis.csvSelectDefault}
-          </button>
+          </Button>
         </div>
         <button
           type="button"
@@ -177,7 +172,7 @@ export function CsvColumnPicker({
         </div>
         {/* The one thing worth checking before downloading: nothing else on
             this panel tells you what order the columns come out in. */}
-        <pre className="text-[11px] font-mono whitespace-pre-wrap break-all p-2 rounded border dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 max-h-24 overflow-y-auto">
+        <pre className="max-h-24 overflow-y-auto whitespace-pre-wrap break-all rounded-lg border border-slate-200 bg-white p-2 font-mono text-[11px] text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
           {selected.map(c => c.header).join(",") || "—"}
         </pre>
       </div>

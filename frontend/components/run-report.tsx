@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnalysisDomain, AnalysisRow, AnalysisUrl, JobRun, RunAnalysis } from "@/lib/api";
 import { Lang, messagesFor } from "@/lib/i18n";
+import { Button, inputClass } from "@/components/ui";
 import {
   Depth,
   bandCounts,
@@ -292,7 +293,7 @@ export function RunReport({
   return (
     <div className="space-y-6">
       {/* Controls. print:hidden keeps them out of the PDF entirely. */}
-      <div className="print:hidden border rounded-md dark:border-slate-700 p-4 space-y-4">
+      <div className="min-w-0 space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm print:hidden dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-wrap items-center gap-3">
           <span className="font-medium text-sm">{t.report.controls}</span>
           <label className="text-xs flex items-center gap-1.5">
@@ -300,20 +301,18 @@ export function RunReport({
             <select
               value={lang}
               onChange={e => setLang(e.target.value as Lang)}
-              className="px-2 py-1 rounded border text-sm bg-white dark:bg-slate-900 dark:border-slate-700"
+              className={inputClass}
             >
               <option value="ru">RU</option>
               <option value="en">EN</option>
             </select>
           </label>
-          <button
+          <Button variant="primary"
             type="button"
             onClick={download}
-            disabled={busy}
-            className="ml-auto px-3 py-1.5 text-sm rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 disabled:opacity-50"
-          >
+            disabled={busy}>
             {busy ? t.report.downloading : t.report.download}
-          </button>
+          </Button>
         </div>
 
         <Picker
@@ -448,7 +447,7 @@ export function RunReport({
             return (
               <div
                 key={v.row.keyword}
-                className="border rounded-md dark:border-slate-700 p-3 space-y-2 break-inside-avoid"
+                className="space-y-2 break-inside-avoid rounded-xl border border-slate-200 p-3 dark:border-slate-800"
               >
                 <div className="flex flex-wrap items-baseline gap-2">
                   <span className="font-semibold">{v.row.keyword}</span>
@@ -530,7 +529,7 @@ export function RunReport({
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border rounded-md dark:border-slate-700 px-3 py-2">
+    <div className="rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-800">
       <div className="text-xs text-slate-500 dark:text-slate-400">{label}</div>
       <div className="text-lg font-semibold tabular-nums">{value}</div>
     </div>
@@ -552,10 +551,8 @@ function Picker({
     <div className="space-y-1.5">
       <div className="flex items-center gap-2">
         <span className="text-xs font-medium">{title}</span>
-        <button type="button" onClick={onAll}
-          className="text-xs px-2 py-0.5 rounded border dark:border-slate-700">{allLabel}</button>
-        <button type="button" onClick={onNone}
-          className="text-xs px-2 py-0.5 rounded border dark:border-slate-700">{noneLabel}</button>
+        <Button variant="ghost" size="sm" type="button" onClick={onAll}>{allLabel}</Button>
+        <Button variant="ghost" size="sm" type="button" onClick={onNone}>{noneLabel}</Button>
       </div>
       {hint && <div className="text-xs text-slate-500 dark:text-slate-400">{hint}</div>}
       <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">{children}</div>

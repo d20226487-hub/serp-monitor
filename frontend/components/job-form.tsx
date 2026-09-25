@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AhrefsSettings, api, Job, LocationRef, Project, ProviderRates, SavedLocation } from "@/lib/api";
 import { MultiCombobox, Option } from "./multi-combobox";
 import { useT } from "@/lib/i18n";
+import { Button, inputClass } from "@/components/ui";
 import { formatUsd, billingUnits } from "@/lib/cost";
 
 /** How many keywords one job may carry.
@@ -252,7 +253,7 @@ export function JobForm({ initial, onSaved }: Props) {
           value={name}
           onChange={e => setName(e.target.value)}
           placeholder={t.jobForm.namePlaceholder}
-          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700"
+          className={inputClass}
         />
       </div>
 
@@ -266,7 +267,7 @@ export function JobForm({ initial, onSaved }: Props) {
         <select
           value={projectId ?? ""}
           onChange={e => setProjectId(e.target.value ? Number(e.target.value) : null)}
-          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700"
+          className={inputClass}
         >
           <option value="">{t.jobForm.noProject}</option>
           {projects.map(p => (
@@ -309,7 +310,7 @@ export function JobForm({ initial, onSaved }: Props) {
           onChange={e => setKeywordsText(e.target.value)}
           rows={8}
           placeholder={t.jobForm.keywordsPlaceholder}
-          className="w-full px-3 py-2 rounded-md border font-mono text-sm bg-white dark:bg-slate-900 dark:border-slate-700"
+          className={`${inputClass} font-mono`}
         />
         <div className="text-xs text-slate-600 dark:text-slate-400">{t.jobForm.keywordsCount(keywords.length)}</div>
         {overflow > 0 && (
@@ -346,7 +347,7 @@ export function JobForm({ initial, onSaved }: Props) {
       </div>
 
       {mode === "analyzer" && (
-        <div className="border rounded-md p-4 dark:border-slate-700 space-y-3">
+        <div className="min-w-0 space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div>
             <div className="font-medium text-sm">{t.jobForm.ahrefsMetrics}</div>
             <div className="text-xs text-slate-600 dark:text-slate-400">{t.jobForm.ahrefsMetricsHelp}</div>
@@ -473,7 +474,7 @@ export function JobForm({ initial, onSaved }: Props) {
         <select
           value={provider}
           onChange={e => setProvider(e.target.value)}
-          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700"
+          className={inputClass}
         >
           <option value="serpapi">SerpAPI</option>
           <option value="brightdata">Bright Data</option>
@@ -586,12 +587,12 @@ export function JobForm({ initial, onSaved }: Props) {
             type="number" min={1} max={100}
             value={topN}
             onChange={e => setTopN(Number(e.target.value) || 10)}
-            className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700"
+            className={inputClass}
           />
         </div>
       </div>
 
-      <div className="border rounded-md p-4 dark:border-slate-700 space-y-3">
+      <div className="min-w-0 space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center justify-between">
           <div>
             <div className="font-medium text-sm">{t.jobForm.schedule}</div>
@@ -613,7 +614,7 @@ export function JobForm({ initial, onSaved }: Props) {
           value={cron}
           onChange={e => setCron(e.target.value)}
           placeholder={t.jobForm.cronPlaceholder}
-          className="w-full px-3 py-2 rounded-md border font-mono text-sm bg-white dark:bg-slate-900 dark:border-slate-700"
+          className={`${inputClass} font-mono`}
         />
         <div className="flex flex-wrap gap-2 text-xs">
           {[
@@ -623,16 +624,14 @@ export function JobForm({ initial, onSaved }: Props) {
             [t.jobForm.cronPresets.daily09And21, "0 9,21 * * *"],
             [t.jobForm.cronPresets.weekdays08, "0 8 * * 1-5"],
           ].map(([label, expr]) => (
-            <button
+            <Button variant="ghost"
               key={expr} type="button"
-              className="px-2 py-1 rounded border dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
-              onClick={() => setCron(expr)}
-            >{label}</button>
+              onClick={() => setCron(expr)}>{label}</Button>
           ))}
         </div>
       </div>
 
-      <div className="border rounded-md p-4 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/50">
         <div className="grid sm:grid-cols-2 gap-4">
           <div>
             <div className="text-sm font-medium mb-1">{t.jobForm.estimateTitle}</div>
@@ -668,20 +667,16 @@ export function JobForm({ initial, onSaved }: Props) {
       </div>
 
       <div className="flex flex-wrap gap-3">
-        <button
+        <Button variant="primary"
           disabled={saving}
-          onClick={() => save(false)}
-          className="px-4 py-2 rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 disabled:opacity-50"
-        >
+          onClick={() => save(false)}>
           {initial ? t.jobForm.saveChanges : t.jobForm.saveCreate}
-        </button>
-        <button
+        </Button>
+        <Button variant="ghost"
           disabled={saving}
-          onClick={() => save(true)}
-          className="px-4 py-2 rounded-md border dark:border-slate-700 disabled:opacity-50"
-        >
+          onClick={() => save(true)}>
           {initial ? t.jobForm.saveAndRunUpdate : t.jobForm.saveAndRunCreate}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -789,7 +784,7 @@ function EffectiveTargetingPanel({
   const showYandex = engines.includes("yandex");
 
   return (
-    <div className="border rounded-md p-3 dark:border-slate-700 space-y-2">
+    <div className="space-y-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
       <div className="text-xs uppercase tracking-wide font-semibold text-slate-600 dark:text-slate-400">
         {t.jobForm.targeting.header(provider)}
       </div>

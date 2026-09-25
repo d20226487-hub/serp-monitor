@@ -1,6 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useT } from "@/lib/i18n";
+import { Button, inputClass } from "@/components/ui";
 import { parseVolumePaste } from "@/lib/volume-paste";
 
 /**
@@ -67,7 +68,7 @@ export function VolumePastePanel({
         onChange={e => setText(e.target.value)}
         placeholder={t.analysis.pastePlaceholder}
         rows={6}
-        className="w-full px-2 py-1.5 text-xs font-mono rounded border bg-white dark:bg-slate-900 dark:border-slate-700"
+        className={`${inputClass} font-mono text-xs`}
       />
 
       {text.trim() && (
@@ -124,16 +125,14 @@ export function VolumePastePanel({
       )}
 
       <div className="flex items-center gap-2">
-        <button
+        <Button variant="primary" size="sm"
           type="button"
           onClick={apply}
-          disabled={saving || parsed.matched.length === 0}
-          className="px-3 py-1 text-xs rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 disabled:opacity-40"
-        >
+          disabled={saving || parsed.matched.length === 0}>
           {saving
             ? t.common.loading
             : t.analysis.pasteApply(parsed.matched.length)}
-        </button>
+        </Button>
       </div>
     </div>
   );

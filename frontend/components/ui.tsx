@@ -9,7 +9,7 @@
 // Tones mean the same thing in both apps: red bad, amber warning, emerald
 // good, slate neutral, and sky reserved for structure — never for a verdict.
 
-import { type ReactNode } from "react";
+import { type MouseEvent, type ReactNode } from "react";
 import { Icon, isPhoneName, type IconName } from "@/components/icons";
 
 export function Card({
@@ -58,7 +58,9 @@ export function Button({
   title,
 }: {
   children: ReactNode;
-  onClick?: () => void;
+  /** Takes the event, so a button inside a <summary> or a <label> can stop the
+   *  click from also toggling its parent. A plain `() => void` still fits. */
+  onClick?: (e: MouseEvent<HTMLButtonElement>) => void;
   variant?: keyof typeof BUTTON_VARIANTS;
   disabled?: boolean;
   type?: "button" | "submit";

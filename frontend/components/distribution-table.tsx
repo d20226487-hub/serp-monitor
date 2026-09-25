@@ -41,7 +41,7 @@ export function DistributionTable({
     "cursor-pointer select-none hover:text-slate-900 dark:hover:text-slate-100";
 
   return (
-    <div className="border rounded-md dark:border-slate-700 overflow-hidden">
+    <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
       <div className="px-3 py-2 bg-slate-50 dark:bg-slate-900/50 border-b dark:border-slate-800 flex items-baseline gap-2">
         <span className="font-medium text-sm">{title}</span>
         <span className="text-xs text-slate-600 dark:text-slate-400">({rows.length})</span>

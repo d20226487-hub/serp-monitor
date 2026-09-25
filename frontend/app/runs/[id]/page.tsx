@@ -7,6 +7,7 @@ import { RunAnalysisTable } from "@/components/run-analysis";
 import { buildBrowserUrl, variantLabel } from "@/lib/browser-urls";
 import { ExternalLink } from "lucide-react";
 import { useT } from "@/lib/i18n";
+import { Button, inputClass } from "@/components/ui";
 import { RunOverview } from "@/components/run-overview";
 import { RunPhases } from "@/components/run-phases";
 import { formatUsd } from "@/lib/cost";
@@ -254,7 +255,7 @@ export default function RunPage() {
             <input
               type="number" min={1} max={100} value={topExport}
               onChange={e => setTopExport(Number(e.target.value) || 10)}
-              className="ml-2 w-16 px-2 py-1 rounded border bg-white dark:bg-slate-900 dark:border-slate-700"
+              className={`${inputClass} ml-2 !w-16`}
             />
           </label>
           {/* Only analyzer runs have anything to report on. */}
@@ -268,7 +269,7 @@ export default function RunPage() {
             href={api.exportUrl(id, topExport)}
             className="px-3 py-1.5 rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-sm"
           >{t.run.downloadCsv}</a>
-          <button onClick={copyAll} className="px-3 py-1.5 rounded-md border dark:border-slate-700 text-sm">{t.common.copyAll}</button>
+          <Button variant="ghost" onClick={copyAll}>{t.common.copyAll}</Button>
         </div>
       </div>
 
@@ -303,7 +304,7 @@ export default function RunPage() {
         value={filterKw}
         onChange={e => setFilterKw(e.target.value)}
         placeholder={t.run.filterPlaceholder}
-        className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700"
+        className={inputClass}
       />
 
       {/* Analyzer mode replaces the domain/URL distribution with the
@@ -324,7 +325,7 @@ export default function RunPage() {
       )}
 
       {verifyEntries.length > 0 && (
-        <details className="border rounded-md dark:border-slate-700 group">
+        <details className="group rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <summary className="cursor-pointer select-none px-4 py-2.5 flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-900/40">
             <span className="text-slate-600 dark:text-slate-300 group-open:rotate-90 transition-transform">▶</span>
             <span className="font-medium text-sm">{t.run.verify.title}</span>
@@ -390,15 +391,13 @@ export default function RunPage() {
                 <span className="text-sm text-slate-600 dark:text-slate-300">
                   {t.run.groupCount(totalRows, g.variants.length)}
                 </span>
-                <button
+                <Button variant="ghost"
                   onClick={e => {
                     // Inside a <summary>, a click would also toggle the panel.
                     e.preventDefault();
                     e.stopPropagation();
                     copyKeyword(g.keyword);
-                  }}
-                  className="ml-auto text-sm px-2.5 py-1 rounded border bg-white/70 dark:bg-slate-900/40 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-900"
-                >{t.common.copy}</button>
+                  }}>{t.common.copy}</Button>
               </summary>
               <div className="bg-white dark:bg-slate-900">
                 {g.variants.map((v, vi) => (
