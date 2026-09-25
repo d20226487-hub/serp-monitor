@@ -835,7 +835,7 @@ melbet	kz	34	20,000	0.45`,
         `Added ${added}, skipped ${skipped} (duplicates)`,
     },
     list: {
-      heading: (n: number) => `Saved locations (${n})`,
+      title: "Saved locations",
       perProviderHelp: (
         <>
           What gets sent per provider, derived from each row:{" "}
@@ -943,6 +943,8 @@ melbet	kz	34	20,000	0.45`,
       title: "Visibility weights",
       help:
         "What each SERP slot is worth, as a share of the page. Used for the Visibility column on a project's averaged positions. The defaults are steep — half the page in the first slot — because this tool watches branded queries, where #1 takes a share it never would on a research query.",
+      isDefault: "default curve",
+      customised: "customised",
       colPosition: "Position",
       colWeight: "Weight",
       colShare: "Share of page",
@@ -1886,7 +1888,7 @@ melbet	kz	34	20 000	0,45`,
         `Добавлено: ${added}, пропущено: ${skipped} (дубликаты)`,
     },
     list: {
-      heading: (n: number) => `Сохранённые локации (${n})`,
+      title: "Сохранённые локации",
       perProviderHelp: (
         <>
           Что отправляется в каждый провайдер на основе строки:{" "}
@@ -1994,6 +1996,8 @@ melbet	kz	34	20 000	0,45`,
       title: "Веса видимости",
       help:
         "Сколько стоит каждая позиция выдачи — как доля страницы. Используется для колонки «Видимость» в средних позициях проекта. Значения по умолчанию резкие: половина страницы приходится на первую позицию, потому что инструмент следит за брендовыми запросами, где первый результат забирает долю, немыслимую для информационного запроса.",
+      isDefault: "кривая по умолчанию",
+      customised: "изменена",
       colPosition: "Позиция",
       colWeight: "Вес",
       colShare: "Доля страницы",

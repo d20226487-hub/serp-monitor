@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useT } from "@/lib/i18n";
+import { Button, inputClass } from "@/components/ui";
 import { OpportunityFormula } from "@/lib/opportunity";
 
 /**
@@ -120,7 +121,7 @@ export function FormulaEditor({
                       step={f.step}
                       disabled={disabled}
                       onChange={e => set(f.key, Number(e.target.value))}
-                      className={`w-20 px-1.5 py-0.5 rounded border bg-white dark:bg-slate-900 dark:border-slate-700 font-mono ${
+                      className={`${inputClass} !w-20 font-mono ${
                         changed ? "border-amber-500 dark:border-amber-500" : ""
                       }`}
                     />
@@ -228,22 +229,18 @@ export function GlobalFormulaSection({
         disabled={saving}
       />
       <div className="flex items-center gap-2">
-        <button
+        <Button variant="primary"
           type="button"
           onClick={save}
-          disabled={saving}
-          className="px-3 py-1.5 text-sm rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 disabled:opacity-50"
-        >
+          disabled={saving}>
           {t.common.save}
-        </button>
-        <button
+        </Button>
+        <Button variant="ghost"
           type="button"
           onClick={reset}
-          disabled={saving}
-          className="px-3 py-1.5 text-sm rounded-md border dark:border-slate-700 disabled:opacity-50"
-        >
+          disabled={saving}>
           {t.formula.resetGlobal}
-        </button>
+        </Button>
         {saved && <span className="text-xs text-emerald-700 dark:text-emerald-300">{t.common.saved}</span>}
       </div>
     </div>

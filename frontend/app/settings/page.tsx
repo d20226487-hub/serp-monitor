@@ -14,9 +14,12 @@ import {
   SavedLocationInput,
 } from "@/lib/api";
 import { googleUule } from "@/lib/uule";
-import { Trash2, Pencil, Check, X, Copy } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import { GlobalFormulaSection } from "@/components/opportunity-formula";
+import {
+  Button, Callout, Card, Empty, ErrorNote, Field, Pill, SectionTitle, inputClass,
+} from "@/components/ui";
+import { Icon } from "@/components/icons";
 import { VisibilitySection } from "@/components/visibility-weights";
 import { OpportunityFormula } from "@/lib/opportunity";
 
@@ -131,19 +134,18 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold">{t.settings.title}</h1>
-        <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-          {t.settings.intro}
-        </p>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300">
+          <Icon name="sliders" className="h-4 w-4" />
+        </span>
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold tracking-tight">{t.settings.title}</h1>
+          <p className="text-sm text-slate-600 dark:text-slate-400">{t.settings.intro}</p>
+        </div>
       </div>
 
-      {err && (
-        <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 text-red-800 dark:text-red-200 rounded-md px-3 py-2 text-sm">
-          {err}
-        </div>
-      )}
+      {err && <ErrorNote>{err}</ErrorNote>}
 
       {/* Providers */}
       <ProvidersSection onError={setErr} />
@@ -164,60 +166,69 @@ export default function SettingsPage() {
       <VisibilitySection onError={setErr} />
 
       {/* Add one */}
-      <section className="border rounded-md p-4 dark:border-slate-700 space-y-3">
-        <h2 className="font-medium">{t.settings.addLocation.title}</h2>
-        <p className="text-xs text-slate-600 dark:text-slate-400">
-          {t.settings.addLocation.help}
-        </p>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2">
-          <input
-            value={add.canonical_name}
-            onChange={e => setAdd({ ...add, canonical_name: e.target.value })}
-            placeholder={t.settings.addLocation.phCanonical}
-            className="px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700"
-          />
-          <input
-            value={add.name ?? ""}
-            onChange={e => setAdd({ ...add, name: e.target.value })}
-            placeholder={t.settings.addLocation.phName}
-            className="px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700"
-          />
-          <input
-            value={add.country_code ?? ""}
-            onChange={e => setAdd({ ...add, country_code: e.target.value })}
-            placeholder={t.settings.addLocation.phCc}
-            className="px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700"
-          />
-          <select
-            value={add.target_type ?? ""}
-            onChange={e => setAdd({ ...add, target_type: e.target.value })}
-            className="px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700"
-          >
-            <option value="">{t.settings.addLocation.phType}</option>
-            <option value="Country">{t.settings.addLocation.typeOptions.Country}</option>
-            <option value="Region">{t.settings.addLocation.typeOptions.Region}</option>
-            <option value="City">{t.settings.addLocation.typeOptions.City}</option>
-            <option value="Other">{t.settings.addLocation.typeOptions.Other}</option>
-          </select>
-          <input
-            type="number"
-            value={add.yandex_lr ?? ""}
-            onChange={e => setAdd({ ...add, yandex_lr: e.target.value ? Number(e.target.value) : null })}
-            placeholder={t.settings.addLocation.phYandexLr}
-            className="px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700"
-          />
+      <Card title={<SectionTitle icon="flag">{t.settings.addLocation.title}</SectionTitle>}>
+        <div className="space-y-4">
+          <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+            {t.settings.addLocation.help}
+          </p>
+          {/* Labels rather than placeholders: a placeholder disappears the
+              moment anything is typed, and these five fields are not
+              guessable from their contents. */}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <Field label={t.settings.addLocation.phCanonical}>
+              <input
+                value={add.canonical_name}
+                onChange={e => setAdd({ ...add, canonical_name: e.target.value })}
+                className={`${inputClass} font-mono`}
+              />
+            </Field>
+            <Field label={t.settings.addLocation.phName}>
+              <input
+                value={add.name ?? ""}
+                onChange={e => setAdd({ ...add, name: e.target.value })}
+                className={inputClass}
+              />
+            </Field>
+            <Field label={t.settings.addLocation.phCc}>
+              <input
+                value={add.country_code ?? ""}
+                onChange={e => setAdd({ ...add, country_code: e.target.value })}
+                className={inputClass}
+              />
+            </Field>
+            <Field label={t.settings.addLocation.phType}>
+              <select
+                value={add.target_type ?? ""}
+                onChange={e => setAdd({ ...add, target_type: e.target.value })}
+                className={inputClass}
+              >
+                <option value="">{t.settings.addLocation.phType}</option>
+                <option value="Country">{t.settings.addLocation.typeOptions.Country}</option>
+                <option value="Region">{t.settings.addLocation.typeOptions.Region}</option>
+                <option value="City">{t.settings.addLocation.typeOptions.City}</option>
+                <option value="Other">{t.settings.addLocation.typeOptions.Other}</option>
+              </select>
+            </Field>
+            <Field label={t.settings.addLocation.phYandexLr}>
+              <input
+                type="number"
+                value={add.yandex_lr ?? ""}
+                onChange={e => setAdd({ ...add, yandex_lr: e.target.value ? Number(e.target.value) : null })}
+                className={`${inputClass} font-mono`}
+              />
+            </Field>
+          </div>
+          <Button variant="primary" disabled={busy} onClick={addOne}>
+            <Icon name="plus" className="h-3.5 w-3.5" />
+            {t.common.add}
+          </Button>
         </div>
-        <button
-          disabled={busy}
-          onClick={addOne}
-          className="px-4 py-2 rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 disabled:opacity-50"
-        >{t.common.add}</button>
-      </section>
+      </Card>
 
       {/* Opportunity formula — the global defaults every run inherits. */}
-      <section className="border rounded-md p-4 dark:border-slate-700 space-y-3">
-        <h2 className="font-medium">{t.formula.title}</h2>
-        <p className="text-xs text-slate-600 dark:text-slate-400">{t.formula.subtitle}</p>
+      <Card title={<SectionTitle icon="summary">{t.formula.title}</SectionTitle>}>
+        <div className="space-y-4">
+        <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">{t.formula.subtitle}</p>
         {formula && formulaDefaults ? (
           <GlobalFormulaSection
             initial={formula}
@@ -232,80 +243,110 @@ export default function SettingsPage() {
             }}
           />
         ) : (
-          <div className="text-xs text-slate-600 dark:text-slate-400">{t.common.loading}</div>
+          <div className="text-sm text-slate-600 dark:text-slate-400">{t.common.loading}</div>
         )}
-      </section>
+        </div>
+      </Card>
 
       {/* Bulk import */}
-      <section className="border rounded-md p-4 dark:border-slate-700 space-y-3">
-        <h2 className="font-medium">{t.settings.bulk.title}</h2>
-        <p className="text-xs text-slate-600 dark:text-slate-400">
-          {t.settings.bulk.help}
-        </p>
-        <textarea
-          value={bulk}
-          onChange={e => setBulk(e.target.value)}
-          rows={8}
-          placeholder={"Almaty,Almaty Province,Kazakhstan | Almaty | kz | City | 162\nTashkent,Tashkent Region,Uzbekistan | Tashkent | uz | City | 11353"}
-          className="w-full px-3 py-2 rounded-md border font-mono text-sm bg-white dark:bg-slate-900 dark:border-slate-700"
-        />
-        <div className="flex items-center gap-3">
-          <button disabled={busy} onClick={importBulk}
-            className="px-4 py-2 rounded-md border dark:border-slate-700 disabled:opacity-50">{t.common.import}</button>
-          {bulkResult && <span className="text-sm text-emerald-700 dark:text-emerald-300">{bulkResult}</span>}
+      <Card title={<SectionTitle icon="code">{t.settings.bulk.title}</SectionTitle>}>
+        <div className="space-y-4">
+          <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+            {t.settings.bulk.help}
+          </p>
+          <textarea
+            value={bulk}
+            onChange={e => setBulk(e.target.value)}
+            rows={8}
+            placeholder={"Almaty,Almaty Province,Kazakhstan | Almaty | kz | City | 162\nTashkent,Tashkent Region,Uzbekistan | Tashkent | uz | City | 11353"}
+            className={`${inputClass} font-mono`}
+          />
+          <div className="flex items-center gap-3">
+            <Button disabled={busy} onClick={importBulk}>{t.common.import}</Button>
+            {bulkResult && (
+              <span className="inline-flex items-center gap-1.5 text-sm text-emerald-700 dark:text-emerald-300">
+                <Icon name="check" className="h-3.5 w-3.5" />
+                {bulkResult}
+              </span>
+            )}
+          </div>
         </div>
-      </section>
+      </Card>
 
       {/* Saved list */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-3">
-          <h2 className="font-medium">{t.settings.list.heading(items.length)}</h2>
-          <input value={filter} onChange={e => setFilter(e.target.value)}
+      <Card
+        title={
+          <SectionTitle icon="list" count={items.length}>
+            {t.settings.list.title}
+          </SectionTitle>
+        }
+        actions={
+          <input
+            value={filter}
+            onChange={e => setFilter(e.target.value)}
             placeholder={t.common.filter}
-            className="ml-auto px-3 py-1.5 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700 text-sm" />
-        </div>
-
-        <p className="text-xs text-slate-600 dark:text-slate-400">
+            className={`${inputClass} !w-48`}
+          />
+        }
+        className="overflow-hidden"
+      >
+        <div className="space-y-3">
+        <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
           {t.settings.list.perProviderHelp}
         </p>
 
-        <div className="border rounded-md overflow-hidden dark:border-slate-700">
+        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 dark:bg-slate-900/50 text-left">
-              <tr>
-                <th className="px-3 py-2">{t.settings.list.cols.canonical}</th>
-                <th className="px-3 py-2">{t.settings.list.cols.name}</th>
-                <th className="px-3 py-2">{t.settings.list.cols.cc}</th>
-                <th className="px-3 py-2">{t.settings.list.cols.type}</th>
-                <th className="px-3 py-2">{t.settings.list.cols.yandexLr}</th>
-                <th className="px-3 py-2">{t.settings.list.cols.uule}</th>
-                <th className="px-3 py-2 w-28"></th>
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
+                <th className="px-3 py-2 font-medium">{t.settings.list.cols.canonical}</th>
+                <th className="px-3 py-2 font-medium">{t.settings.list.cols.name}</th>
+                <th className="px-3 py-2 font-medium">{t.settings.list.cols.cc}</th>
+                <th className="px-3 py-2 font-medium">{t.settings.list.cols.type}</th>
+                <th className="px-3 py-2 font-medium">{t.settings.list.cols.yandexLr}</th>
+                <th className="px-3 py-2 font-medium">{t.settings.list.cols.uule}</th>
+                <th className="w-28 px-3 py-2"></th>
               </tr>
             </thead>
             <tbody>
               {filtered.map(it => (
-                <tr key={it.id} className="border-t dark:border-slate-800 align-top">
+                <tr
+                  key={it.id}
+                  className="border-b border-slate-100 align-top last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40"
+                >
                   {editId === it.id ? (
                     <>
                       <td className="px-3 py-2"><input value={editDraft.canonical_name}
                         onChange={e => setEditDraft({ ...editDraft, canonical_name: e.target.value })}
-                        className="w-full px-2 py-1 rounded border bg-white dark:bg-slate-900 dark:border-slate-700" /></td>
+                        className={inputClass} /></td>
                       <td className="px-3 py-2"><input value={editDraft.name ?? ""}
                         onChange={e => setEditDraft({ ...editDraft, name: e.target.value })}
-                        className="w-full px-2 py-1 rounded border bg-white dark:bg-slate-900 dark:border-slate-700" /></td>
+                        className={inputClass} /></td>
                       <td className="px-3 py-2"><input value={editDraft.country_code ?? ""}
                         onChange={e => setEditDraft({ ...editDraft, country_code: e.target.value })}
-                        className="w-16 px-2 py-1 rounded border bg-white dark:bg-slate-900 dark:border-slate-700" /></td>
+                        className={`${inputClass} !w-16`} /></td>
                       <td className="px-3 py-2"><input value={editDraft.target_type ?? ""}
                         onChange={e => setEditDraft({ ...editDraft, target_type: e.target.value })}
-                        className="w-24 px-2 py-1 rounded border bg-white dark:bg-slate-900 dark:border-slate-700" /></td>
+                        className={`${inputClass} !w-24`} /></td>
                       <td className="px-3 py-2"><input type="number" value={editDraft.yandex_lr ?? ""}
                         onChange={e => setEditDraft({ ...editDraft, yandex_lr: e.target.value ? Number(e.target.value) : null })}
-                        className="w-24 px-2 py-1 rounded border bg-white dark:bg-slate-900 dark:border-slate-700" /></td>
+                        className={`${inputClass} !w-24`} /></td>
                       <td className="px-3 py-2"><UuleCell canonicalName={editDraft.canonical_name} /></td>
                       <td className="px-3 py-2 flex gap-2">
-                        <button onClick={saveEdit} className="text-emerald-700 dark:text-emerald-300"><Check className="w-4 h-4" /></button>
-                        <button onClick={() => setEditId(null)} className="text-slate-600 dark:text-slate-400"><X className="w-4 h-4" /></button>
+                        <button
+                          onClick={saveEdit}
+                          title={t.common.save}
+                          className="grid h-7 w-7 place-items-center rounded-lg transition hover:bg-slate-100 dark:hover:bg-slate-800 text-emerald-700 dark:text-emerald-400"
+                        >
+                          <Icon name="check" className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => setEditId(null)}
+                          title={t.common.cancel}
+                          className="grid h-7 w-7 place-items-center rounded-lg transition hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400"
+                        >
+                          <Icon name="cross" className="h-4 w-4" />
+                        </button>
                       </td>
                     </>
                   ) : (
@@ -317,11 +358,19 @@ export default function SettingsPage() {
                       <td className="px-3 py-2 font-mono">{it.yandex_lr ?? "—"}</td>
                       <td className="px-3 py-2"><UuleCell canonicalName={it.canonical_name} /></td>
                       <td className="px-3 py-2 flex gap-2">
-                        <button onClick={() => { setEditId(it.id); setEditDraft(it); }} className="text-slate-600 dark:text-slate-300">
-                          <Pencil className="w-4 h-4" />
+                        <button
+                          onClick={() => { setEditId(it.id); setEditDraft(it); }}
+                          title={t.common.edit}
+                          className="grid h-7 w-7 place-items-center rounded-lg transition hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
+                        >
+                          <Icon name="pencil" className="h-4 w-4" />
                         </button>
-                        <button onClick={() => del(it.id)} className="text-red-600 dark:text-red-400">
-                          <Trash2 className="w-4 h-4" />
+                        <button
+                          onClick={() => del(it.id)}
+                          title={t.common.delete}
+                          className="grid h-7 w-7 place-items-center rounded-lg transition hover:bg-slate-100 dark:hover:bg-slate-800 text-red-600 dark:text-red-400"
+                        >
+                          <Icon name="trash" className="h-4 w-4" />
                         </button>
                       </td>
                     </>
@@ -329,12 +378,17 @@ export default function SettingsPage() {
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={7} className="px-3 py-6 text-center text-slate-600 dark:text-slate-400">{t.settings.list.empty}</td></tr>
+                <tr>
+                  <td colSpan={7} className="px-3 py-6">
+                    <Empty>{t.settings.list.empty}</Empty>
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
         </div>
-      </section>
+        </div>
+      </Card>
     </div>
   );
 }
@@ -367,7 +421,9 @@ function UuleCell({ canonicalName }: { canonicalName: string }) {
         className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
         title={t.settings.list.copyUuleTitle}
       >
-        {copied ? <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3 h-3" />}
+        {copied
+          ? <Icon name="check" className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+          : <Icon name="copy" className="h-3 w-3" />}
       </button>
     </div>
   );
@@ -461,20 +517,18 @@ function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void 
   const value = draft ?? data.prompt;
 
   return (
-    <section className="border rounded-md p-4 dark:border-slate-700 space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 className="font-medium">{t.settings.aiAnalysis.title}</h2>
-        {data.is_custom ? (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/40 text-blue-800 dark:text-blue-200">
-            {t.settings.aiAnalysis.customised}
-          </span>
+    <Card
+      title={<SectionTitle icon="text">{t.settings.aiAnalysis.title}</SectionTitle>}
+      actions={
+        data.is_custom ? (
+          <Pill tone="info" icon="pencil">{t.settings.aiAnalysis.customised}</Pill>
         ) : (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-            {t.settings.aiAnalysis.usingDefault}
-          </span>
-        )}
-      </div>
-      <p className="text-xs text-slate-600 dark:text-slate-400">{t.settings.aiAnalysis.help}</p>
+          <Pill tone="neutral" icon="dash">{t.settings.aiAnalysis.usingDefault}</Pill>
+        )
+      }
+    >
+      <div className="space-y-3">
+      <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">{t.settings.aiAnalysis.help}</p>
 
       {/* Sampling and reasoning. Each field carries what the measurement
           actually showed, because two of the three look equally important and
@@ -499,7 +553,7 @@ function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void 
               value={tuning[key]}
               onChange={e => setTuning(v => ({ ...v, [key]: e.target.value }))}
               onBlur={saveTuning}
-              className="ml-2 w-28 px-2 py-1 rounded border text-sm bg-white dark:bg-slate-900 dark:border-slate-700"
+              className={`${inputClass} ml-2 !w-28`}
             />
             <span className="block text-xs text-slate-600 dark:text-slate-400 mt-0.5">{help}</span>
           </label>
@@ -507,7 +561,7 @@ function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void 
       </div>
 
       <div className="space-y-1">
-        <label className="text-xs font-medium">{t.settings.aiAnalysis.providerLabel}</label>
+        <label className="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">{t.settings.aiAnalysis.providerLabel}</label>
         <select
           value={data.provider ?? "auto"}
           onChange={e => pickProvider(e.target.value)}
@@ -524,35 +578,29 @@ function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void 
       </div>
 
       <div className="space-y-1">
-        <label className="text-xs font-medium">{t.settings.aiAnalysis.promptLabel}</label>
+        <label className="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">{t.settings.aiAnalysis.promptLabel}</label>
         <div className="text-xs text-slate-600 dark:text-slate-400">{t.settings.aiAnalysis.placeholders}</div>
         <textarea
           rows={16}
           value={value}
           onChange={e => setDraft(e.target.value)}
-          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700 text-xs font-mono"
+          className={`${inputClass} font-mono text-xs`}
         />
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <button
+        <Button variant="primary"
           disabled={draft == null || draft === data.prompt}
-          onClick={save}
-          className="px-3 py-1.5 rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-sm disabled:opacity-50"
-        >{t.common.save}</button>
-        <button onClick={reset} disabled={!data.is_custom}
-          className="px-3 py-1.5 rounded-md border dark:border-slate-700 text-sm disabled:opacity-50">
+          onClick={save}>{t.common.save}</Button>
+        <Button variant="ghost" onClick={reset} disabled={!data.is_custom}>
           {t.settings.aiAnalysis.reset}
-        </button>
+        </Button>
         {/* Loads the RU text into the editor as an UNSAVED draft — the user
             reviews and presses Save. Never writes over a saved prompt by itself. */}
-        <button onClick={() => setDraft(data.default_ru)}
-          className="px-3 py-1.5 rounded-md border dark:border-slate-700 text-sm">
+        <Button variant="ghost" onClick={() => setDraft(data.default_ru)}>
           {t.settings.aiAnalysis.loadRu}
-        </button>
+        </Button>
         {draft != null && draft !== data.prompt && (
-          <span className="text-xs text-amber-700 dark:text-amber-300">
-            {t.settings.aiAnalysis.unsaved}
-          </span>
+          <Pill tone="warn" icon="alert">{t.settings.aiAnalysis.unsaved}</Pill>
         )}
         {msg && <span className="text-sm text-emerald-700 dark:text-emerald-300">{msg}</span>}
       </div>
@@ -562,7 +610,7 @@ function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void 
           encodes is the part most worth tuning independently. */}
       <div className="pt-4 border-t dark:border-slate-800 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
-          <label className="text-xs font-medium">{t.settings.aiAnalysis.domainTitle}</label>
+          <label className="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">{t.settings.aiAnalysis.domainTitle}</label>
           {data.domain_is_custom && (
             <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/40 text-blue-800 dark:text-blue-200">
               {t.settings.aiAnalysis.customised}
@@ -574,30 +622,25 @@ function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void 
           rows={14}
           value={domainDraft ?? data.domain_prompt}
           onChange={e => setDomainDraft(e.target.value)}
-          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700 text-xs font-mono"
+          className={`${inputClass} font-mono text-xs`}
         />
         <div className="flex flex-wrap items-center gap-2 pt-1">
-          <button
+          <Button variant="primary"
             disabled={domainDraft == null || domainDraft === data.domain_prompt}
-            onClick={saveDomain}
-            className="px-3 py-1.5 rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-sm disabled:opacity-50"
-          >{t.common.save}</button>
-          <button onClick={resetDomain} disabled={!data.domain_is_custom}
-            className="px-3 py-1.5 rounded-md border dark:border-slate-700 text-sm disabled:opacity-50">
+            onClick={saveDomain}>{t.common.save}</Button>
+          <Button variant="ghost" onClick={resetDomain} disabled={!data.domain_is_custom}>
             {t.settings.aiAnalysis.domainReset}
-          </button>
-          <button onClick={() => setDomainDraft(data.domain_default_ru)}
-            className="px-3 py-1.5 rounded-md border dark:border-slate-700 text-sm">
+          </Button>
+          <Button variant="ghost" onClick={() => setDomainDraft(data.domain_default_ru)}>
             {t.settings.aiAnalysis.domainLoadRu}
-          </button>
+          </Button>
           {domainDraft != null && domainDraft !== data.domain_prompt && (
-            <span className="text-xs text-amber-700 dark:text-amber-300">
-              {t.settings.aiAnalysis.unsaved}
-            </span>
+            <Pill tone="warn" icon="alert">{t.settings.aiAnalysis.unsaved}</Pill>
           )}
         </div>
       </div>
-    </section>
+      </div>
+    </Card>
   );
 }
 
@@ -665,16 +708,18 @@ function AhrefsSection({ onError }: { onError: (msg: string | null) => void }) {
   if (!data) return null;
 
   return (
-    <section className="border rounded-md p-4 dark:border-slate-700 space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 className="font-medium">{t.settings.ahrefs.title}</h2>
-        {data.configured ? (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200">{t.settings.providers.configured}</span>
+    <Card
+      title={<SectionTitle icon="link">{t.settings.ahrefs.title}</SectionTitle>}
+      actions={
+        data.configured ? (
+          <Pill tone="good" icon="check">{t.settings.providers.configured}</Pill>
         ) : (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">{t.settings.providers.notSet}</span>
-        )}
-      </div>
-      <p className="text-xs text-slate-600 dark:text-slate-400">{t.settings.ahrefs.help}</p>
+          <Pill tone="neutral" icon="dash">{t.settings.providers.notSet}</Pill>
+        )
+      }
+    >
+      <div className="space-y-3">
+      <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">{t.settings.ahrefs.help}</p>
 
       {/* Cross-run metric cache. Its TTL is a freshness trade-off rather than a
           free win, so it is exposed rather than assumed. */}
@@ -692,26 +737,22 @@ function AhrefsSection({ onError }: { onError: (msg: string | null) => void }) {
             value={ttlDraft}
             onChange={e => setTtlDraft(e.target.value)}
             onBlur={saveTtl}
-            className="w-20 px-2 py-1 rounded border text-sm bg-white dark:bg-slate-900 dark:border-slate-700"
+            className={`${inputClass} !w-20`}
           />
           <span className="text-xs text-slate-600 dark:text-slate-400">
             {t.jobForm.ahrefsCacheDays}
           </span>
-          <button
-            onClick={clearCache}
-            className="ml-auto text-xs px-2.5 py-1 rounded border dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
-          >
+          <Button variant="ghost" size="sm"
+            onClick={clearCache}>
             {t.jobForm.ahrefsCacheClear}
-          </button>
+          </Button>
         </div>
         {Number(ttlDraft) === 0 && (
-          <div className="text-xs text-amber-700 dark:text-amber-300">
-            {t.jobForm.ahrefsCacheOff}
-          </div>
+          <Callout tone="warn" icon="alert">{t.jobForm.ahrefsCacheOff}</Callout>
         )}
       </div>
       <div className="space-y-1">
-        <label className="text-xs font-medium">{t.settings.ahrefs.apiKey}</label>
+        <label className="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">{t.settings.ahrefs.apiKey}</label>
         {data.configured && (
           <div className="text-xs text-slate-600 dark:text-slate-400">
             {t.settings.providers.savedSecret(data.last4, data.length)}
@@ -723,27 +764,30 @@ function AhrefsSection({ onError }: { onError: (msg: string | null) => void }) {
           value={draft}
           onChange={e => setDraft(e.target.value)}
           placeholder={t.settings.ahrefs.apiKeyPlaceholder}
-          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700 text-sm"
+          className={inputClass}
         />
       </div>
       <div className="flex flex-wrap gap-2">
-        <button onClick={save}
-          className="px-3 py-1.5 rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-sm">{t.common.save}</button>
-        <button disabled={busy} onClick={test}
-          className="px-3 py-1.5 rounded-md border dark:border-slate-700 text-sm disabled:opacity-50">
+        <Button variant="primary" onClick={save}>{t.common.save}</Button>
+        <Button variant="ghost" disabled={busy} onClick={test}>
           {busy ? t.settings.ai.testing : t.common.test}
-        </button>
-        <button onClick={clear}
-          className="px-3 py-1.5 rounded-md border dark:border-slate-700 text-sm text-red-600 dark:text-red-400">{t.common.clear}</button>
+        </Button>
+        <Button variant="danger" onClick={clear}>{t.common.clear}</Button>
       </div>
-      {msg && <div className="text-xs text-emerald-700 dark:text-emerald-300">{msg}</div>}
+      {msg && (
+        <span className="inline-flex items-center gap-1.5 text-sm text-emerald-700 dark:text-emerald-300">
+          <Icon name="check" className="h-3.5 w-3.5" />
+          {msg}
+        </span>
+      )}
       {testRes && (
-        <div className="text-xs bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded px-3 py-2">
+        <Callout tone="good" icon="check">
           {t.settings.ahrefs.testOk(testRes.units_billed ?? 0)}
-        </div>
+        </Callout>
       )}
       <p className="text-xs text-slate-600 dark:text-slate-400">{t.settings.ahrefs.footnote}</p>
-    </section>
+      </div>
+    </Card>
   );
 }
 
@@ -840,7 +884,7 @@ function AIProvidersSection({ onError }: { onError: (msg: string | null) => void
 
   return (
     <section className="space-y-3">
-      <h2 className="font-medium">{t.settings.ai.title}</h2>
+      <SectionTitle icon="robot">{t.settings.ai.title}</SectionTitle>
       <p className="text-xs text-slate-600 dark:text-slate-400">{t.settings.ai.help}</p>
       <div className="grid lg:grid-cols-2 gap-4">
         {META.map(meta => {
@@ -850,31 +894,31 @@ function AIProvidersSection({ onError }: { onError: (msg: string | null) => void
           const msg = msgs[meta.id];
           const anyConfigured = Object.values(status?.fields ?? {}).some(f => f.configured);
           return (
-            <div key={meta.id} className="border rounded-md p-4 dark:border-slate-700 space-y-3">
+            <div key={meta.id} className="min-w-0 space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="font-medium">{meta.name}</h3>
+                <h3 className="text-sm font-semibold tracking-tight">{meta.name}</h3>
                 {anyConfigured ? (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200">{t.settings.providers.configured}</span>
+                  <Pill tone="good" icon="check">{t.settings.providers.configured}</Pill>
                 ) : (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">{t.settings.providers.notSet}</span>
+                  <Pill tone="neutral" icon="dash">{t.settings.providers.notSet}</Pill>
                 )}
                 {/* Vertex accepts two auth modes; spell out which one the
                     stored config will actually use. */}
                 {status?.auth_mode && (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/40 text-blue-800 dark:text-blue-200">
+                  <Pill tone="info" icon="key">
                     {status.auth_mode === "service_account"
                       ? t.settings.ai.authServiceAccount
                       : t.settings.ai.authExpress}
-                  </span>
+                  </Pill>
                 )}
               </div>
-              <p className="text-xs text-slate-600 dark:text-slate-400">{meta.help}</p>
+              <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">{meta.help}</p>
 
               {meta.fields.map(f => {
                 const cur = status?.fields?.[f.key];
                 return (
                   <div key={f.key} className="space-y-1">
-                    <label className="text-xs font-medium">{f.label}</label>
+                    <label className="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">{f.label}</label>
                     {cur?.configured && (
                       <div className="text-xs text-slate-600 dark:text-slate-400 break-all">
                         {cur.last4
@@ -891,7 +935,7 @@ function AIProvidersSection({ onError }: { onError: (msg: string | null) => void
                         value={draft[f.key] ?? ""}
                         onChange={e => setDraft(meta.id, f.key, e.target.value)}
                         placeholder={f.placeholder}
-                        className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700 text-xs font-mono"
+                        className={`${inputClass} font-mono text-xs`}
                       />
                     ) : (
                       <input
@@ -900,7 +944,7 @@ function AIProvidersSection({ onError }: { onError: (msg: string | null) => void
                         value={draft[f.key] ?? ""}
                         onChange={e => setDraft(meta.id, f.key, e.target.value)}
                         placeholder={f.placeholder}
-                        className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700 text-sm"
+                        className={inputClass}
                       />
                     )}
                   </div>
@@ -908,26 +952,28 @@ function AIProvidersSection({ onError }: { onError: (msg: string | null) => void
               })}
 
               <div className="flex flex-wrap gap-2 pt-1">
-                <button onClick={() => save(meta.id)}
-                  className="px-3 py-1.5 rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-sm">{t.common.save}</button>
-                <button disabled={busy === meta.id} onClick={() => test(meta.id)}
-                  className="px-3 py-1.5 rounded-md border dark:border-slate-700 text-sm disabled:opacity-50">
+                <Button variant="primary" onClick={() => save(meta.id)}>{t.common.save}</Button>
+                <Button variant="ghost" disabled={busy === meta.id} onClick={() => test(meta.id)}>
                   {busy === meta.id ? t.settings.ai.testing : t.common.test}
-                </button>
-                <button onClick={() => clear(meta.id)}
-                  className="px-3 py-1.5 rounded-md border dark:border-slate-700 text-sm text-red-600 dark:text-red-400">{t.common.clear}</button>
+                </Button>
+                <Button variant="danger" onClick={() => clear(meta.id)}>{t.common.clear}</Button>
               </div>
-              {msg && <div className="text-xs text-emerald-700 dark:text-emerald-300">{msg}</div>}
+              {msg && (
+                <span className="inline-flex items-center gap-1.5 text-sm text-emerald-700 dark:text-emerald-300">
+                  <Icon name="check" className="h-3.5 w-3.5" />
+                  {msg}
+                </span>
+              )}
               {testRes && (
-                <div className="text-xs bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded px-3 py-2 space-y-0.5">
+                <Callout tone="good" icon="check">
                   <div>{t.settings.ai.testOk(testRes.model ?? "")}</div>
-                  {testRes.text && <div className="font-mono">“{testRes.text}”</div>}
+                  {testRes.text && <div className="font-mono text-xs">“{testRes.text}”</div>}
                   {(testRes.prompt_tokens != null || testRes.completion_tokens != null) && (
-                    <div className="text-slate-600 dark:text-slate-400">
+                    <div className="text-xs text-slate-600 dark:text-slate-400">
                       {t.settings.ai.testTokens(testRes.prompt_tokens ?? 0, testRes.completion_tokens ?? 0)}
                     </div>
                   )}
-                </div>
+                </Callout>
               )}
             </div>
           );
@@ -975,16 +1021,16 @@ function RatesSection({ onError }: { onError: (msg: string | null) => void }) {
   if (!data) return null;
 
   return (
-    <section className="border rounded-md p-4 dark:border-slate-700 space-y-3">
-      <h2 className="font-medium">{t.settings.rates.title}</h2>
-      <p className="text-xs text-slate-600 dark:text-slate-400">{t.settings.rates.help}</p>
+    <Card title={<SectionTitle icon="coin">{t.settings.rates.title}</SectionTitle>}>
+      <div className="space-y-4">
+      <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">{t.settings.rates.help}</p>
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {Object.keys(data.defaults).map((p) => {
           const current = data.rates[p];
           const isDefault = current === data.defaults[p];
           return (
             <div key={p} className="space-y-1">
-              <label className="text-xs font-medium">{RATE_PROVIDER_NAMES[p] ?? p}</label>
+              <label className="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">{RATE_PROVIDER_NAMES[p] ?? p}</label>
               <div className="flex items-center gap-1">
                 <span className="text-slate-600 dark:text-slate-400 text-sm">$</span>
                 <input
@@ -993,7 +1039,7 @@ function RatesSection({ onError }: { onError: (msg: string | null) => void }) {
                   min="0"
                   value={drafts[p] ?? String(current ?? "")}
                   onChange={(e) => setDrafts({ ...drafts, [p]: e.target.value })}
-                  className="w-full px-2 py-1.5 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700 text-sm font-mono"
+                  className={`${inputClass} font-mono`}
                 />
               </div>
               <div className="text-xs text-slate-600 dark:text-slate-400">
@@ -1006,15 +1052,14 @@ function RatesSection({ onError }: { onError: (msg: string | null) => void }) {
         })}
       </div>
       <div className="flex items-center gap-3">
-        <button
+        <Button variant="primary"
           disabled={busy || Object.keys(drafts).length === 0}
-          onClick={save}
-          className="px-4 py-2 rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-sm disabled:opacity-50"
-        >{t.common.save}</button>
+          onClick={save}>{t.common.save}</Button>
         {msg && <span className="text-sm text-emerald-700 dark:text-emerald-300">{msg}</span>}
       </div>
       <p className="text-xs text-slate-600 dark:text-slate-400">{t.settings.rates.footnote}</p>
-    </section>
+      </div>
+    </Card>
   );
 }
 
@@ -1128,7 +1173,7 @@ function ProvidersSection({ onError }: { onError: (msg: string | null) => void }
 
   return (
     <section className="space-y-3">
-      <h2 className="font-medium">{t.settings.providers.title}</h2>
+      <SectionTitle icon="key">{t.settings.providers.title}</SectionTitle>
       <div className="grid lg:grid-cols-3 gap-4">
         {PROVIDER_META.map(meta => {
           const status = statuses.find(s => s.provider === meta.id);
@@ -1136,24 +1181,24 @@ function ProvidersSection({ onError }: { onError: (msg: string | null) => void }
           const testRes = tests[meta.id];
           const msg = msgs[meta.id];
           return (
-            <div key={meta.id} className="border rounded-md p-4 dark:border-slate-700 space-y-3">
+            <div key={meta.id} className="min-w-0 space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <div className="flex items-center gap-2">
-                <h3 className="font-medium">{meta.name}</h3>
+                <h3 className="text-sm font-semibold tracking-tight">{meta.name}</h3>
                 {status?.fields && Object.values(status.fields).every(f => f.configured) ? (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200">{t.settings.providers.configured}</span>
+                  <Pill tone="good" icon="check">{t.settings.providers.configured}</Pill>
                 ) : Object.values(status?.fields ?? {}).some(f => f.configured) ? (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200">{t.settings.providers.partial}</span>
+                  <Pill tone="warn" icon="half">{t.settings.providers.partial}</Pill>
                 ) : (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">{t.settings.providers.notSet}</span>
+                  <Pill tone="neutral" icon="dash">{t.settings.providers.notSet}</Pill>
                 )}
               </div>
-              <p className="text-xs text-slate-600 dark:text-slate-400">{meta.help}</p>
+              <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">{meta.help}</p>
 
               {meta.fields.map(f => {
                 const cur = status?.fields?.[f.key];
                 return (
                   <div key={f.key} className="space-y-1">
-                    <label className="text-xs font-medium">{f.label}</label>
+                    <label className="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">{f.label}</label>
                     {cur?.configured && (
                       <div className="text-xs text-slate-600 dark:text-slate-400">
                         {cur.last4 ? t.settings.providers.savedSecret(cur.last4, cur.length ?? 0) :
@@ -1166,28 +1211,30 @@ function ProvidersSection({ onError }: { onError: (msg: string | null) => void }
                       value={draft[f.key] ?? ""}
                       onChange={e => setDraft(meta.id, f.key, e.target.value)}
                       placeholder={f.placeholder}
-                      className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700 text-sm"
+                      className={inputClass}
                     />
                   </div>
                 );
               })}
 
               <div className="flex flex-wrap gap-2 pt-1">
-                <button onClick={() => save(meta.id)}
-                  className="px-3 py-1.5 rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-sm">{t.common.save}</button>
-                <button onClick={() => test(meta.id)}
-                  className="px-3 py-1.5 rounded-md border dark:border-slate-700 text-sm">{t.common.test}</button>
-                <button onClick={() => clear(meta.id)}
-                  className="px-3 py-1.5 rounded-md border dark:border-slate-700 text-sm text-red-600 dark:text-red-400">{t.common.clear}</button>
+                <Button variant="primary" onClick={() => save(meta.id)}>{t.common.save}</Button>
+                <Button variant="ghost" onClick={() => test(meta.id)}>{t.common.test}</Button>
+                <Button variant="danger" onClick={() => clear(meta.id)}>{t.common.clear}</Button>
               </div>
-              {msg && <div className="text-xs text-emerald-700 dark:text-emerald-300">{msg}</div>}
+              {msg && (
+                <span className="inline-flex items-center gap-1.5 text-sm text-emerald-700 dark:text-emerald-300">
+                  <Icon name="check" className="h-3.5 w-3.5" />
+                  {msg}
+                </span>
+              )}
               {testRes && (
-                <div className="text-xs bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded px-3 py-2">
+                <Callout tone="good" icon="check">
                   {t.settings.providers.worksOk(meta.name)}
                   {testRes.plan && t.settings.providers.plan(testRes.plan)}
                   {testRes.searches_left != null && t.settings.providers.searchesLeft(testRes.searches_left)}
                   {testRes.balance != null && t.settings.providers.balance(testRes.balance)}
-                </div>
+                </Callout>
               )}
             </div>
           );

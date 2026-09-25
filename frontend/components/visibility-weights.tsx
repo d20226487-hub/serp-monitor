@@ -2,6 +2,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, VisibilityWeights } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { Button, Callout, Card, Pill, SectionTitle, inputClass } from "@/components/ui";
+import { Icon } from "@/components/icons";
 
 /**
  * What each SERP slot is worth, as a share of the page.
@@ -87,29 +89,39 @@ export function VisibilitySection({ onError }: { onError: (msg: string | null) =
   if (!data) return null;
 
   return (
-    <section className="border rounded-md p-4 dark:border-slate-700 space-y-3">
-      <h2 className="font-medium">{t.settings.visibility.title}</h2>
-      <p className="text-xs text-slate-600 dark:text-slate-400">
+    <Card
+      title={<SectionTitle icon="value">{t.settings.visibility.title}</SectionTitle>}
+      actions={
+        isDefault
+          ? <Pill tone="neutral" icon="dash">{t.settings.visibility.isDefault}</Pill>
+          : <Pill tone="info" icon="pencil">{t.settings.visibility.customised}</Pill>
+      }
+    >
+      <div className="space-y-4">
+      <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
         {t.settings.visibility.help}
       </p>
 
-      <div className="overflow-x-auto">
-        <table className="text-sm">
+      <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+        <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              <th className="py-1 pr-3 font-medium">{t.settings.visibility.colPosition}</th>
-              <th className="py-1 pr-3 font-medium">{t.settings.visibility.colWeight}</th>
-              <th className="py-1 pr-3 font-medium">{t.settings.visibility.colShare}</th>
-              <th className="py-1 font-medium">{t.settings.visibility.colCumulative}</th>
+            <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
+              <th className="px-3 py-2 font-medium">{t.settings.visibility.colPosition}</th>
+              <th className="px-3 py-2 font-medium">{t.settings.visibility.colWeight}</th>
+              <th className="px-3 py-2 font-medium">{t.settings.visibility.colShare}</th>
+              <th className="px-3 py-2 font-medium">{t.settings.visibility.colCumulative}</th>
             </tr>
           </thead>
           <tbody>
             {view.rows.map((row, i) => (
-              <tr key={i}>
-                <td className="py-0.5 pr-3 font-mono text-xs text-slate-500 dark:text-slate-400">
+              <tr
+                key={i}
+                className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40"
+              >
+                <td className="px-3 py-1 font-mono text-xs text-slate-500 dark:text-slate-400">
                   #{i + 1}
                 </td>
-                <td className="py-0.5 pr-3">
+                <td className="px-3 py-1">
                   <input
                     type="number"
                     min="0"
@@ -120,15 +132,15 @@ export function VisibilitySection({ onError }: { onError: (msg: string | null) =
                       next[i] = e.target.value;
                       setDraft(next);
                     }}
-                    className="w-20 rounded-md border bg-white px-2 py-1 text-sm font-mono dark:border-slate-700 dark:bg-slate-900"
+                    className={`${inputClass} !w-24 font-mono`}
                   />
                 </td>
-                <td className="py-0.5 pr-3 font-mono text-xs tabular-nums text-slate-600 dark:text-slate-400">
+                <td className="px-3 py-1 font-mono text-xs tabular-nums text-slate-600 dark:text-slate-400">
                   {row.share.toFixed(1)}%
                 </td>
                 {/* The column that makes the curve legible: "positions 1-3
                     hold 80% of the page between them". */}
-                <td className="py-0.5 font-mono text-xs tabular-nums">
+                <td className="px-3 py-1 font-mono text-xs font-semibold tabular-nums">
                   {row.cumulative.toFixed(1)}%
                 </td>
               </tr>
@@ -138,50 +150,48 @@ export function VisibilitySection({ onError }: { onError: (msg: string | null) =
       </div>
 
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <button
-          type="button"
+        <Button
+          size="sm"
           disabled={busy || draft.length >= MAX_SLOTS}
           onClick={() => setDraft([...draft, "1"])}
-          className="rounded-md border px-2 py-1 disabled:opacity-50 dark:border-slate-700"
         >
           {t.settings.visibility.addSlot}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          size="sm"
           disabled={busy || draft.length <= 1}
           onClick={() => setDraft(draft.slice(0, -1))}
-          className="rounded-md border px-2 py-1 disabled:opacity-50 dark:border-slate-700"
         >
           {t.settings.visibility.removeSlot}
-        </button>
+        </Button>
         <span className="text-slate-600 dark:text-slate-400">
           {t.settings.visibility.depth(draft.length)}
         </span>
       </div>
 
       {!usable && (
-        <p className="text-xs text-amber-700 dark:text-amber-400">
-          {t.settings.visibility.allZero}
-        </p>
+        <Callout tone="warn" icon="alert">{t.settings.visibility.allZero}</Callout>
       )}
 
-      <div className="flex items-center gap-3">
-        <button
-          disabled={busy || !dirty || !usable}
-          onClick={save}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50 dark:bg-white dark:text-slate-900"
-        >{t.common.save}</button>
-        <button
-          disabled={busy || isDefault}
-          onClick={reset}
-          className="rounded-md border px-3 py-2 text-sm disabled:opacity-50 dark:border-slate-700"
-        >{t.settings.visibility.reset}</button>
-        {msg && <span className="text-sm text-emerald-700 dark:text-emerald-300">{msg}</span>}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="primary" disabled={busy || !dirty || !usable} onClick={save}>
+          {t.common.save}
+        </Button>
+        <Button disabled={busy || isDefault} onClick={reset}>
+          {t.settings.visibility.reset}
+        </Button>
+        {msg && (
+          <span className="inline-flex items-center gap-1.5 text-sm text-emerald-700 dark:text-emerald-300">
+            <Icon name="check" className="h-3.5 w-3.5" />
+            {msg}
+          </span>
+        )}
       </div>
 
       <p className="text-xs text-slate-600 dark:text-slate-400">
         {t.settings.visibility.footnote}
       </p>
-    </section>
+      </div>
+    </Card>
   );
 }
