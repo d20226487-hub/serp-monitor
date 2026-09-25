@@ -286,13 +286,13 @@ export function RunReport({
   const totalVolume = selected.reduce((n, v) => n + (v.row.volume ?? 0), 0);
 
   if (ranked.length === 0) {
-    return <div className="text-sm text-neutral-600 dark:text-neutral-400">{t.report.empty}</div>;
+    return <div className="text-sm text-slate-600 dark:text-slate-400">{t.report.empty}</div>;
   }
 
   return (
     <div className="space-y-6">
       {/* Controls. print:hidden keeps them out of the PDF entirely. */}
-      <div className="print:hidden border rounded-md dark:border-neutral-700 p-4 space-y-4">
+      <div className="print:hidden border rounded-md dark:border-slate-700 p-4 space-y-4">
         <div className="flex flex-wrap items-center gap-3">
           <span className="font-medium text-sm">{t.report.controls}</span>
           <label className="text-xs flex items-center gap-1.5">
@@ -300,7 +300,7 @@ export function RunReport({
             <select
               value={lang}
               onChange={e => setLang(e.target.value as Lang)}
-              className="px-2 py-1 rounded border text-sm bg-white dark:bg-neutral-900 dark:border-neutral-700"
+              className="px-2 py-1 rounded border text-sm bg-white dark:bg-slate-900 dark:border-slate-700"
             >
               <option value="ru">RU</option>
               <option value="en">EN</option>
@@ -310,7 +310,7 @@ export function RunReport({
             type="button"
             onClick={download}
             disabled={busy}
-            className="ml-auto px-3 py-1.5 text-sm rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 disabled:opacity-50"
+            className="ml-auto px-3 py-1.5 text-sm rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 disabled:opacity-50"
           >
             {busy ? t.report.downloading : t.report.download}
           </button>
@@ -362,12 +362,12 @@ export function RunReport({
 
       {/* ---- The document itself ---- */}
       <article className="report space-y-6">
-        <header className="border-b dark:border-neutral-700 pb-3">
+        <header className="border-b dark:border-slate-700 pb-3">
           <h1 className="text-2xl font-semibold">{t.report.title}</h1>
-          <div className="text-sm text-neutral-600 dark:text-neutral-400">
+          <div className="text-sm text-slate-600 dark:text-slate-400">
             {t.report.subtitle(market, started)}
           </div>
-          <div className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+          <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             {t.report.footer(jobName, runId)}
           </div>
         </header>
@@ -383,12 +383,12 @@ export function RunReport({
 
         <section className="space-y-2 break-inside-avoid">
           <h2 className="text-lg font-semibold">{t.report.shortlistTitle}</h2>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
             {t.report.shortlistLead(selected.length)}
           </p>
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left border-b dark:border-neutral-700">
+              <tr className="text-left border-b dark:border-slate-700">
                 <th className="py-1.5 pr-2 font-medium">{t.report.colRank}</th>
                 <th className="py-1.5 pr-2 font-medium">{t.report.colKeyword}</th>
                 <th className="py-1.5 pr-2 font-medium text-right">{t.report.colVolume}</th>
@@ -401,8 +401,8 @@ export function RunReport({
             </thead>
             <tbody>
               {selected.map((v, i) => (
-                <tr key={v.row.keyword} className="border-b dark:border-neutral-800">
-                  <td className="py-1.5 pr-2 tabular-nums text-neutral-500 dark:text-neutral-400">{i + 1}</td>
+                <tr key={v.row.keyword} className="border-b dark:border-slate-800">
+                  <td className="py-1.5 pr-2 tabular-nums text-slate-500 dark:text-slate-400">{i + 1}</td>
                   <td className="py-1.5 pr-2 font-medium">{v.row.keyword}</td>
                   <td className="py-1.5 pr-2 text-right tabular-nums">{num(v.row.volume)}</td>
                   <td className="py-1.5 pr-2">
@@ -431,7 +431,7 @@ export function RunReport({
           </table>
           {/* Sits under the table rather than above it: someone who already
               knows the columns should reach the keywords first. */}
-          <dl className="text-xs text-neutral-600 dark:text-neutral-400 space-y-0.5 pt-1">
+          <dl className="text-xs text-slate-600 dark:text-slate-400 space-y-0.5 pt-1">
             {legend.map(([term, text]) => (
               <div key={term} className="flex gap-1.5">
                 <dt className="font-medium whitespace-nowrap">{term} —</dt>
@@ -448,11 +448,11 @@ export function RunReport({
             return (
               <div
                 key={v.row.keyword}
-                className="border rounded-md dark:border-neutral-700 p-3 space-y-2 break-inside-avoid"
+                className="border rounded-md dark:border-slate-700 p-3 space-y-2 break-inside-avoid"
               >
                 <div className="flex flex-wrap items-baseline gap-2">
                   <span className="font-semibold">{v.row.keyword}</span>
-                  <span className="text-sm text-neutral-600 dark:text-neutral-400">
+                  <span className="text-sm text-slate-600 dark:text-slate-400">
                     {num(v.row.volume)} · {v.row.difficulty
                       ? t.analysis.difficultyLabels[v.row.difficulty] ?? v.row.difficulty
                       : "—"}
@@ -464,25 +464,25 @@ export function RunReport({
 
                 {v.row.comment && (
                   <div className="text-sm">
-                    <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
                       {t.report.aiComment}
                     </div>
-                    <p className="text-neutral-700 dark:text-neutral-300">{v.row.comment}</p>
+                    <p className="text-slate-700 dark:text-slate-300">{v.row.comment}</p>
                   </div>
                 )}
 
                 <div>
-                  <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1">
+                  <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">
                     {t.report.competitors}
                   </div>
                   {doms.length === 0 ? (
-                    <div className="text-xs text-neutral-500 dark:text-neutral-400">
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
                       {t.report.noDomains}
                     </div>
                   ) : (
                     <table className="w-full text-xs">
                       <thead>
-                        <tr className="text-left text-neutral-500 dark:text-neutral-400">
+                        <tr className="text-left text-slate-500 dark:text-slate-400">
                           <th className="py-1 pr-2 font-medium">{t.report.colDomain}</th>
                           <th className="py-1 pr-2 font-medium text-right">{t.report.colAge}</th>
                           <th className="py-1 pr-2 font-medium text-right">{t.report.colBacklinks}</th>
@@ -493,7 +493,7 @@ export function RunReport({
                       </thead>
                       <tbody>
                         {doms.map(d => (
-                          <tr key={d.domain} className="border-t dark:border-neutral-800">
+                          <tr key={d.domain} className="border-t dark:border-slate-800">
                             <td className="py-1 pr-2 font-mono break-all">{d.domain}</td>
                             <td className={`py-1 pr-2 text-right tabular-nums ${
                               d.age_days != null && d.age_days < 365
@@ -530,8 +530,8 @@ export function RunReport({
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border rounded-md dark:border-neutral-700 px-3 py-2">
-      <div className="text-xs text-neutral-500 dark:text-neutral-400">{label}</div>
+    <div className="border rounded-md dark:border-slate-700 px-3 py-2">
+      <div className="text-xs text-slate-500 dark:text-slate-400">{label}</div>
       <div className="text-lg font-semibold tabular-nums">{value}</div>
     </div>
   );
@@ -553,11 +553,11 @@ function Picker({
       <div className="flex items-center gap-2">
         <span className="text-xs font-medium">{title}</span>
         <button type="button" onClick={onAll}
-          className="text-xs px-2 py-0.5 rounded border dark:border-neutral-700">{allLabel}</button>
+          className="text-xs px-2 py-0.5 rounded border dark:border-slate-700">{allLabel}</button>
         <button type="button" onClick={onNone}
-          className="text-xs px-2 py-0.5 rounded border dark:border-neutral-700">{noneLabel}</button>
+          className="text-xs px-2 py-0.5 rounded border dark:border-slate-700">{noneLabel}</button>
       </div>
-      {hint && <div className="text-xs text-neutral-500 dark:text-neutral-400">{hint}</div>}
+      {hint && <div className="text-xs text-slate-500 dark:text-slate-400">{hint}</div>}
       <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">{children}</div>
     </div>
   );
@@ -573,12 +573,12 @@ function Chip({
       aria-pressed={on}
       className={`px-2 py-0.5 text-xs rounded border transition-colors ${
         on
-          ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 border-neutral-900 dark:border-white"
-          : "border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400"
+          ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-slate-900 dark:border-white"
+          : "border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400"
       }`}
     >
       {label}
-      {note && <span className={`ml-1 ${on ? "opacity-60" : "text-neutral-500 dark:text-neutral-400"}`}>{note}</span>}
+      {note && <span className={`ml-1 ${on ? "opacity-60" : "text-slate-500 dark:text-slate-400"}`}>{note}</span>}
     </button>
   );
 }

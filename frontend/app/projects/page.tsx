@@ -4,6 +4,8 @@ import Link from "next/link";
 import { api, Project } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { ProjectForm } from "@/components/project-form";
+import { Button, Card, Empty, ErrorNote } from "@/components/ui";
+import { Icon } from "@/components/icons";
 
 /**
  * Projects: a client or site, the domains watched for it, and the jobs filed
@@ -65,34 +67,30 @@ export default function ProjectsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">{t.projects.title}</h1>
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="text-xl font-semibold tracking-tight">{t.projects.title}</h1>
         {!creating && (
-          <button
-            onClick={() => { setCreating(true); setEditing(null); }}
-            className="px-3 py-1.5 rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm"
-          >
+          <Button className="ml-auto" onClick={() => { setCreating(true); setEditing(null); }}>
+            <Icon name="plus" className="h-3.5 w-3.5" />
             {t.projects.newProject}
-          </button>
+          </Button>
         )}
       </div>
 
-      <p className="text-sm text-neutral-600 dark:text-neutral-400 max-w-3xl">
+      <p className="max-w-3xl text-sm leading-relaxed text-slate-700 dark:text-slate-300">
         {t.projects.lead}
       </p>
 
-      {err && <div className="text-sm text-red-600 dark:text-red-400">{err}</div>}
+      {err && <ErrorNote>{err}</ErrorNote>}
 
       {creating && (
         <ProjectForm onSave={create} onCancel={() => setCreating(false)} busy={busy} />
       )}
 
       {projects === null ? (
-        <div className="text-sm text-neutral-600 dark:text-neutral-400">{t.common.loading}</div>
+        <div className="text-sm text-slate-600 dark:text-slate-400">{t.common.loading}</div>
       ) : projects.length === 0 && !creating ? (
-        <div className="text-neutral-600 dark:text-neutral-400 text-sm border rounded-md p-6 dark:border-neutral-700">
-          {t.projects.empty}
-        </div>
+        <Empty>{t.projects.empty}</Empty>
       ) : (
         <div className="space-y-2">
           {projects.map(p => (
@@ -105,52 +103,71 @@ export default function ProjectsPage() {
                 busy={busy}
               />
             ) : (
-              <div key={p.id} className="border rounded-md px-4 py-3 dark:border-neutral-700">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <Link href={`/projects/${p.id}`} className="font-medium hover:underline">
+              <div
+                key={p.id}
+                className="min-w-0 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700"
+              >
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300">
+                    <Icon name="layers" className="h-3.5 w-3.5" />
+                  </span>
+                  <Link
+                    href={`/projects/${p.id}`}
+                    className="font-semibold tracking-tight hover:underline"
+                  >
                     {p.name}
                   </Link>
-                  <span className="text-xs text-neutral-600 dark:text-neutral-400">
-                    {t.projects.domainsCount(p.domains.length)} · {t.projects.jobsCount(p.job_count)}
+                  <span className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                    <span className="rounded-md bg-slate-100 px-1.5 py-0.5 dark:bg-slate-800">
+                      {t.projects.domainsCount(p.domains.length)}
+                    </span>
+                    <span className="rounded-md bg-slate-100 px-1.5 py-0.5 dark:bg-slate-800">
+                      {t.projects.jobsCount(p.job_count)}
+                    </span>
                   </span>
-                  <div className="ml-auto flex items-center gap-2">
+                  <div className="ml-auto flex items-center gap-1.5">
                     {/* Straight into the job form with the folder preselected —
                         the common next step after making a project. */}
                     <Link
                       href={`/jobs/new?project=${p.id}`}
-                      className="text-sm px-2 py-1 rounded border dark:border-neutral-700"
+                      className="rounded-lg border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
                     >
                       {t.projects.newJob}
                     </Link>
                     {p.job_count > 0 && (
                       <Link
                         href={`/?project=${p.id}`}
-                        className="text-sm px-2 py-1 rounded border dark:border-neutral-700"
+                        className="rounded-lg border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
                       >
                         {t.projects.viewJobs}
                       </Link>
                     )}
-                    <button
-                      onClick={() => { setEditing(p); setCreating(false); }}
-                      className="text-sm px-2 py-1 rounded border dark:border-neutral-700"
-                    >
+                    <Button size="sm" onClick={() => { setEditing(p); setCreating(false); }}>
                       {t.common.edit}
-                    </button>
-                    <button
-                      onClick={() => remove(p)}
-                      className="text-sm px-2 py-1 rounded border dark:border-neutral-700 text-red-600 dark:text-red-400"
-                    >
+                    </Button>
+                    <Button size="sm" variant="danger" onClick={() => remove(p)}>
                       {t.common.delete}
-                    </button>
+                    </Button>
                   </div>
                 </div>
                 {p.notes && (
-                  <div className="text-xs text-neutral-600 dark:text-neutral-400 mt-1">{p.notes}</div>
+                  <div className="mt-1.5 text-sm text-slate-700 dark:text-slate-300">{p.notes}</div>
                 )}
                 {p.domains.length > 0 && (
-                  <div className="text-xs font-mono text-neutral-600 dark:text-neutral-400 mt-1.5 break-all">
-                    {p.domains.slice(0, 8).join(" · ")}
-                    {p.domains.length > 8 && ` · ${t.projects.andMore(p.domains.length - 8)}`}
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {p.domains.slice(0, 8).map(d => (
+                      <span
+                        key={d}
+                        className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                      >
+                        {d}
+                      </span>
+                    ))}
+                    {p.domains.length > 8 && (
+                      <span className="px-1 py-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                        {t.projects.andMore(p.domains.length - 8)}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>

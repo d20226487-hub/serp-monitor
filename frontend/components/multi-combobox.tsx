@@ -96,17 +96,17 @@ export function MultiCombobox<T = string>({
           type="button"
           onClick={() => setOpen(o => !o)}
           className={clsx(
-            "w-full min-h-[40px] px-2.5 py-1.5 rounded-md border bg-white dark:bg-neutral-900",
-            "dark:border-neutral-700 flex flex-wrap gap-1 items-center text-left"
+            "w-full min-h-[40px] px-2.5 py-1.5 rounded-md border bg-white dark:bg-slate-900",
+            "dark:border-slate-700 flex flex-wrap gap-1 items-center text-left"
           )}
         >
           {selected.length === 0 && (
-            <span className="text-neutral-600 dark:text-neutral-400 text-sm px-1">{ph}</span>
+            <span className="text-slate-600 dark:text-slate-400 text-sm px-1">{ph}</span>
           )}
           {selected.map((v, i) => (
             <span
               key={i}
-              className="inline-flex items-center gap-1 bg-neutral-100 dark:bg-neutral-800 rounded px-2 py-0.5 text-xs"
+              className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded px-2 py-0.5 text-xs"
             >
               {labelOf(v)}
               <X
@@ -127,7 +127,7 @@ export function MultiCombobox<T = string>({
                 placeholder={ph}
               />
               <Command.List>
-                {loading && <div className="px-3 py-2 text-sm text-neutral-600 dark:text-neutral-400">{t.combobox.searching}</div>}
+                {loading && <div className="px-3 py-2 text-sm text-slate-600 dark:text-slate-400">{t.combobox.searching}</div>}
                 {!loading && visible.length === 0 && (
                   <Command.Empty>{t.combobox.noMatches}</Command.Empty>
                 )}
@@ -140,7 +140,7 @@ export function MultiCombobox<T = string>({
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <div>{o.label}</div>
-                        {o.sub && <div className="text-xs text-neutral-600 dark:text-neutral-400">{o.sub}</div>}
+                        {o.sub && <div className="text-xs text-slate-600 dark:text-slate-400">{o.sub}</div>}
                       </div>
                       {isSelected(o.value) && (
                         <span className="text-xs text-emerald-600 dark:text-emerald-400">✓</span>

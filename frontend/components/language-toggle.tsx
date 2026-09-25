@@ -12,16 +12,16 @@ export function LanguageToggle() {
   const base =
     "px-2 py-1 text-xs font-medium rounded transition-colors";
   const active =
-    "bg-neutral-200 text-neutral-900 dark:bg-neutral-700 dark:text-neutral-100";
+    "bg-slate-200 text-slate-900 dark:bg-slate-700 dark:text-slate-100";
   const idle =
-    "text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-100";
+    "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100";
 
   return (
     <div
       role="group"
       aria-label={t.langSwitchTitle}
       title={t.langSwitchTitle}
-      className="inline-flex items-center gap-1 rounded-md border dark:border-neutral-700 px-1 py-0.5"
+      className="inline-flex items-center gap-1 rounded-md border dark:border-slate-700 px-1 py-0.5"
     >
       <button
         type="button"

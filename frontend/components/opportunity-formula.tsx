@@ -97,7 +97,7 @@ export function FormulaEditor({
         <div key={group.id} className="space-y-2">
           <div>
             <div className="text-sm font-medium">{t.formula.groups[group.id]}</div>
-            <div className="text-xs text-neutral-600 dark:text-neutral-400">
+            <div className="text-xs text-slate-600 dark:text-slate-400">
               {t.formula.groupHints[group.id]}
             </div>
           </div>
@@ -108,7 +108,7 @@ export function FormulaEditor({
               const changed = current !== fallback;
               return (
                 <label key={f.key} className="text-xs">
-                  <span className="block text-neutral-600 dark:text-neutral-400">
+                  <span className="block text-slate-600 dark:text-slate-400">
                     {t.formula.labels[f.key] ?? f.key}
                   </span>
                   <span className="flex items-center gap-1.5 mt-0.5">
@@ -120,7 +120,7 @@ export function FormulaEditor({
                       step={f.step}
                       disabled={disabled}
                       onChange={e => set(f.key, Number(e.target.value))}
-                      className={`w-20 px-1.5 py-0.5 rounded border bg-white dark:bg-neutral-900 dark:border-neutral-700 font-mono ${
+                      className={`w-20 px-1.5 py-0.5 rounded border bg-white dark:bg-slate-900 dark:border-slate-700 font-mono ${
                         changed ? "border-amber-500 dark:border-amber-500" : ""
                       }`}
                     />
@@ -130,13 +130,13 @@ export function FormulaEditor({
                         type="button"
                         onClick={() => set(f.key, fallback)}
                         title={t.formula.revertTo(String(fallback))}
-                        className="text-xs text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+                        className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                       >
                         ↺ {fallback}
                       </button>
                     )}
                   </span>
-                  <span className="block text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+                  <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                     {t.formula.hints[f.key] ?? ""}
                   </span>
                 </label>
@@ -146,10 +146,10 @@ export function FormulaEditor({
 
           {group.curve && (
             <label className="text-xs block">
-              <span className="block text-neutral-600 dark:text-neutral-400">
+              <span className="block text-slate-600 dark:text-slate-400">
                 {t.formula.labels.volume_curve}
               </span>
-              <span className="inline-flex rounded-md border dark:border-neutral-700 overflow-hidden mt-0.5">
+              <span className="inline-flex rounded-md border dark:border-slate-700 overflow-hidden mt-0.5">
                 {CURVES.map(c => (
                   <button
                     key={c}
@@ -157,17 +157,17 @@ export function FormulaEditor({
                     disabled={disabled}
                     onClick={() => set("volume_curve", c)}
                     aria-pressed={value.volume_curve === c}
-                    className={`px-2 py-0.5 text-xs border-l first:border-l-0 dark:border-neutral-700 ${
+                    className={`px-2 py-0.5 text-xs border-l first:border-l-0 dark:border-slate-700 ${
                       value.volume_curve === c
-                        ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                        : "hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                        ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                        : "hover:bg-slate-100 dark:hover:bg-slate-800"
                     }`}
                   >
                     {c}
                   </button>
                 ))}
               </span>
-              <span className="block text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+              <span className="block text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 {t.formula.hints.volume_curve}
               </span>
             </label>
@@ -176,7 +176,7 @@ export function FormulaEditor({
       ))}
 
       {/* The formula written out, so the fields above are never just knobs. */}
-      <div className="text-xs text-neutral-500 dark:text-neutral-400 font-mono border-t dark:border-neutral-800 pt-2">
+      <div className="text-xs text-slate-500 dark:text-slate-400 font-mono border-t dark:border-slate-800 pt-2">
         {t.formula.equation}
       </div>
     </div>
@@ -232,7 +232,7 @@ export function GlobalFormulaSection({
           type="button"
           onClick={save}
           disabled={saving}
-          className="px-3 py-1.5 text-sm rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 disabled:opacity-50"
+          className="px-3 py-1.5 text-sm rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 disabled:opacity-50"
         >
           {t.common.save}
         </button>
@@ -240,7 +240,7 @@ export function GlobalFormulaSection({
           type="button"
           onClick={reset}
           disabled={saving}
-          className="px-3 py-1.5 text-sm rounded-md border dark:border-neutral-700 disabled:opacity-50"
+          className="px-3 py-1.5 text-sm rounded-md border dark:border-slate-700 disabled:opacity-50"
         >
           {t.formula.resetGlobal}
         </button>

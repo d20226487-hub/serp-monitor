@@ -226,7 +226,7 @@ export default function RunPage() {
     return Array.from(m.entries());
   }, [verifyEntries]);
 
-  if (!run) return <div className="text-sm text-neutral-600 dark:text-neutral-400">{t.common.loading}</div>;
+  if (!run) return <div className="text-sm text-slate-600 dark:text-slate-400">{t.common.loading}</div>;
 
   const statusLabels = t.jobs.statusBadge as Record<string, string>;
 
@@ -234,7 +234,7 @@ export default function RunPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold">{t.run.title(run.id)}</h1>
-        <span className="text-xs text-neutral-600 dark:text-neutral-400">
+        <span className="text-xs text-slate-600 dark:text-slate-400">
           {new Date(run.started_at).toLocaleString()} · {statusLabels[run.status] ?? run.status} · {t.run.headerStats(run.queries_done, run.queries_total)}
           {run.queries_failed > 0 && <span className="text-red-600 dark:text-red-400"> · {t.run.failed(run.queries_failed)}</span>}
           {run.cost != null && (
@@ -243,7 +243,7 @@ export default function RunPage() {
               <span title={run.cost_source === "actual" ? t.cost.actualHint : t.cost.estimateHint}>
                 {formatUsd(run.cost)}
                 {run.cost_source === "estimate" && (
-                  <span className="text-neutral-500 dark:text-neutral-400"> ({t.cost.estimated})</span>
+                  <span className="text-slate-500 dark:text-slate-400"> ({t.cost.estimated})</span>
                 )}
               </span>
             </>
@@ -254,21 +254,21 @@ export default function RunPage() {
             <input
               type="number" min={1} max={100} value={topExport}
               onChange={e => setTopExport(Number(e.target.value) || 10)}
-              className="ml-2 w-16 px-2 py-1 rounded border bg-white dark:bg-neutral-900 dark:border-neutral-700"
+              className="ml-2 w-16 px-2 py-1 rounded border bg-white dark:bg-slate-900 dark:border-slate-700"
             />
           </label>
           {/* Only analyzer runs have anything to report on. */}
           {analysis?.mode === "analyzer" && (
             <Link
               href={`/runs/${id}/report`}
-              className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm"
+              className="px-3 py-1.5 rounded-md border dark:border-slate-700 text-sm"
             >{t.report.open}</Link>
           )}
           <a
             href={api.exportUrl(id, topExport)}
-            className="px-3 py-1.5 rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm"
+            className="px-3 py-1.5 rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-sm"
           >{t.run.downloadCsv}</a>
-          <button onClick={copyAll} className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm">{t.common.copyAll}</button>
+          <button onClick={copyAll} className="px-3 py-1.5 rounded-md border dark:border-slate-700 text-sm">{t.common.copyAll}</button>
         </div>
       </div>
 
@@ -303,7 +303,7 @@ export default function RunPage() {
         value={filterKw}
         onChange={e => setFilterKw(e.target.value)}
         placeholder={t.run.filterPlaceholder}
-        className="w-full px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700"
+        className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700"
       />
 
       {/* Analyzer mode replaces the domain/URL distribution with the
@@ -324,18 +324,18 @@ export default function RunPage() {
       )}
 
       {verifyEntries.length > 0 && (
-        <details className="border rounded-md dark:border-neutral-700 group">
-          <summary className="cursor-pointer select-none px-4 py-2.5 flex items-center gap-2 hover:bg-neutral-50 dark:hover:bg-neutral-900/40">
-            <span className="text-neutral-600 dark:text-neutral-300 group-open:rotate-90 transition-transform">▶</span>
+        <details className="border rounded-md dark:border-slate-700 group">
+          <summary className="cursor-pointer select-none px-4 py-2.5 flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-900/40">
+            <span className="text-slate-600 dark:text-slate-300 group-open:rotate-90 transition-transform">▶</span>
             <span className="font-medium text-sm">{t.run.verify.title}</span>
-            <span className="text-xs text-neutral-600 dark:text-neutral-400">
+            <span className="text-xs text-slate-600 dark:text-slate-400">
               {t.run.verify.summary(verifyEntries.length)}
             </span>
           </summary>
-          <div className="border-t dark:border-neutral-800 p-4 space-y-4">
+          <div className="border-t dark:border-slate-800 p-4 space-y-4">
             {verifyByKeyword.map(([kw, entries]) => (
               <div key={kw}>
-                <div className="text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1.5">
+                <div className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                   &ldquo;{kw}&rdquo;
                 </div>
                 <ul className="space-y-1.5">
@@ -363,7 +363,7 @@ export default function RunPage() {
                 </ul>
               </div>
             ))}
-            <p className="text-xs text-neutral-600 dark:text-neutral-400 italic pt-2 border-t dark:border-neutral-800">
+            <p className="text-xs text-slate-600 dark:text-slate-400 italic pt-2 border-t dark:border-slate-800">
               {t.run.verify.footer}
             </p>
           </div>
@@ -379,15 +379,15 @@ export default function RunPage() {
             // keyword is the common case, not reading them.
             <details
               key={g.keyword}
-              className={`group rounded-lg border overflow-hidden border-l-4 ${KEYWORD_ACCENT.border} ${KEYWORD_ACCENT.borderL} dark:border-neutral-700`}
+              className={`group rounded-lg border overflow-hidden border-l-4 ${KEYWORD_ACCENT.border} ${KEYWORD_ACCENT.borderL} dark:border-slate-700`}
             >
               <summary
                 className={`px-5 py-3 flex items-center gap-3 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden ${KEYWORD_ACCENT.header}`}
               >
-                <span className="text-neutral-600 dark:text-neutral-300 transition-transform group-open:rotate-90">▶</span>
+                <span className="text-slate-600 dark:text-slate-300 transition-transform group-open:rotate-90">▶</span>
                 <span className={`inline-block w-2 h-2 rounded-full ${KEYWORD_ACCENT.dot}`} />
                 <div className="font-semibold text-base">{g.keyword}</div>
-                <span className="text-sm text-neutral-600 dark:text-neutral-300">
+                <span className="text-sm text-slate-600 dark:text-slate-300">
                   {t.run.groupCount(totalRows, g.variants.length)}
                 </span>
                 <button
@@ -397,13 +397,13 @@ export default function RunPage() {
                     e.stopPropagation();
                     copyKeyword(g.keyword);
                   }}
-                  className="ml-auto text-sm px-2.5 py-1 rounded border bg-white/70 dark:bg-neutral-900/40 dark:border-neutral-700 hover:bg-white dark:hover:bg-neutral-900"
+                  className="ml-auto text-sm px-2.5 py-1 rounded border bg-white/70 dark:bg-slate-900/40 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-900"
                 >{t.common.copy}</button>
               </summary>
-              <div className="bg-white dark:bg-neutral-900">
+              <div className="bg-white dark:bg-slate-900">
                 {g.variants.map((v, vi) => (
-                  <div key={v.key} className={vi > 0 ? "border-t dark:border-neutral-800" : ""}>
-                    <div className="px-5 py-2 flex flex-wrap items-center gap-1.5 bg-neutral-50 dark:bg-neutral-900/60 border-b dark:border-neutral-800">
+                  <div key={v.key} className={vi > 0 ? "border-t dark:border-slate-800" : ""}>
+                    <div className="px-5 py-2 flex flex-wrap items-center gap-1.5 bg-slate-50 dark:bg-slate-900/60 border-b dark:border-slate-800">
                       <Chip kind="engine">{v.engine}</Chip>
                       <Chip kind="device">{v.device}</Chip>
                       {(v.country || v.location) && (
@@ -418,8 +418,8 @@ export default function RunPage() {
                     <table className="w-full text-sm">
                       <tbody>
                         {v.rows.sort((a, b) => a.position - b.position).map(r => (
-                          <tr key={r.id} className="border-t first:border-t-0 dark:border-neutral-800 align-top">
-                            <td className="px-3 py-3 w-10 text-neutral-600 dark:text-neutral-400 font-mono">{r.position}</td>
+                          <tr key={r.id} className="border-t first:border-t-0 dark:border-slate-800 align-top">
+                            <td className="px-3 py-3 w-10 text-slate-600 dark:text-slate-400 font-mono">{r.position}</td>
                             <td className="px-3 py-3">
                               <a
                                 href={r.url ?? "#"}
@@ -427,7 +427,7 @@ export default function RunPage() {
                                 className="text-blue-700 dark:text-blue-300 hover:underline break-all text-xs"
                               >{r.url}</a>
                               {r.title && <div className="font-medium mt-0.5">{r.title}</div>}
-                              {r.description && <div className="text-neutral-600 dark:text-neutral-400 mt-0.5">{r.description}</div>}
+                              {r.description && <div className="text-slate-600 dark:text-slate-400 mt-0.5">{r.description}</div>}
                             </td>
                           </tr>
                         ))}
@@ -442,7 +442,7 @@ export default function RunPage() {
       </div>
 
       {groups.length === 0 && (
-        <div className="text-sm text-neutral-600 dark:text-neutral-400">
+        <div className="text-sm text-slate-600 dark:text-slate-400">
           {run.status === "running" ? t.run.streaming : t.run.noResults}
         </div>
       )}

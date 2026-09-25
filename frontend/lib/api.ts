@@ -42,6 +42,17 @@ export type PositionHit = {
   domain: string;
   position: number;
   url: string | null;
+  /** The host the link actually opens. */
+  linked_host: string | null;
+  /** The host the engine printed, when it reported one. */
+  shown_host: string | null;
+  /** The two differ: an AMP publisher, a CDN, or a doorway printing someone
+   *  else's brand. Worth showing either way. */
+  substituted: boolean;
+  /** The job resolves to the displayed host, but the engine reported none for
+   *  this result, so the raw link was used. A visible gap beats a silent
+   *  fallback. */
+  unresolved: boolean;
 };
 
 export type PositionRow = {
@@ -105,6 +116,9 @@ export type Job = {
   /** Look up domain registration dates via DataForSEO WHOIS and feed the age
    *  to the AI judge. Bills dollars per request, so it is opt-in per job. */
   whois_enabled: boolean;
+  /** Report the host the engine DISPLAYED (an AMP/CDN publisher) as the host
+   *  that ranked. Raw hosts are stored either way and stay revealable. */
+  prefer_shown_host: boolean;
   created_at: string;
   updated_at: string;
 };

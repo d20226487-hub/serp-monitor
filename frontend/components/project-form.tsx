@@ -52,7 +52,7 @@ export function ProjectForm({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3 border rounded-md p-4 dark:border-neutral-700">
+    <form onSubmit={submit} className="space-y-3 border rounded-md p-4 dark:border-slate-700">
       <div className="space-y-1.5">
         <label className="text-sm font-medium">{t.projects.name}</label>
         <input
@@ -60,14 +60,14 @@ export function ProjectForm({
           value={name}
           onChange={e => setName(e.target.value)}
           placeholder={t.projects.namePlaceholder}
-          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700"
+          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700"
         />
       </div>
 
       <div className="space-y-1.5">
         <label className="text-sm font-medium">
           {t.projects.domains}{" "}
-          <span className="text-xs text-neutral-600 dark:text-neutral-400">
+          <span className="text-xs text-slate-600 dark:text-slate-400">
             {t.projects.domainsHint}
           </span>
         </label>
@@ -76,10 +76,10 @@ export function ProjectForm({
           onChange={e => setDomainsText(e.target.value)}
           rows={8}
           placeholder={t.projects.domainsPlaceholder}
-          className="w-full px-3 py-2 rounded-md border font-mono text-sm bg-white dark:bg-neutral-900 dark:border-neutral-700"
+          className="w-full px-3 py-2 rounded-md border font-mono text-sm bg-white dark:bg-slate-900 dark:border-slate-700"
         />
         <div className="text-xs space-y-0.5">
-          <div className="text-neutral-600 dark:text-neutral-400">
+          <div className="text-slate-600 dark:text-slate-400">
             {t.projects.domainsCount(parsed.domains.length)}
             {parsed.duplicates > 0 && ` · ${t.projects.domainsDuplicates(parsed.duplicates)}`}
           </div>
@@ -98,14 +98,14 @@ export function ProjectForm({
       <div className="space-y-1.5">
         <label className="text-sm font-medium">
           {t.projects.notes}{" "}
-          <span className="text-xs text-neutral-600 dark:text-neutral-400">
+          <span className="text-xs text-slate-600 dark:text-slate-400">
             {t.common.optional}
           </span>
         </label>
         <input
           value={notes}
           onChange={e => setNotes(e.target.value)}
-          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700"
+          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700"
         />
       </div>
 
@@ -115,14 +115,14 @@ export function ProjectForm({
         <button
           type="submit"
           disabled={busy}
-          className="px-3 py-1.5 rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm disabled:opacity-50"
+          className="px-3 py-1.5 rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-sm disabled:opacity-50"
         >
           {initial ? t.common.save : t.projects.create}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm"
+          className="px-3 py-1.5 rounded-md border dark:border-slate-700 text-sm"
         >
           {t.common.cancel}
         </button>

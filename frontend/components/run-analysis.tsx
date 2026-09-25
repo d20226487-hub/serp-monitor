@@ -74,7 +74,7 @@ const BAND_BAR: Record<Band, string> = {
   propped: "bg-amber-400",
   moderate: "bg-orange-500",
   strong: "bg-red-500",
-  unknown: "bg-neutral-300 dark:bg-neutral-600",
+  unknown: "bg-slate-300 dark:bg-slate-600",
 };
 
 const DEPTH_KEY = "analysisDepth";
@@ -88,9 +88,9 @@ const CSV_COLUMNS_KEY = "analysisCsvColumns.v2";
 
 /** Score colour: a shortlisted keyword should be findable without reading. */
 function scoreTone(rank: number | null, shortlist: number): string {
-  if (rank == null) return "text-neutral-400";
+  if (rank == null) return "text-slate-400";
   if (rank <= shortlist) return "text-emerald-700 dark:text-emerald-300 font-semibold";
-  return "text-neutral-600 dark:text-neutral-300";
+  return "text-slate-600 dark:text-slate-300";
 }
 
 function formatMetric(v: number | null | undefined): string {
@@ -146,7 +146,7 @@ function Ladder({
   const lastSlot = depth === 0
     ? urls.reduce((m, u) => Math.max(m, u.position), 0)
     : depth;
-  if (!driver || lastSlot === 0) return <span className="text-neutral-500 dark:text-neutral-400">—</span>;
+  if (!driver || lastSlot === 0) return <span className="text-slate-500 dark:text-slate-400">—</span>;
 
   const byPos = new Map(inDepth.map(u => [u.position, u]));
   const slots = Array.from({ length: lastSlot }, (_, i) => i + 1);
@@ -163,7 +163,7 @@ function Ladder({
         // and 3px apart an outline would bleed into the neighbouring slot.
         const marker = (
           <span
-            className={`mt-[3px] w-[3px] h-[3px] rounded-full ${picked.has(pos) ? "bg-neutral-500 dark:bg-neutral-300" : "bg-transparent"
+            className={`mt-[3px] w-[3px] h-[3px] rounded-full ${picked.has(pos) ? "bg-slate-500 dark:bg-slate-300" : "bg-transparent"
             }`}
           />
         );
@@ -175,7 +175,7 @@ function Ladder({
               title={t.analysis.gapHint(pos)}
               className="flex flex-col items-center justify-end w-[7px] h-[30px]"
             >
-              <span className="w-full h-px bg-neutral-300 dark:bg-neutral-700" />
+              <span className="w-full h-px bg-slate-300 dark:bg-slate-700" />
               {marker}
             </span>
           );
@@ -226,10 +226,10 @@ function formatAge(days: number | null | undefined): string | null {
  *  Thresholds match the "is this a doorway" question rather than anything in
  *  the WHOIS data: under a year is suspicious, under three is worth a look. */
 function ageTone(days: number | null | undefined): string {
-  if (days == null) return "text-neutral-400";
+  if (days == null) return "text-slate-400";
   if (days < 365) return "text-red-600 dark:text-red-400 font-medium";
   if (days < 3 * 365) return "text-amber-700 dark:text-amber-400";
-  return "text-neutral-600 dark:text-neutral-300";
+  return "text-slate-600 dark:text-slate-300";
 }
 
 function DomainSubTable({
@@ -242,10 +242,10 @@ function DomainSubTable({
   if ((!metrics.length && !showWhois) || !row.domains?.length) return null;
   return (
     <div className="mt-3">
-      <div className="text-xs text-neutral-600 dark:text-neutral-400 mb-1">{t.analysis.rawDomainTitle}</div>
+      <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">{t.analysis.rawDomainTitle}</div>
       <table className="w-full text-xs">
         <thead>
-          <tr className="text-left text-neutral-600 dark:text-neutral-400">
+          <tr className="text-left text-slate-600 dark:text-slate-400">
             <th className="px-2 py-1 font-medium">{t.analysis.colDomain}</th>
             {showWhois && (
               <>
@@ -273,9 +273,9 @@ function DomainSubTable({
             // as "—" when the parent was not measured (runs made before the
             // domain pass started including parents).
             const parentRow = d.is_subdomain && d.registrable ? (
-              <tr key={`${d.domain}-parent`} className="border-t dark:border-neutral-800 text-neutral-600 dark:text-neutral-400">
+              <tr key={`${d.domain}-parent`} className="border-t dark:border-slate-800 text-slate-600 dark:text-slate-400">
                 <td className="px-2 py-1 font-mono break-all pl-5">
-                  <span className="text-neutral-500 dark:text-neutral-400">└ </span>{d.registrable}
+                  <span className="text-slate-500 dark:text-slate-400">└ </span>{d.registrable}
                 </td>
                 {showWhois && (
                   <>
@@ -293,19 +293,19 @@ function DomainSubTable({
               </tr>
             ) : null;
             return [(
-              <tr key={d.domain} className="border-t dark:border-neutral-800">
+              <tr key={d.domain} className="border-t dark:border-slate-800">
                 <td className="px-2 py-1 font-mono break-all">
                   {d.domain}
                   {/* A subdomain has no registration of its own, so say whose
                       date is on the row rather than implying it is the host's. */}
                   {showWhois && d.is_subdomain && d.registrable && (
-                    <span className="ml-1 text-neutral-500 dark:text-neutral-400">→ {d.registrable}</span>
+                    <span className="ml-1 text-slate-500 dark:text-slate-400">→ {d.registrable}</span>
                   )}
                 </td>
                 {showWhois && (
                   <>
                     <td
-                      className={`px-2 py-1 text-right font-mono tabular-nums whitespace-nowrap ${d.is_subdomain ? "text-neutral-500 dark:text-neutral-400" : ageTone(d.age_days)
+                      className={`px-2 py-1 text-right font-mono tabular-nums whitespace-nowrap ${d.is_subdomain ? "text-slate-500 dark:text-slate-400" : ageTone(d.age_days)
                       }`}
                       title={
                         age
@@ -328,7 +328,7 @@ function DomainSubTable({
                     {/* Registrar belongs to the registration, same as the age
                         — so on a subdomain row it sits on the parent below,
                         not here where it would read as this host's own. */}
-                    <td className="px-2 py-1 text-neutral-600 dark:text-neutral-400 break-all">
+                    <td className="px-2 py-1 text-slate-600 dark:text-slate-400 break-all">
                       {d.is_subdomain ? "" : (d.registrar || "—")}
                     </td>
                   </>
@@ -388,7 +388,7 @@ function VolumeCell({
           if (e.key === "Enter") commit();
           if (e.key === "Escape") setEditing(false);
         }}
-        className="w-20 px-1 py-0.5 text-right font-mono text-sm rounded border bg-white dark:bg-neutral-900 dark:border-neutral-700"
+        className="w-20 px-1 py-0.5 text-right font-mono text-sm rounded border bg-white dark:bg-slate-900 dark:border-slate-700"
       />
     );
   }
@@ -403,7 +403,7 @@ function VolumeCell({
             ? t.analysis.volumeCityHint((country ?? "").toUpperCase() || t.analysis.volumeAnyCountry)
             : t.analysis.volumeHint(country ?? t.analysis.volumeAnyCountry)
       }
-      className={`font-mono tabular-nums hover:underline ${volume == null ? "text-neutral-500 dark:text-neutral-400" : ""
+      className={`font-mono tabular-nums hover:underline ${volume == null ? "text-slate-500 dark:text-slate-400" : ""
       }`}
     >
       {volume == null ? t.analysis.volumeAdd : volume.toLocaleString()}
@@ -437,12 +437,12 @@ function PromptInspector({ row }: { row: AnalysisRow }) {
         type="button"
         onClick={() => setOpen(o => !o)}
         aria-expanded={open}
-        className="text-xs text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 inline-flex items-center gap-1.5"
+        className="text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 inline-flex items-center gap-1.5"
       >
         <span className={`transition-transform ${open ? "rotate-90" : ""}`}>▶</span>
         {t.analysis.promptTitle}
         {row.ai_model && (
-          <span className="text-neutral-500 dark:text-neutral-400">
+          <span className="text-slate-500 dark:text-slate-400">
             ({t.analysis.promptMeta(
               row.ai_model, row.ai_prompt_tokens, row.ai_completion_tokens,
             )})
@@ -451,27 +451,27 @@ function PromptInspector({ row }: { row: AnalysisRow }) {
       </button>
       {open && (
         <div className="mt-1.5 space-y-2">
-          <div className="text-xs text-neutral-600 dark:text-neutral-400">{t.analysis.promptHint}</div>
+          <div className="text-xs text-slate-600 dark:text-slate-400">{t.analysis.promptHint}</div>
           {row.ai_prompt ? (
             <>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={copy}
-                  className="px-2 py-0.5 text-xs rounded-md border dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                  className="px-2 py-0.5 text-xs rounded-md border dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
                 >
                   {copied ? t.analysis.promptCopied : t.analysis.promptCopy}
                 </button>
               </div>
               {/* Monospace and pre-wrap: the markdown table only reads as a
                   table if its column alignment survives. */}
-              <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-96 overflow-y-auto p-2 rounded border dark:border-neutral-800 bg-white dark:bg-neutral-950">
+              <pre className="text-xs font-mono whitespace-pre-wrap break-words max-h-96 overflow-y-auto p-2 rounded border dark:border-slate-800 bg-white dark:bg-slate-950">
                 {row.ai_prompt}
               </pre>
               {row.ai_raw && (
                 <>
-                  <div className="text-xs text-neutral-600 dark:text-neutral-400">{t.analysis.promptResponse}</div>
-                  <pre className="text-xs font-mono whitespace-pre-wrap break-words p-2 rounded border dark:border-neutral-800 bg-white dark:bg-neutral-950">
+                  <div className="text-xs text-slate-600 dark:text-slate-400">{t.analysis.promptResponse}</div>
+                  <pre className="text-xs font-mono whitespace-pre-wrap break-words p-2 rounded border dark:border-slate-800 bg-white dark:bg-slate-950">
                     {row.ai_raw}
                   </pre>
                 </>
@@ -843,21 +843,21 @@ export function RunAnalysisTable({
     key === sortKey ? (sortDir === "asc" ? " ▲" : " ▼") : "";
 
   const th =
-    "px-3 py-2 font-medium text-neutral-600 dark:text-neutral-400 cursor-pointer select-none hover:text-neutral-900 dark:hover:text-neutral-100";
+    "px-3 py-2 font-medium text-slate-600 dark:text-slate-400 cursor-pointer select-none hover:text-slate-900 dark:hover:text-slate-100";
 
   if (analysis.rows.length === 0) {
     return (
-      <div className="border rounded-md p-6 dark:border-neutral-700 text-sm text-neutral-600 dark:text-neutral-400">
+      <div className="border rounded-md p-6 dark:border-slate-700 text-sm text-slate-600 dark:text-slate-400">
         {t.analysis.empty}
       </div>
     );
   }
 
   return (
-    <div className="border rounded-md dark:border-neutral-700 overflow-hidden">
-      <div className="px-4 py-2.5 bg-neutral-50 dark:bg-neutral-900/50 border-b dark:border-neutral-800 flex flex-wrap items-center gap-x-3 gap-y-2">
+    <div className="border rounded-md dark:border-slate-700 overflow-hidden">
+      <div className="px-4 py-2.5 bg-slate-50 dark:bg-slate-900/50 border-b dark:border-slate-800 flex flex-wrap items-center gap-x-3 gap-y-2">
         <span className="font-medium text-sm">{t.analysis.title}</span>
-        <span className="text-xs text-neutral-600 dark:text-neutral-400">
+        <span className="text-xs text-slate-600 dark:text-slate-400">
           {/* No single size to quote any more: it varies per keyword with how
               many results that SERP returned, and each row's cohort label
               names the positions it actually used. */}
@@ -869,7 +869,7 @@ export function RunAnalysisTable({
             onClick={() => setEditingFormula(e => !e)}
             aria-pressed={editingFormula}
             title={isOverride ? t.formula.runOverridden : t.formula.runInherited}
-            className={`px-2 py-0.5 text-xs rounded-md border dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 ${isOverride ? "border-amber-500 dark:border-amber-500" : ""
+            className={`px-2 py-0.5 text-xs rounded-md border dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 ${isOverride ? "border-amber-500 dark:border-amber-500" : ""
             }`}
           >
             {t.formula.edit}{isOverride ? " *" : ""}
@@ -878,7 +878,7 @@ export function RunAnalysisTable({
             type="button"
             onClick={() => setPasting(p => !p)}
             aria-pressed={pasting}
-            className="px-2 py-0.5 text-xs rounded-md border dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+            className="px-2 py-0.5 text-xs rounded-md border dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             {t.analysis.pasteVolumes}
           </button>
@@ -889,13 +889,13 @@ export function RunAnalysisTable({
               beside the export it just looks like a second, unrelated button,
               and the first thing you do is press Export and get a file. Hence
               the icon and the caret. */}
-          <div className="inline-flex rounded-md border dark:border-neutral-700 overflow-hidden">
+          <div className="inline-flex rounded-md border dark:border-slate-700 overflow-hidden">
             <button
               type="button"
               onClick={exportCsv}
               disabled={csvSelection.length === 0}
               title={csvSelection.length ? t.analysis.exportHint : t.analysis.exportNoColumns}
-              className="px-2 py-0.5 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-50 disabled:hover:bg-transparent"
+              className="px-2 py-0.5 text-xs hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50 disabled:hover:bg-transparent"
             >
               {t.analysis.exportCsv}
             </button>
@@ -905,14 +905,14 @@ export function RunAnalysisTable({
               aria-pressed={pickingColumns}
               aria-expanded={pickingColumns}
               title={t.analysis.csvColumnsHint}
-              className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs border-l dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 ${pickingColumns ? "bg-neutral-100 dark:bg-neutral-800" : ""
+              className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs border-l dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 ${pickingColumns ? "bg-slate-100 dark:bg-slate-800" : ""
               }`}
             >
               <Columns3 className="w-3 h-3" aria-hidden />
               {t.analysis.csvColumns}
               {/* The count is the tell that this button decides what the export
                   contains, not just how it looks. */}
-              <span className="text-neutral-500 dark:text-neutral-400 tabular-nums">
+              <span className="text-slate-500 dark:text-slate-400 tabular-nums">
                 {csvSelection.length}
               </span>
               <ChevronDown
@@ -923,7 +923,7 @@ export function RunAnalysisTable({
           </div>
           {/* Quick wins vs biggest prizes. The right answer genuinely differs
               by campaign, so it is a control rather than a constant. */}
-          <label className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
+          <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
             <span>{t.analysis.balanceQuick}</span>
             <input
               type="range"
@@ -935,20 +935,20 @@ export function RunAnalysisTable({
               title={t.analysis.balanceHint(
                 Math.round(weightsFor(balance, formula.min_weight).wv / 2 * 100),
               )}
-              className="w-24 accent-neutral-900 dark:accent-neutral-100"
+              className="w-24 accent-slate-900 dark:accent-slate-100"
             />
             <span>{t.analysis.balanceVolume}</span>
           </label>
-          <span className="text-xs text-neutral-600 dark:text-neutral-400">{t.analysis.depthLabel}</span>
-          <div className="inline-flex rounded-md border dark:border-neutral-700 overflow-hidden">
+          <span className="text-xs text-slate-600 dark:text-slate-400">{t.analysis.depthLabel}</span>
+          <div className="inline-flex rounded-md border dark:border-slate-700 overflow-hidden">
             {DEPTHS.map(d => (
               <button
                 key={d}
                 type="button"
                 onClick={() => pickDepth(d)}
                 aria-pressed={depth === d}
-                className={`px-2 py-0.5 text-xs border-l first:border-l-0 dark:border-neutral-700 ${depth === d ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                    : "hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                className={`px-2 py-0.5 text-xs border-l first:border-l-0 dark:border-slate-700 ${depth === d ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                    : "hover:bg-slate-100 dark:hover:bg-slate-800"
                 }`}
               >
                 {d === 0 ? t.analysis.depthAll : t.analysis.depthOption(d)}
@@ -956,7 +956,7 @@ export function RunAnalysisTable({
             ))}
           </div>
           {analysis.ahrefs_units != null && (
-            <span className="text-xs text-neutral-600 dark:text-neutral-400 pl-1">
+            <span className="text-xs text-slate-600 dark:text-slate-400 pl-1">
               {t.analysis.units(analysis.ahrefs_units)}
             </span>
           )}
@@ -983,23 +983,23 @@ export function RunAnalysisTable({
               genuinely spent nothing, which is what makes this affordable on a
               schedule. */}
           {analysis.whois_enabled && analysis.whois_cost != null && (
-            <span className="text-xs text-neutral-600 dark:text-neutral-400" title={whoisHint}>
+            <span className="text-xs text-slate-600 dark:text-slate-400" title={whoisHint}>
               {whoisSummary}
             </span>
           )}
         </div>
       </div>
       {editingFormula && (
-        <div className="px-4 py-3 border-b dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/50 space-y-3">
+        <div className="px-4 py-3 border-b dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 space-y-3">
           <div className="flex items-baseline gap-2">
             <span className="font-medium text-sm">{t.formula.runTitle}</span>
-            <span className={`text-xs ${isOverride ? "text-amber-700 dark:text-amber-300" : "text-neutral-600 dark:text-neutral-400"}`}>
+            <span className={`text-xs ${isOverride ? "text-amber-700 dark:text-amber-300" : "text-slate-600 dark:text-slate-400"}`}>
               {isOverride ? t.formula.runOverridden : t.formula.runInherited}
             </span>
             <button
               type="button"
               onClick={() => setEditingFormula(false)}
-              className="ml-auto text-xs text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100"
+              className="ml-auto text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
             >
               {t.common.cancel}
             </button>
@@ -1017,7 +1017,7 @@ export function RunAnalysisTable({
               type="button"
               onClick={saveRunFormula}
               disabled={savingFormula}
-              className="px-3 py-1 text-xs rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 disabled:opacity-50"
+              className="px-3 py-1 text-xs rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 disabled:opacity-50"
             >
               {t.formula.runSaveOverride}
             </button>
@@ -1026,7 +1026,7 @@ export function RunAnalysisTable({
                 type="button"
                 onClick={clearRunFormula}
                 disabled={savingFormula}
-                className="px-3 py-1 text-xs rounded-md border dark:border-neutral-700 disabled:opacity-50"
+                className="px-3 py-1 text-xs rounded-md border dark:border-slate-700 disabled:opacity-50"
               >
                 {t.formula.runClearOverride}
               </button>
@@ -1051,7 +1051,7 @@ export function RunAnalysisTable({
         />
       )}
       {(missingAi > 0 || scoring) && (
-        <div className="px-4 py-2 border-b dark:border-neutral-800 bg-amber-50 dark:bg-amber-950/30 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+        <div className="px-4 py-2 border-b dark:border-slate-800 bg-amber-50 dark:bg-amber-950/30 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
           <span className="text-amber-900 dark:text-amber-200">
             {t.analysis.aiMissing(analysis.rows.length - missingAi, analysis.rows.length)}
           </span>
@@ -1069,20 +1069,20 @@ export function RunAnalysisTable({
         </div>
       )}
       {otherMarkets.length > 0 && (
-        <div className="px-4 py-2 border-b dark:border-neutral-800 text-xs text-amber-700 dark:text-amber-300">
+        <div className="px-4 py-2 border-b dark:border-slate-800 text-xs text-amber-700 dark:text-amber-300">
           {t.analysis.volumeMultiCountry(market, otherMarkets.join(", "))}
         </div>
       )}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-white dark:bg-neutral-900">
-            <tr className="border-b dark:border-neutral-800 text-left">
+          <thead className="bg-white dark:bg-slate-900">
+            <tr className="border-b dark:border-slate-800 text-left">
               <th className={th} onClick={() => toggle("keyword")}>
                 {t.analysis.colKeyword}{arrow("keyword")}
               </th>
               {/* The ladder is a picture; there is nothing to order it by that
                   the Soft slots column does not already carry. */}
-              <th className="px-3 py-2 font-medium text-neutral-600 dark:text-neutral-400">
+              <th className="px-3 py-2 font-medium text-slate-600 dark:text-slate-400">
                 {t.analysis.colShape}
               </th>
               {analysis.metrics.map(m => (
@@ -1107,13 +1107,13 @@ export function RunAnalysisTable({
               <th className={`${th} text-right`} onClick={() => toggle("coverage")}>
                 {t.analysis.colCoverage}{arrow("coverage")}
               </th>
-              <th className="px-3 py-2 font-medium text-neutral-600 dark:text-neutral-400 text-right">
+              <th className="px-3 py-2 font-medium text-slate-600 dark:text-slate-400 text-right">
                 {t.analysis.colDifficulty}
               </th>
               <th className={`${th} text-right`} onClick={() => toggle("opportunity")}>
                 {t.analysis.colOpportunity}{arrow("opportunity")}
               </th>
-              <th className="px-3 py-2 font-medium text-neutral-600 dark:text-neutral-400">
+              <th className="px-3 py-2 font-medium text-slate-600 dark:text-slate-400">
                 {t.analysis.colComment}
               </th>
             </tr>
@@ -1139,7 +1139,7 @@ export function RunAnalysisTable({
           </tbody>
         </table>
       </div>
-      <div className="px-4 py-2 border-t dark:border-neutral-800 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-600 dark:text-neutral-400">
+      <div className="px-4 py-2 border-t dark:border-slate-800 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600 dark:text-slate-400">
         <span>{t.analysis.legendTitle}</span>
         {(["soft", "propped", "moderate", "strong", "unknown"] as Band[]).map(b => (
           <span key={b} className="inline-flex items-center gap-1" title={t.analysis.bandHints[b]}>
@@ -1148,7 +1148,7 @@ export function RunAnalysisTable({
           </span>
         ))}
       </div>
-      <div className="px-4 py-2 border-t dark:border-neutral-800 text-xs text-neutral-600 dark:text-neutral-400">
+      <div className="px-4 py-2 border-t dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400">
         {t.analysis.footnote}
       </div>
     </div>
@@ -1188,7 +1188,7 @@ function AnalysisTableRow({
   const span = metrics.length + 8;
   return (
     <>
-      <tr className="border-b dark:border-neutral-800">
+      <tr className="border-b dark:border-slate-800">
         <td className="px-3 py-2 font-medium break-all align-top">
           {/* Toggles the raw per-URL rows — the manual check on what Ahrefs
               actually returned for this keyword's SERP. */}
@@ -1198,7 +1198,7 @@ function AnalysisTableRow({
             className="inline-flex items-center gap-1.5 text-left hover:underline"
             aria-expanded={open}
           >
-            <span className={`text-neutral-600 dark:text-neutral-300 transition-transform ${open ? "rotate-90" : ""}`}>▶</span>
+            <span className={`text-slate-600 dark:text-slate-300 transition-transform ${open ? "rotate-90" : ""}`}>▶</span>
             {row.keyword}
           </button>
         </td>
@@ -1215,7 +1215,7 @@ function AnalysisTableRow({
               column — the cohort is the same for the whole row now. */}
           {cohort.length > 0 && (
             <div
-              className="text-xs text-neutral-500 dark:text-neutral-400 font-mono mt-1"
+              className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-1"
               title={t.analysis.cohortHint(cohort.length, rankerLabel)}
             >
               {t.analysis.cohortLabel(cohortPositions)}
@@ -1263,11 +1263,11 @@ function AnalysisTableRow({
           }
         >
           {total === 0 ? (
-            <span className="text-neutral-500 dark:text-neutral-400">—</span>
+            <span className="text-slate-500 dark:text-slate-400">—</span>
           ) : bands.soft > 0 ? (
             <span className="text-emerald-700 dark:text-emerald-300">{bands.soft}</span>
           ) : (
-            <span className="text-neutral-500 dark:text-neutral-400">0</span>
+            <span className="text-slate-500 dark:text-slate-400">0</span>
           )}
         </td>
         <td className="px-3 py-2 text-right align-top">
@@ -1280,7 +1280,7 @@ function AnalysisTableRow({
           />
         </td>
         <td
-          className={`px-3 py-2 text-right font-mono tabular-nums align-top ${partial ? "text-amber-700 dark:text-amber-300" : "text-neutral-600 dark:text-neutral-400"
+          className={`px-3 py-2 text-right font-mono tabular-nums align-top ${partial ? "text-amber-700 dark:text-amber-300" : "text-slate-600 dark:text-slate-400"
           }`}
           title={
             total === 0
@@ -1291,7 +1291,7 @@ function AnalysisTableRow({
           }
         >
           {total === 0 ? (
-            <span className="text-neutral-500 dark:text-neutral-400">—</span>
+            <span className="text-slate-500 dark:text-slate-400">—</span>
           ) : (
             `${analysed}/${total}`
           )}
@@ -1306,7 +1306,7 @@ function AnalysisTableRow({
               {t.analysis.aiFailed}
             </span>
           ) : (
-            <span className="text-xs text-neutral-500 dark:text-neutral-400">{t.analysis.difficultyPending}</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">{t.analysis.difficultyPending}</span>
           )}
         </td>
         <td
@@ -1324,7 +1324,7 @@ function AnalysisTableRow({
           }
         >
           {opp.score == null ? (
-            <span className="text-xs text-neutral-500 dark:text-neutral-400">{t.analysis.oppNeedsVolume}</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">{t.analysis.oppNeedsVolume}</span>
           ) : (
             <>
               <span className={`font-mono tabular-nums ${scoreTone(rank, shortlist)}`}>
@@ -1340,18 +1340,18 @@ function AnalysisTableRow({
             </>
           )}
         </td>
-        <td className="px-3 py-2 text-neutral-600 dark:text-neutral-300 min-w-[16rem] align-top">
-          {row.comment || <span className="text-neutral-500 dark:text-neutral-400">—</span>}
+        <td className="px-3 py-2 text-slate-600 dark:text-slate-300 min-w-[16rem] align-top">
+          {row.comment || <span className="text-slate-500 dark:text-slate-400">—</span>}
         </td>
       </tr>
       {open && (
-        <tr className="border-b dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/40">
+        <tr className="border-b dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40">
           <td colSpan={span} className="px-3 py-2">
-            <div className="text-xs text-neutral-600 dark:text-neutral-400 mb-1">{t.analysis.rawTitle}</div>
+            <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">{t.analysis.rawTitle}</div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="text-left text-neutral-600 dark:text-neutral-400">
+                  <tr className="text-left text-slate-600 dark:text-slate-400">
                     <th className="px-2 py-1 font-medium">{t.analysis.colPos}</th>
                     <th className="px-2 py-1 font-medium">URL</th>
                     {metrics.map(m => (
@@ -1373,8 +1373,8 @@ function AnalysisTableRow({
                     return (
                       <tr
                         key={`${u.position}-${u.url}`}
-                        className={`border-t dark:border-neutral-800 ${inDepth ? "" : "opacity-50"} ${
-                          picked ? "bg-neutral-100/70 dark:bg-neutral-800/50" : ""
+                        className={`border-t dark:border-slate-800 ${inDepth ? "" : "opacity-50"} ${
+                          picked ? "bg-slate-100/70 dark:bg-slate-800/50" : ""
                         }`}
                       >
                         <td className="px-2 py-1 font-mono whitespace-nowrap">
@@ -1386,7 +1386,7 @@ function AnalysisTableRow({
                           {/* The rows the headline numbers were averaged from. */}
                           {picked && (
                             <span
-                              className="ml-1.5 text-xs uppercase tracking-wide text-neutral-600 dark:text-neutral-400"
+                              className="ml-1.5 text-xs uppercase tracking-wide text-slate-600 dark:text-slate-400"
                               title={t.analysis.cohortHint(cohort.length, rankerLabel)}
                             >
                               {t.analysis.inCohort}
@@ -1405,13 +1405,13 @@ function AnalysisTableRow({
                           {/* Never hide that we measured a different URL than the
                               one that ranked. */}
                           {u.normalized && (
-                            <div className="text-neutral-600 dark:text-neutral-400 break-all">
+                            <div className="text-slate-600 dark:text-slate-400 break-all">
                               {t.analysis.analyzedAs}{" "}
                               <span className="font-mono">{u.analyzed_url}</span>
                             </div>
                           )}
                           {u.positions.length > 1 && (
-                            <span className="ml-2 text-neutral-600 dark:text-neutral-400">
+                            <span className="ml-2 text-slate-600 dark:text-slate-400">
                               {t.analysis.alsoAt(
                                 positionsLabel(u.positions.filter(p => p !== u.position)),
                               )}

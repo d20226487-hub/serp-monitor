@@ -133,7 +133,7 @@ export default function SettingsPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-semibold">{t.settings.title}</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-1">
+        <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
           {t.settings.intro}
         </p>
       </div>
@@ -160,9 +160,9 @@ export default function SettingsPage() {
       <RatesSection onError={setErr} />
 
       {/* Add one */}
-      <section className="border rounded-md p-4 dark:border-neutral-700 space-y-3">
+      <section className="border rounded-md p-4 dark:border-slate-700 space-y-3">
         <h2 className="font-medium">{t.settings.addLocation.title}</h2>
-        <p className="text-xs text-neutral-600 dark:text-neutral-400">
+        <p className="text-xs text-slate-600 dark:text-slate-400">
           {t.settings.addLocation.help}
         </p>
         <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2">
@@ -170,24 +170,24 @@ export default function SettingsPage() {
             value={add.canonical_name}
             onChange={e => setAdd({ ...add, canonical_name: e.target.value })}
             placeholder={t.settings.addLocation.phCanonical}
-            className="px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700"
+            className="px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700"
           />
           <input
             value={add.name ?? ""}
             onChange={e => setAdd({ ...add, name: e.target.value })}
             placeholder={t.settings.addLocation.phName}
-            className="px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700"
+            className="px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700"
           />
           <input
             value={add.country_code ?? ""}
             onChange={e => setAdd({ ...add, country_code: e.target.value })}
             placeholder={t.settings.addLocation.phCc}
-            className="px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700"
+            className="px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700"
           />
           <select
             value={add.target_type ?? ""}
             onChange={e => setAdd({ ...add, target_type: e.target.value })}
-            className="px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700"
+            className="px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700"
           >
             <option value="">{t.settings.addLocation.phType}</option>
             <option value="Country">{t.settings.addLocation.typeOptions.Country}</option>
@@ -200,20 +200,20 @@ export default function SettingsPage() {
             value={add.yandex_lr ?? ""}
             onChange={e => setAdd({ ...add, yandex_lr: e.target.value ? Number(e.target.value) : null })}
             placeholder={t.settings.addLocation.phYandexLr}
-            className="px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700"
+            className="px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700"
           />
         </div>
         <button
           disabled={busy}
           onClick={addOne}
-          className="px-4 py-2 rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 disabled:opacity-50"
+          className="px-4 py-2 rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 disabled:opacity-50"
         >{t.common.add}</button>
       </section>
 
       {/* Opportunity formula — the global defaults every run inherits. */}
-      <section className="border rounded-md p-4 dark:border-neutral-700 space-y-3">
+      <section className="border rounded-md p-4 dark:border-slate-700 space-y-3">
         <h2 className="font-medium">{t.formula.title}</h2>
-        <p className="text-xs text-neutral-600 dark:text-neutral-400">{t.formula.subtitle}</p>
+        <p className="text-xs text-slate-600 dark:text-slate-400">{t.formula.subtitle}</p>
         {formula && formulaDefaults ? (
           <GlobalFormulaSection
             initial={formula}
@@ -228,14 +228,14 @@ export default function SettingsPage() {
             }}
           />
         ) : (
-          <div className="text-xs text-neutral-600 dark:text-neutral-400">{t.common.loading}</div>
+          <div className="text-xs text-slate-600 dark:text-slate-400">{t.common.loading}</div>
         )}
       </section>
 
       {/* Bulk import */}
-      <section className="border rounded-md p-4 dark:border-neutral-700 space-y-3">
+      <section className="border rounded-md p-4 dark:border-slate-700 space-y-3">
         <h2 className="font-medium">{t.settings.bulk.title}</h2>
-        <p className="text-xs text-neutral-600 dark:text-neutral-400">
+        <p className="text-xs text-slate-600 dark:text-slate-400">
           {t.settings.bulk.help}
         </p>
         <textarea
@@ -243,11 +243,11 @@ export default function SettingsPage() {
           onChange={e => setBulk(e.target.value)}
           rows={8}
           placeholder={"Almaty,Almaty Province,Kazakhstan | Almaty | kz | City | 162\nTashkent,Tashkent Region,Uzbekistan | Tashkent | uz | City | 11353"}
-          className="w-full px-3 py-2 rounded-md border font-mono text-sm bg-white dark:bg-neutral-900 dark:border-neutral-700"
+          className="w-full px-3 py-2 rounded-md border font-mono text-sm bg-white dark:bg-slate-900 dark:border-slate-700"
         />
         <div className="flex items-center gap-3">
           <button disabled={busy} onClick={importBulk}
-            className="px-4 py-2 rounded-md border dark:border-neutral-700 disabled:opacity-50">{t.common.import}</button>
+            className="px-4 py-2 rounded-md border dark:border-slate-700 disabled:opacity-50">{t.common.import}</button>
           {bulkResult && <span className="text-sm text-emerald-700 dark:text-emerald-300">{bulkResult}</span>}
         </div>
       </section>
@@ -258,16 +258,16 @@ export default function SettingsPage() {
           <h2 className="font-medium">{t.settings.list.heading(items.length)}</h2>
           <input value={filter} onChange={e => setFilter(e.target.value)}
             placeholder={t.common.filter}
-            className="ml-auto px-3 py-1.5 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700 text-sm" />
+            className="ml-auto px-3 py-1.5 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700 text-sm" />
         </div>
 
-        <p className="text-xs text-neutral-600 dark:text-neutral-400">
+        <p className="text-xs text-slate-600 dark:text-slate-400">
           {t.settings.list.perProviderHelp}
         </p>
 
-        <div className="border rounded-md overflow-hidden dark:border-neutral-700">
+        <div className="border rounded-md overflow-hidden dark:border-slate-700">
           <table className="w-full text-sm">
-            <thead className="bg-neutral-50 dark:bg-neutral-900/50 text-left">
+            <thead className="bg-slate-50 dark:bg-slate-900/50 text-left">
               <tr>
                 <th className="px-3 py-2">{t.settings.list.cols.canonical}</th>
                 <th className="px-3 py-2">{t.settings.list.cols.name}</th>
@@ -280,28 +280,28 @@ export default function SettingsPage() {
             </thead>
             <tbody>
               {filtered.map(it => (
-                <tr key={it.id} className="border-t dark:border-neutral-800 align-top">
+                <tr key={it.id} className="border-t dark:border-slate-800 align-top">
                   {editId === it.id ? (
                     <>
                       <td className="px-3 py-2"><input value={editDraft.canonical_name}
                         onChange={e => setEditDraft({ ...editDraft, canonical_name: e.target.value })}
-                        className="w-full px-2 py-1 rounded border bg-white dark:bg-neutral-900 dark:border-neutral-700" /></td>
+                        className="w-full px-2 py-1 rounded border bg-white dark:bg-slate-900 dark:border-slate-700" /></td>
                       <td className="px-3 py-2"><input value={editDraft.name ?? ""}
                         onChange={e => setEditDraft({ ...editDraft, name: e.target.value })}
-                        className="w-full px-2 py-1 rounded border bg-white dark:bg-neutral-900 dark:border-neutral-700" /></td>
+                        className="w-full px-2 py-1 rounded border bg-white dark:bg-slate-900 dark:border-slate-700" /></td>
                       <td className="px-3 py-2"><input value={editDraft.country_code ?? ""}
                         onChange={e => setEditDraft({ ...editDraft, country_code: e.target.value })}
-                        className="w-16 px-2 py-1 rounded border bg-white dark:bg-neutral-900 dark:border-neutral-700" /></td>
+                        className="w-16 px-2 py-1 rounded border bg-white dark:bg-slate-900 dark:border-slate-700" /></td>
                       <td className="px-3 py-2"><input value={editDraft.target_type ?? ""}
                         onChange={e => setEditDraft({ ...editDraft, target_type: e.target.value })}
-                        className="w-24 px-2 py-1 rounded border bg-white dark:bg-neutral-900 dark:border-neutral-700" /></td>
+                        className="w-24 px-2 py-1 rounded border bg-white dark:bg-slate-900 dark:border-slate-700" /></td>
                       <td className="px-3 py-2"><input type="number" value={editDraft.yandex_lr ?? ""}
                         onChange={e => setEditDraft({ ...editDraft, yandex_lr: e.target.value ? Number(e.target.value) : null })}
-                        className="w-24 px-2 py-1 rounded border bg-white dark:bg-neutral-900 dark:border-neutral-700" /></td>
+                        className="w-24 px-2 py-1 rounded border bg-white dark:bg-slate-900 dark:border-slate-700" /></td>
                       <td className="px-3 py-2"><UuleCell canonicalName={editDraft.canonical_name} /></td>
                       <td className="px-3 py-2 flex gap-2">
                         <button onClick={saveEdit} className="text-emerald-700 dark:text-emerald-300"><Check className="w-4 h-4" /></button>
-                        <button onClick={() => setEditId(null)} className="text-neutral-600 dark:text-neutral-400"><X className="w-4 h-4" /></button>
+                        <button onClick={() => setEditId(null)} className="text-slate-600 dark:text-slate-400"><X className="w-4 h-4" /></button>
                       </td>
                     </>
                   ) : (
@@ -313,7 +313,7 @@ export default function SettingsPage() {
                       <td className="px-3 py-2 font-mono">{it.yandex_lr ?? "—"}</td>
                       <td className="px-3 py-2"><UuleCell canonicalName={it.canonical_name} /></td>
                       <td className="px-3 py-2 flex gap-2">
-                        <button onClick={() => { setEditId(it.id); setEditDraft(it); }} className="text-neutral-600 dark:text-neutral-300">
+                        <button onClick={() => { setEditId(it.id); setEditDraft(it); }} className="text-slate-600 dark:text-slate-300">
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button onClick={() => del(it.id)} className="text-red-600 dark:text-red-400">
@@ -325,7 +325,7 @@ export default function SettingsPage() {
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={7} className="px-3 py-6 text-center text-neutral-600 dark:text-neutral-400">{t.settings.list.empty}</td></tr>
+                <tr><td colSpan={7} className="px-3 py-6 text-center text-slate-600 dark:text-slate-400">{t.settings.list.empty}</td></tr>
               )}
             </tbody>
           </table>
@@ -343,7 +343,7 @@ function UuleCell({ canonicalName }: { canonicalName: string }) {
   const [copied, setCopied] = useState(false);
   const value = useMemo(() => googleUule(canonicalName), [canonicalName]);
   if (!value) {
-    return <span className="text-neutral-600 dark:text-neutral-400">—</span>;
+    return <span className="text-slate-600 dark:text-slate-400">—</span>;
   }
   const truncated = value.length > 18 ? value.slice(0, 18) + "…" : value;
   async function copy() {
@@ -355,12 +355,12 @@ function UuleCell({ canonicalName }: { canonicalName: string }) {
   }
   return (
     <div className="flex items-center gap-1.5">
-      <code title={value} className="font-mono text-xs cursor-help text-neutral-700 dark:text-neutral-300">
+      <code title={value} className="font-mono text-xs cursor-help text-slate-700 dark:text-slate-300">
         {truncated}
       </code>
       <button
         onClick={copy}
-        className="text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+        className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
         title={t.settings.list.copyUuleTitle}
       >
         {copied ? <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3 h-3" />}
@@ -457,7 +457,7 @@ function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void 
   const value = draft ?? data.prompt;
 
   return (
-    <section className="border rounded-md p-4 dark:border-neutral-700 space-y-3">
+    <section className="border rounded-md p-4 dark:border-slate-700 space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="font-medium">{t.settings.aiAnalysis.title}</h2>
         {data.is_custom ? (
@@ -465,20 +465,20 @@ function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void 
             {t.settings.aiAnalysis.customised}
           </span>
         ) : (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">
+          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
             {t.settings.aiAnalysis.usingDefault}
           </span>
         )}
       </div>
-      <p className="text-xs text-neutral-600 dark:text-neutral-400">{t.settings.aiAnalysis.help}</p>
+      <p className="text-xs text-slate-600 dark:text-slate-400">{t.settings.aiAnalysis.help}</p>
 
       {/* Sampling and reasoning. Each field carries what the measurement
           actually showed, because two of the three look equally important and
           only one of them moves the verdict. */}
-      <div className="pt-2 border-t dark:border-neutral-800 space-y-2.5">
+      <div className="pt-2 border-t dark:border-slate-800 space-y-2.5">
         <div>
           <div className="text-sm font-medium">{t.aiTuning.tuningTitle}</div>
-          <p className="text-xs text-neutral-600 dark:text-neutral-400">{t.aiTuning.tuningHelp}</p>
+          <p className="text-xs text-slate-600 dark:text-slate-400">{t.aiTuning.tuningHelp}</p>
         </div>
         {([
           ["temperature", t.aiTuning.temperature, t.aiTuning.temperatureHelp, 0, data.temperature_max, 0.1],
@@ -495,9 +495,9 @@ function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void 
               value={tuning[key]}
               onChange={e => setTuning(v => ({ ...v, [key]: e.target.value }))}
               onBlur={saveTuning}
-              className="ml-2 w-28 px-2 py-1 rounded border text-sm bg-white dark:bg-neutral-900 dark:border-neutral-700"
+              className="ml-2 w-28 px-2 py-1 rounded border text-sm bg-white dark:bg-slate-900 dark:border-slate-700"
             />
-            <span className="block text-xs text-neutral-600 dark:text-neutral-400 mt-0.5">{help}</span>
+            <span className="block text-xs text-slate-600 dark:text-slate-400 mt-0.5">{help}</span>
           </label>
         ))}
       </div>
@@ -507,7 +507,7 @@ function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void 
         <select
           value={data.provider ?? "auto"}
           onChange={e => pickProvider(e.target.value)}
-          className="w-full sm:w-72 px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700 text-sm"
+          className="w-full sm:w-72 px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700 text-sm"
         >
           <option value="auto">{t.settings.aiAnalysis.providerAuto}</option>
           {data.available.map(p => (
@@ -521,28 +521,28 @@ function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void 
 
       <div className="space-y-1">
         <label className="text-xs font-medium">{t.settings.aiAnalysis.promptLabel}</label>
-        <div className="text-xs text-neutral-600 dark:text-neutral-400">{t.settings.aiAnalysis.placeholders}</div>
+        <div className="text-xs text-slate-600 dark:text-slate-400">{t.settings.aiAnalysis.placeholders}</div>
         <textarea
           rows={16}
           value={value}
           onChange={e => setDraft(e.target.value)}
-          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700 text-xs font-mono"
+          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700 text-xs font-mono"
         />
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <button
           disabled={draft == null || draft === data.prompt}
           onClick={save}
-          className="px-3 py-1.5 rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm disabled:opacity-50"
+          className="px-3 py-1.5 rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-sm disabled:opacity-50"
         >{t.common.save}</button>
         <button onClick={reset} disabled={!data.is_custom}
-          className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm disabled:opacity-50">
+          className="px-3 py-1.5 rounded-md border dark:border-slate-700 text-sm disabled:opacity-50">
           {t.settings.aiAnalysis.reset}
         </button>
         {/* Loads the RU text into the editor as an UNSAVED draft — the user
             reviews and presses Save. Never writes over a saved prompt by itself. */}
         <button onClick={() => setDraft(data.default_ru)}
-          className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm">
+          className="px-3 py-1.5 rounded-md border dark:border-slate-700 text-sm">
           {t.settings.aiAnalysis.loadRu}
         </button>
         {draft != null && draft !== data.prompt && (
@@ -556,7 +556,7 @@ function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void 
       {/* Domain-level guidance: its own prompt, because it only applies when a
           job has domain metrics on, and the authority-vs-PBN judgement it
           encodes is the part most worth tuning independently. */}
-      <div className="pt-4 border-t dark:border-neutral-800 space-y-1">
+      <div className="pt-4 border-t dark:border-slate-800 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <label className="text-xs font-medium">{t.settings.aiAnalysis.domainTitle}</label>
           {data.domain_is_custom && (
@@ -565,25 +565,25 @@ function AIAnalysisSection({ onError }: { onError: (msg: string | null) => void 
             </span>
           )}
         </div>
-        <div className="text-xs text-neutral-600 dark:text-neutral-400">{t.settings.aiAnalysis.domainHelp}</div>
+        <div className="text-xs text-slate-600 dark:text-slate-400">{t.settings.aiAnalysis.domainHelp}</div>
         <textarea
           rows={14}
           value={domainDraft ?? data.domain_prompt}
           onChange={e => setDomainDraft(e.target.value)}
-          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700 text-xs font-mono"
+          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700 text-xs font-mono"
         />
         <div className="flex flex-wrap items-center gap-2 pt-1">
           <button
             disabled={domainDraft == null || domainDraft === data.domain_prompt}
             onClick={saveDomain}
-            className="px-3 py-1.5 rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm disabled:opacity-50"
+            className="px-3 py-1.5 rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-sm disabled:opacity-50"
           >{t.common.save}</button>
           <button onClick={resetDomain} disabled={!data.domain_is_custom}
-            className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm disabled:opacity-50">
+            className="px-3 py-1.5 rounded-md border dark:border-slate-700 text-sm disabled:opacity-50">
             {t.settings.aiAnalysis.domainReset}
           </button>
           <button onClick={() => setDomainDraft(data.domain_default_ru)}
-            className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm">
+            className="px-3 py-1.5 rounded-md border dark:border-slate-700 text-sm">
             {t.settings.aiAnalysis.domainLoadRu}
           </button>
           {domainDraft != null && domainDraft !== data.domain_prompt && (
@@ -661,22 +661,22 @@ function AhrefsSection({ onError }: { onError: (msg: string | null) => void }) {
   if (!data) return null;
 
   return (
-    <section className="border rounded-md p-4 dark:border-neutral-700 space-y-3">
+    <section className="border rounded-md p-4 dark:border-slate-700 space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="font-medium">{t.settings.ahrefs.title}</h2>
         {data.configured ? (
           <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200">{t.settings.providers.configured}</span>
         ) : (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">{t.settings.providers.notSet}</span>
+          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">{t.settings.providers.notSet}</span>
         )}
       </div>
-      <p className="text-xs text-neutral-600 dark:text-neutral-400">{t.settings.ahrefs.help}</p>
+      <p className="text-xs text-slate-600 dark:text-slate-400">{t.settings.ahrefs.help}</p>
 
       {/* Cross-run metric cache. Its TTL is a freshness trade-off rather than a
           free win, so it is exposed rather than assumed. */}
-      <div className="pt-2 border-t dark:border-neutral-800 space-y-1.5">
+      <div className="pt-2 border-t dark:border-slate-800 space-y-1.5">
         <div className="text-sm font-medium">{t.jobForm.ahrefsCacheTitle}</div>
-        <p className="text-xs text-neutral-600 dark:text-neutral-400">
+        <p className="text-xs text-slate-600 dark:text-slate-400">
           {t.jobForm.ahrefsCacheHelp}
         </p>
         <div className="flex flex-wrap items-center gap-2">
@@ -688,14 +688,14 @@ function AhrefsSection({ onError }: { onError: (msg: string | null) => void }) {
             value={ttlDraft}
             onChange={e => setTtlDraft(e.target.value)}
             onBlur={saveTtl}
-            className="w-20 px-2 py-1 rounded border text-sm bg-white dark:bg-neutral-900 dark:border-neutral-700"
+            className="w-20 px-2 py-1 rounded border text-sm bg-white dark:bg-slate-900 dark:border-slate-700"
           />
-          <span className="text-xs text-neutral-600 dark:text-neutral-400">
+          <span className="text-xs text-slate-600 dark:text-slate-400">
             {t.jobForm.ahrefsCacheDays}
           </span>
           <button
             onClick={clearCache}
-            className="ml-auto text-xs px-2.5 py-1 rounded border dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+            className="ml-auto text-xs px-2.5 py-1 rounded border dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             {t.jobForm.ahrefsCacheClear}
           </button>
@@ -709,7 +709,7 @@ function AhrefsSection({ onError }: { onError: (msg: string | null) => void }) {
       <div className="space-y-1">
         <label className="text-xs font-medium">{t.settings.ahrefs.apiKey}</label>
         {data.configured && (
-          <div className="text-xs text-neutral-600 dark:text-neutral-400">
+          <div className="text-xs text-slate-600 dark:text-slate-400">
             {t.settings.providers.savedSecret(data.last4, data.length)}
           </div>
         )}
@@ -719,18 +719,18 @@ function AhrefsSection({ onError }: { onError: (msg: string | null) => void }) {
           value={draft}
           onChange={e => setDraft(e.target.value)}
           placeholder={t.settings.ahrefs.apiKeyPlaceholder}
-          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700 text-sm"
+          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700 text-sm"
         />
       </div>
       <div className="flex flex-wrap gap-2">
         <button onClick={save}
-          className="px-3 py-1.5 rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm">{t.common.save}</button>
+          className="px-3 py-1.5 rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-sm">{t.common.save}</button>
         <button disabled={busy} onClick={test}
-          className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm disabled:opacity-50">
+          className="px-3 py-1.5 rounded-md border dark:border-slate-700 text-sm disabled:opacity-50">
           {busy ? t.settings.ai.testing : t.common.test}
         </button>
         <button onClick={clear}
-          className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm text-red-600 dark:text-red-400">{t.common.clear}</button>
+          className="px-3 py-1.5 rounded-md border dark:border-slate-700 text-sm text-red-600 dark:text-red-400">{t.common.clear}</button>
       </div>
       {msg && <div className="text-xs text-emerald-700 dark:text-emerald-300">{msg}</div>}
       {testRes && (
@@ -738,7 +738,7 @@ function AhrefsSection({ onError }: { onError: (msg: string | null) => void }) {
           {t.settings.ahrefs.testOk(testRes.units_billed ?? 0)}
         </div>
       )}
-      <p className="text-xs text-neutral-600 dark:text-neutral-400">{t.settings.ahrefs.footnote}</p>
+      <p className="text-xs text-slate-600 dark:text-slate-400">{t.settings.ahrefs.footnote}</p>
     </section>
   );
 }
@@ -837,7 +837,7 @@ function AIProvidersSection({ onError }: { onError: (msg: string | null) => void
   return (
     <section className="space-y-3">
       <h2 className="font-medium">{t.settings.ai.title}</h2>
-      <p className="text-xs text-neutral-600 dark:text-neutral-400">{t.settings.ai.help}</p>
+      <p className="text-xs text-slate-600 dark:text-slate-400">{t.settings.ai.help}</p>
       <div className="grid lg:grid-cols-2 gap-4">
         {META.map(meta => {
           const status = statuses.find(s => s.provider === meta.id);
@@ -846,13 +846,13 @@ function AIProvidersSection({ onError }: { onError: (msg: string | null) => void
           const msg = msgs[meta.id];
           const anyConfigured = Object.values(status?.fields ?? {}).some(f => f.configured);
           return (
-            <div key={meta.id} className="border rounded-md p-4 dark:border-neutral-700 space-y-3">
+            <div key={meta.id} className="border rounded-md p-4 dark:border-slate-700 space-y-3">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="font-medium">{meta.name}</h3>
                 {anyConfigured ? (
                   <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200">{t.settings.providers.configured}</span>
                 ) : (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">{t.settings.providers.notSet}</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">{t.settings.providers.notSet}</span>
                 )}
                 {/* Vertex accepts two auth modes; spell out which one the
                     stored config will actually use. */}
@@ -864,7 +864,7 @@ function AIProvidersSection({ onError }: { onError: (msg: string | null) => void
                   </span>
                 )}
               </div>
-              <p className="text-xs text-neutral-600 dark:text-neutral-400">{meta.help}</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400">{meta.help}</p>
 
               {meta.fields.map(f => {
                 const cur = status?.fields?.[f.key];
@@ -872,7 +872,7 @@ function AIProvidersSection({ onError }: { onError: (msg: string | null) => void
                   <div key={f.key} className="space-y-1">
                     <label className="text-xs font-medium">{f.label}</label>
                     {cur?.configured && (
-                      <div className="text-xs text-neutral-600 dark:text-neutral-400 break-all">
+                      <div className="text-xs text-slate-600 dark:text-slate-400 break-all">
                         {cur.last4
                           ? t.settings.providers.savedSecret(cur.last4, cur.length ?? 0)
                           : cur.value
@@ -887,7 +887,7 @@ function AIProvidersSection({ onError }: { onError: (msg: string | null) => void
                         value={draft[f.key] ?? ""}
                         onChange={e => setDraft(meta.id, f.key, e.target.value)}
                         placeholder={f.placeholder}
-                        className="w-full px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700 text-xs font-mono"
+                        className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700 text-xs font-mono"
                       />
                     ) : (
                       <input
@@ -896,7 +896,7 @@ function AIProvidersSection({ onError }: { onError: (msg: string | null) => void
                         value={draft[f.key] ?? ""}
                         onChange={e => setDraft(meta.id, f.key, e.target.value)}
                         placeholder={f.placeholder}
-                        className="w-full px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700 text-sm"
+                        className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700 text-sm"
                       />
                     )}
                   </div>
@@ -905,13 +905,13 @@ function AIProvidersSection({ onError }: { onError: (msg: string | null) => void
 
               <div className="flex flex-wrap gap-2 pt-1">
                 <button onClick={() => save(meta.id)}
-                  className="px-3 py-1.5 rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm">{t.common.save}</button>
+                  className="px-3 py-1.5 rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-sm">{t.common.save}</button>
                 <button disabled={busy === meta.id} onClick={() => test(meta.id)}
-                  className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm disabled:opacity-50">
+                  className="px-3 py-1.5 rounded-md border dark:border-slate-700 text-sm disabled:opacity-50">
                   {busy === meta.id ? t.settings.ai.testing : t.common.test}
                 </button>
                 <button onClick={() => clear(meta.id)}
-                  className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm text-red-600 dark:text-red-400">{t.common.clear}</button>
+                  className="px-3 py-1.5 rounded-md border dark:border-slate-700 text-sm text-red-600 dark:text-red-400">{t.common.clear}</button>
               </div>
               {msg && <div className="text-xs text-emerald-700 dark:text-emerald-300">{msg}</div>}
               {testRes && (
@@ -919,7 +919,7 @@ function AIProvidersSection({ onError }: { onError: (msg: string | null) => void
                   <div>{t.settings.ai.testOk(testRes.model ?? "")}</div>
                   {testRes.text && <div className="font-mono">“{testRes.text}”</div>}
                   {(testRes.prompt_tokens != null || testRes.completion_tokens != null) && (
-                    <div className="text-neutral-600 dark:text-neutral-400">
+                    <div className="text-slate-600 dark:text-slate-400">
                       {t.settings.ai.testTokens(testRes.prompt_tokens ?? 0, testRes.completion_tokens ?? 0)}
                     </div>
                   )}
@@ -929,7 +929,7 @@ function AIProvidersSection({ onError }: { onError: (msg: string | null) => void
           );
         })}
       </div>
-      <p className="text-xs text-neutral-600 dark:text-neutral-400">{t.settings.ai.testNote}</p>
+      <p className="text-xs text-slate-600 dark:text-slate-400">{t.settings.ai.testNote}</p>
     </section>
   );
 }
@@ -971,9 +971,9 @@ function RatesSection({ onError }: { onError: (msg: string | null) => void }) {
   if (!data) return null;
 
   return (
-    <section className="border rounded-md p-4 dark:border-neutral-700 space-y-3">
+    <section className="border rounded-md p-4 dark:border-slate-700 space-y-3">
       <h2 className="font-medium">{t.settings.rates.title}</h2>
-      <p className="text-xs text-neutral-600 dark:text-neutral-400">{t.settings.rates.help}</p>
+      <p className="text-xs text-slate-600 dark:text-slate-400">{t.settings.rates.help}</p>
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {Object.keys(data.defaults).map((p) => {
           const current = data.rates[p];
@@ -982,17 +982,17 @@ function RatesSection({ onError }: { onError: (msg: string | null) => void }) {
             <div key={p} className="space-y-1">
               <label className="text-xs font-medium">{RATE_PROVIDER_NAMES[p] ?? p}</label>
               <div className="flex items-center gap-1">
-                <span className="text-neutral-600 dark:text-neutral-400 text-sm">$</span>
+                <span className="text-slate-600 dark:text-slate-400 text-sm">$</span>
                 <input
                   type="number"
                   step="0.0001"
                   min="0"
                   value={drafts[p] ?? String(current ?? "")}
                   onChange={(e) => setDrafts({ ...drafts, [p]: e.target.value })}
-                  className="w-full px-2 py-1.5 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700 text-sm font-mono"
+                  className="w-full px-2 py-1.5 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700 text-sm font-mono"
                 />
               </div>
-              <div className="text-xs text-neutral-600 dark:text-neutral-400">
+              <div className="text-xs text-slate-600 dark:text-slate-400">
                 {isDefault
                   ? t.settings.rates.usingDefault
                   : t.settings.rates.defaultIs(String(data.defaults[p]))}
@@ -1005,11 +1005,11 @@ function RatesSection({ onError }: { onError: (msg: string | null) => void }) {
         <button
           disabled={busy || Object.keys(drafts).length === 0}
           onClick={save}
-          className="px-4 py-2 rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm disabled:opacity-50"
+          className="px-4 py-2 rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-sm disabled:opacity-50"
         >{t.common.save}</button>
         {msg && <span className="text-sm text-emerald-700 dark:text-emerald-300">{msg}</span>}
       </div>
-      <p className="text-xs text-neutral-600 dark:text-neutral-400">{t.settings.rates.footnote}</p>
+      <p className="text-xs text-slate-600 dark:text-slate-400">{t.settings.rates.footnote}</p>
     </section>
   );
 }
@@ -1132,7 +1132,7 @@ function ProvidersSection({ onError }: { onError: (msg: string | null) => void }
           const testRes = tests[meta.id];
           const msg = msgs[meta.id];
           return (
-            <div key={meta.id} className="border rounded-md p-4 dark:border-neutral-700 space-y-3">
+            <div key={meta.id} className="border rounded-md p-4 dark:border-slate-700 space-y-3">
               <div className="flex items-center gap-2">
                 <h3 className="font-medium">{meta.name}</h3>
                 {status?.fields && Object.values(status.fields).every(f => f.configured) ? (
@@ -1140,10 +1140,10 @@ function ProvidersSection({ onError }: { onError: (msg: string | null) => void }
                 ) : Object.values(status?.fields ?? {}).some(f => f.configured) ? (
                   <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200">{t.settings.providers.partial}</span>
                 ) : (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">{t.settings.providers.notSet}</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">{t.settings.providers.notSet}</span>
                 )}
               </div>
-              <p className="text-xs text-neutral-600 dark:text-neutral-400">{meta.help}</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400">{meta.help}</p>
 
               {meta.fields.map(f => {
                 const cur = status?.fields?.[f.key];
@@ -1151,7 +1151,7 @@ function ProvidersSection({ onError }: { onError: (msg: string | null) => void }
                   <div key={f.key} className="space-y-1">
                     <label className="text-xs font-medium">{f.label}</label>
                     {cur?.configured && (
-                      <div className="text-xs text-neutral-600 dark:text-neutral-400">
+                      <div className="text-xs text-slate-600 dark:text-slate-400">
                         {cur.last4 ? t.settings.providers.savedSecret(cur.last4, cur.length ?? 0) :
                           cur.value ? t.settings.providers.savedPlain(cur.value) : t.settings.providers.savedNoDetail}
                       </div>
@@ -1162,7 +1162,7 @@ function ProvidersSection({ onError }: { onError: (msg: string | null) => void }
                       value={draft[f.key] ?? ""}
                       onChange={e => setDraft(meta.id, f.key, e.target.value)}
                       placeholder={f.placeholder}
-                      className="w-full px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700 text-sm"
+                      className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700 text-sm"
                     />
                   </div>
                 );
@@ -1170,11 +1170,11 @@ function ProvidersSection({ onError }: { onError: (msg: string | null) => void }
 
               <div className="flex flex-wrap gap-2 pt-1">
                 <button onClick={() => save(meta.id)}
-                  className="px-3 py-1.5 rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 text-sm">{t.common.save}</button>
+                  className="px-3 py-1.5 rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-sm">{t.common.save}</button>
                 <button onClick={() => test(meta.id)}
-                  className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm">{t.common.test}</button>
+                  className="px-3 py-1.5 rounded-md border dark:border-slate-700 text-sm">{t.common.test}</button>
                 <button onClick={() => clear(meta.id)}
-                  className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm text-red-600 dark:text-red-400">{t.common.clear}</button>
+                  className="px-3 py-1.5 rounded-md border dark:border-slate-700 text-sm text-red-600 dark:text-red-400">{t.common.clear}</button>
               </div>
               {msg && <div className="text-xs text-emerald-700 dark:text-emerald-300">{msg}</div>}
               {testRes && (

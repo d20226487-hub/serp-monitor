@@ -36,11 +36,11 @@ export function RunOverview({ results, runId }: { results: Result[]; runId: numb
   }
 
   return (
-    <details className="border rounded-md dark:border-neutral-700 group" open>
-      <summary className="cursor-pointer select-none px-4 py-2.5 flex items-center gap-2 hover:bg-neutral-50 dark:hover:bg-neutral-900/40">
-        <span className="text-neutral-600 dark:text-neutral-300 group-open:rotate-90 transition-transform">▶</span>
+    <details className="border rounded-md dark:border-slate-700 group" open>
+      <summary className="cursor-pointer select-none px-4 py-2.5 flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-900/40">
+        <span className="text-slate-600 dark:text-slate-300 group-open:rotate-90 transition-transform">▶</span>
         <span className="font-medium text-sm">{t.run.overview.title}</span>
-        <span className="text-xs text-neutral-600 dark:text-neutral-400">{t.run.overview.hint}</span>
+        <span className="text-xs text-slate-600 dark:text-slate-400">{t.run.overview.hint}</span>
         <Link
           href={`/runs/${runId}/overview`}
           className="ml-auto text-xs text-blue-700 dark:text-blue-300 hover:underline"
@@ -49,7 +49,7 @@ export function RunOverview({ results, runId }: { results: Result[]; runId: numb
           {t.run.overview.fullBreakdown}
         </Link>
       </summary>
-      <div className="border-t dark:border-neutral-800 p-4 space-y-6">
+      <div className="border-t dark:border-slate-800 p-4 space-y-6">
         {engines.map((engine) => {
           const er = results.filter((r) => r.engine === engine);
           const domains = aggregate(er, "domain");
@@ -58,7 +58,7 @@ export function RunOverview({ results, runId }: { results: Result[]; runId: numb
             <div key={engine} className="space-y-2">
               <div className="flex items-baseline gap-2">
                 <h3 className="font-semibold text-sm">{engineLabel(engine)}</h3>
-                <span className="text-xs text-neutral-600 dark:text-neutral-400">
+                <span className="text-xs text-slate-600 dark:text-slate-400">
                   {t.run.overview.engineSummary(er.length)}
                 </span>
               </div>

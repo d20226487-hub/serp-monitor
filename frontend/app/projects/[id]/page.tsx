@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import { api, Job, Project, ProjectPositions } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { PositionTable } from "@/components/position-table";
+import { Button, Card, Empty, ErrorNote, SectionTitle, StatTile } from "@/components/ui";
+import { Icon } from "@/components/icons";
 import {
   RANGE_PRESETS, RangePreset, customRange, rangeFor, toInputValue, toQuery,
 } from "@/lib/date-range";
@@ -17,6 +19,31 @@ import {
  * "which jobs exist". The jobs and keywords below are what explains the table:
  * which schedules feed it and which terms it can possibly cover.
  */
+/** The names behind a count, small and wrapped. Capped because a project can
+ *  watch more cities than a tile can show without becoming the wall of text
+ *  this row replaced. */
+function ChipList({ items, max = 4 }: { items: string[]; max?: number }) {
+  if (items.length === 0) return null;
+  const shown = items.slice(0, max);
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {shown.map(v => (
+        <span
+          key={v}
+          className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+        >
+          {v}
+        </span>
+      ))}
+      {items.length > max && (
+        <span className="px-1 py-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+          +{items.length - max}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function ProjectPage() {
   const { t } = useT();
   const params = useParams<{ id: string }>();
@@ -74,50 +101,91 @@ export default function ProjectPage() {
 
   const scheduled = jobs.filter(j => j.schedule_enabled && j.cron);
 
-  if (!project && err) {
-    return <div className="text-sm text-red-600 dark:text-red-400">{err}</div>;
-  }
+  // What the project actually watches, read off its jobs rather than stored:
+  // the jobs are the only thing that decides where and on what a keyword is
+  // measured, so a derived list cannot drift from them.
+  const geos = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const j of jobs) {
+      for (const l of j.locations) {
+        const name = (l.name || l.canonical_name || "").split(",")[0].trim();
+        const key = name.toLowerCase();
+        if (name && !seen.has(key)) seen.set(key, name);
+      }
+      // A job with no location still runs, just without geo targeting.
+      if (j.locations.length === 0) seen.set("__none", t.positions.noGeo);
+    }
+    return [...seen.values()].sort((a, b) => a.localeCompare(b));
+  }, [jobs, t]);
+
+  const engines = useMemo(() => {
+    const seen = new Set<string>();
+    for (const j of jobs) for (const e of j.engines) seen.add(e);
+    return [...seen].sort();
+  }, [jobs]);
+
+  if (!project && err) return <ErrorNote>{err}</ErrorNote>;
   if (!project) {
-    return <div className="text-sm text-neutral-600 dark:text-neutral-400">{t.common.loading}</div>;
+    return <div className="text-sm text-slate-600 dark:text-slate-400">{t.common.loading}</div>;
   }
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold">{project.name}</h1>
-        <span className="text-xs text-neutral-600 dark:text-neutral-400">
-          {t.projects.domainsCount(project.domains.length)} · {t.projects.jobsCount(jobs.length)}
+        <span className="grid h-8 w-8 place-items-center rounded-lg bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300">
+          <Icon name="layers" className="h-4 w-4" />
         </span>
-        <div className="ml-auto flex items-center gap-2">
+        <h1 className="text-xl font-semibold tracking-tight">{project.name}</h1>
+        <div className="ml-auto flex items-center gap-1.5">
           <Link
             href={`/jobs/new?project=${project.id}`}
-            className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm"
+            className="flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1 text-sm font-medium text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
           >
+            <Icon name="plus" className="h-3.5 w-3.5" />
             {t.projects.newJob}
           </Link>
           <Link
             href="/projects"
-            className="px-3 py-1.5 rounded-md border dark:border-neutral-700 text-sm"
+            className="rounded-lg border border-slate-300 px-3 py-1 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
           >
             {t.positions.allProjects}
           </Link>
         </div>
       </div>
 
+      {/* What the project is, in one row. The domains themselves are not here
+          on purpose: a project built from permutations runs to hundreds of
+          near-identical hosts, and listing them buried the positions this page
+          exists for. The count is the useful part; the list lives in the
+          project's own edit form. */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <StatTile label={t.projects.domains} value={project.domains.length} icon="globe" />
+        <StatTile label={t.positions.keywords} value={keywords.length} icon="keywords" />
+        <StatTile label={t.projects.viewJobs} value={jobs.length} icon="list" />
+        <StatTile label={t.positions.geos} value={geos.length} icon="flag">
+          <ChipList items={geos} />
+        </StatTile>
+        <StatTile label={t.positions.engines} value={engines.length} icon="search">
+          <ChipList
+            items={engines.map(e => (e === "yandex" ? t.variantLabel.yandex : t.variantLabel.google))}
+          />
+        </StatTile>
+      </div>
+
       <section className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-lg font-semibold">{t.positions.title}</h2>
-          <div className="inline-flex rounded-md border dark:border-neutral-700 overflow-hidden">
+          <SectionTitle icon="activity">{t.positions.title}</SectionTitle>
+          <div className="inline-flex overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700">
             {RANGE_PRESETS.map(p => (
               <button
                 key={p}
                 type="button"
                 onClick={() => setPreset(p)}
                 aria-pressed={preset === p}
-                className={`px-2 py-1 text-xs border-l first:border-l-0 dark:border-neutral-700 ${
+                className={`border-l px-2.5 py-1 text-xs transition first:border-l-0 dark:border-slate-700 ${
                   preset === p
-                    ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                    : "hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                    ? "bg-slate-900 font-medium text-white dark:bg-slate-100 dark:text-slate-900"
+                    : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
                 }`}
               >
                 {t.positions.presets[p]}
@@ -130,19 +198,19 @@ export default function ProjectPage() {
                 type="date"
                 value={from}
                 onChange={e => setFrom(e.target.value)}
-                className="px-2 py-1 rounded border bg-white dark:bg-neutral-900 dark:border-neutral-700"
+                className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
               />
-              <span className="text-neutral-600 dark:text-neutral-400">–</span>
+              <span className="text-slate-500 dark:text-slate-400">–</span>
               <input
                 type="date"
                 value={to}
                 onChange={e => setTo(e.target.value)}
-                className="px-2 py-1 rounded border bg-white dark:bg-neutral-900 dark:border-neutral-700"
+                className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
               />
             </span>
           )}
           {positions && positions.runs.length > 0 && (
-            <span className="text-xs text-neutral-600 dark:text-neutral-400">
+            <span className="text-xs text-slate-500 dark:text-slate-400">
               {t.positions.fromRuns(
                 positions.runs.length,
                 positions.serps.reduce((n, s) => n + s.rows.length, 0),
@@ -151,30 +219,42 @@ export default function ProjectPage() {
             </span>
           )}
           {loading && (
-            <span className="text-xs text-neutral-500 dark:text-neutral-400">{t.common.loading}</span>
+            <span className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+              <Icon name="refresh" className="h-3 w-3 animate-spin" />
+              {t.common.loading}
+            </span>
           )}
         </div>
 
         {preset === "custom" && !range && (
-          <div className="text-xs text-amber-700 dark:text-amber-300">{t.positions.badRange}</div>
+          <div className="rounded-lg border-l-4 border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            {t.positions.badRange}
+          </div>
         )}
-        {err && <div className="text-sm text-red-600 dark:text-red-400">{err}</div>}
+        {err && <ErrorNote>{err}</ErrorNote>}
         {positions && <PositionTable data={positions} />}
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-lg font-semibold">{t.positions.scheduled}</h2>
+        <SectionTitle icon="clock" count={scheduled.length}>{t.positions.scheduled}</SectionTitle>
         {scheduled.length === 0 ? (
-          <div className="text-sm text-neutral-600 dark:text-neutral-400 border rounded-md p-4 dark:border-neutral-700">
-            {t.positions.noScheduled}
-          </div>
+          <Empty>{t.positions.noScheduled}</Empty>
         ) : (
           <div className="space-y-2">
             {scheduled.map(j => (
-              <div key={j.id} className="border rounded-md px-4 py-2.5 flex items-center gap-3 dark:border-neutral-700">
-                <Link href={`/jobs/${j.id}`} className="font-medium hover:underline">{j.name}</Link>
-                <span className="text-xs text-neutral-600 dark:text-neutral-400">
-                  ⏱ {j.cron} · {t.home.kwCount(j.keywords.length)} · {j.engines.join(", ")} · {j.devices.join(", ")}
+              <div
+                key={j.id}
+                className="flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+              >
+                <Link href={`/jobs/${j.id}`} className="font-medium tracking-tight hover:underline">
+                  {j.name}
+                </Link>
+                <span className="inline-flex items-center gap-1 rounded-md bg-sky-100 px-1.5 py-0.5 font-mono text-[11px] text-sky-800 dark:bg-sky-950 dark:text-sky-300">
+                  <Icon name="clock" className="h-3 w-3" />
+                  {j.cron}
+                </span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  {t.home.kwCount(j.keywords.length)} · {j.engines.join(", ")} · {j.devices.join(", ")}
                 </span>
               </div>
             ))}
@@ -183,7 +263,7 @@ export default function ProjectPage() {
         {/* Jobs without a schedule still feed the table when run by hand, so
             they are worth naming rather than leaving invisible. */}
         {jobs.length > scheduled.length && (
-          <div className="text-xs text-neutral-600 dark:text-neutral-400">
+          <div className="text-xs text-slate-500 dark:text-slate-400">
             {t.positions.manualJobs(jobs.length - scheduled.length)}{" "}
             <Link href={`/?project=${project.id}`} className="underline">
               {t.projects.viewJobs}
@@ -193,42 +273,21 @@ export default function ProjectPage() {
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-lg font-semibold">
-          {t.positions.keywords}{" "}
-          <span className="text-sm font-normal text-neutral-600 dark:text-neutral-400">
-            {t.home.kwCount(keywords.length)}
-          </span>
-        </h2>
+        <SectionTitle icon="keywords" count={keywords.length}>{t.positions.keywords}</SectionTitle>
         {keywords.length === 0 ? (
-          <div className="text-sm text-neutral-600 dark:text-neutral-400 border rounded-md p-4 dark:border-neutral-700">
-            {t.positions.noKeywords}
-          </div>
+          <Empty>{t.positions.noKeywords}</Empty>
         ) : (
-          <div className="border rounded-md p-3 dark:border-neutral-700 flex flex-wrap gap-1.5">
+          <div className="flex min-w-0 flex-wrap gap-1.5 rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             {keywords.map(k => (
               <span
                 key={k}
-                className="px-2 py-0.5 rounded-full border text-xs dark:border-neutral-700 text-neutral-700 dark:text-neutral-300"
+                className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300"
               >
                 {k}
               </span>
             ))}
           </div>
         )}
-      </section>
-
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">{t.projects.domains}</h2>
-        <div className="border rounded-md p-3 dark:border-neutral-700 flex flex-wrap gap-1.5">
-          {project.domains.map(d => (
-            <span key={d} className="px-2 py-0.5 rounded-full border text-xs font-mono dark:border-neutral-700">
-              {d}
-            </span>
-          ))}
-          {project.domains.length === 0 && (
-            <span className="text-sm text-neutral-600 dark:text-neutral-400">{t.positions.noDomains}</span>
-          )}
-        </div>
       </section>
     </div>
   );

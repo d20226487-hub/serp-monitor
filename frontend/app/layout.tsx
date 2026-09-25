@@ -37,7 +37,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <LangProvider>
           <HeaderShell />
-          <main className="max-w-6xl mx-auto px-6 py-8">{children}</main>
+          {/* max-w-7xl to match Site Auditor: the tables here are wide and the
+              old 6xl forced the analyzer view to break out of the container. */}
+          <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
         </LangProvider>
       </body>
     </html>

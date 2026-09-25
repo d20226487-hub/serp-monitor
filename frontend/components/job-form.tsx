@@ -44,6 +44,9 @@ export function JobForm({ initial, onSaved }: Props) {
   ];
 
   const [name, setName] = useState(initial?.name ?? "");
+  const [preferShownHost, setPreferShownHost] = useState(
+    initial?.prefer_shown_host ?? false,
+  );
   // Preselected from ?project= when arriving via "New job" on a project, so
   // the common path from the projects page files the job without a second
   // decision. Falls back to whatever the job already had when editing.
@@ -206,6 +209,7 @@ export function JobForm({ initial, onSaved }: Props) {
     ahrefs_metrics: mode === "analyzer" ? ahrefsMetrics : [],
     ahrefs_domain_metrics: mode === "analyzer" ? ahrefsDomainMetrics : [],
     whois_enabled: mode === "analyzer" ? whoisEnabled : false,
+    prefer_shown_host: preferShownHost,
   });
 
   async function save(runAfter = false) {
@@ -248,44 +252,66 @@ export function JobForm({ initial, onSaved }: Props) {
           value={name}
           onChange={e => setName(e.target.value)}
           placeholder={t.jobForm.namePlaceholder}
-          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700"
+          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700"
         />
       </div>
 
       <div className="space-y-1.5">
         <label className="text-sm font-medium">
           {t.jobForm.project}{" "}
-          <span className="text-neutral-600 dark:text-neutral-400 text-xs">
+          <span className="text-slate-600 dark:text-slate-400 text-xs">
             {t.common.optional}
           </span>
         </label>
         <select
           value={projectId ?? ""}
           onChange={e => setProjectId(e.target.value ? Number(e.target.value) : null)}
-          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700"
+          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700"
         >
           <option value="">{t.jobForm.noProject}</option>
           {projects.map(p => (
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
         </select>
-        <div className="text-xs text-neutral-600 dark:text-neutral-400">
+        <div className="text-xs text-slate-600 dark:text-slate-400">
           {projects.length === 0 ? t.jobForm.projectNoneYet : t.jobForm.projectHint}
         </div>
       </div>
 
+      <div className="pt-1">
+        <label className="flex items-start gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={preferShownHost}
+            onChange={e => setPreferShownHost(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span>
+            <span className="font-medium text-sm">{t.jobForm.preferShownHost}</span>
+            <span className="block text-xs text-slate-600 dark:text-slate-400">
+              {t.jobForm.preferShownHostHelp}
+            </span>
+            {preferShownHost && (
+              <span className="block text-xs text-amber-700 dark:text-amber-300 mt-1">
+                {t.jobForm.preferShownHostWarn}
+              </span>
+            )}
+          </span>
+        </label>
+      </div>
+
       <div className="space-y-1.5">
         <label className="text-sm font-medium">
-          {t.jobForm.keywords} <span className="text-neutral-600 dark:text-neutral-400 text-xs">{t.jobForm.keywordsHint}</span>
+          {t.jobForm.keywords} <span className="text-slate-600 dark:text-slate-400 text-xs">{t.jobForm.keywordsHint}</span>
         </label>
         <textarea
           value={keywordsText}
           onChange={e => setKeywordsText(e.target.value)}
           rows={8}
           placeholder={t.jobForm.keywordsPlaceholder}
-          className="w-full px-3 py-2 rounded-md border font-mono text-sm bg-white dark:bg-neutral-900 dark:border-neutral-700"
+          className="w-full px-3 py-2 rounded-md border font-mono text-sm bg-white dark:bg-slate-900 dark:border-slate-700"
         />
-        <div className="text-xs text-neutral-600 dark:text-neutral-400">{t.jobForm.keywordsCount(keywords.length)}</div>
+        <div className="text-xs text-slate-600 dark:text-slate-400">{t.jobForm.keywordsCount(keywords.length)}</div>
         {overflow > 0 && (
           <div className="text-xs text-amber-700 dark:text-amber-300">
             {t.jobForm.keywordsOverflow(overflow, MAX_KEYWORDS)}
@@ -304,14 +330,14 @@ export function JobForm({ initial, onSaved }: Props) {
               type="button"
               onClick={() => setMode(m)}
               aria-pressed={mode === m}
-              className={`text-left px-3 py-2 rounded-md border transition-colors ${mode === m ? "border-neutral-900 dark:border-white bg-neutral-50 dark:bg-neutral-900"
-                  : "border-neutral-300 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-900/50"
+              className={`text-left px-3 py-2 rounded-md border transition-colors ${mode === m ? "border-slate-900 dark:border-white bg-slate-50 dark:bg-slate-900"
+                  : "border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-900/50"
               }`}
             >
               <div className="text-sm font-medium">
                 {m === "serp" ? t.jobForm.modeSerp : t.jobForm.modeAnalyzer}
               </div>
-              <div className="text-xs text-neutral-600 dark:text-neutral-400 mt-0.5">
+              <div className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
                 {m === "serp" ? t.jobForm.modeSerpHelp : t.jobForm.modeAnalyzerHelp}
               </div>
             </button>
@@ -320,10 +346,10 @@ export function JobForm({ initial, onSaved }: Props) {
       </div>
 
       {mode === "analyzer" && (
-        <div className="border rounded-md p-4 dark:border-neutral-700 space-y-3">
+        <div className="border rounded-md p-4 dark:border-slate-700 space-y-3">
           <div>
             <div className="font-medium text-sm">{t.jobForm.ahrefsMetrics}</div>
-            <div className="text-xs text-neutral-600 dark:text-neutral-400">{t.jobForm.ahrefsMetricsHelp}</div>
+            <div className="text-xs text-slate-600 dark:text-slate-400">{t.jobForm.ahrefsMetricsHelp}</div>
           </div>
           {ahrefs && !ahrefs.configured && (
             <div className="text-xs text-amber-700 dark:text-amber-300 border-l-4 border-amber-400 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 rounded">
@@ -343,14 +369,14 @@ export function JobForm({ initial, onSaved }: Props) {
                     )
                   }
                   aria-pressed={on}
-                  className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${on ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 border-neutral-900 dark:border-white"
-                      : "border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                  className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${on ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-slate-900 dark:border-white"
+                      : "border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
                   }`}
                 >
                   {m.label}
                   {/* Field prices differ ~10x, so show them inline: picking
                       org_traffic is a very different decision from picking DR. */}
-                  <span className={`ml-1.5 ${on ? "opacity-60" : "text-neutral-500 dark:text-neutral-400"}`}>
+                  <span className={`ml-1.5 ${on ? "opacity-60" : "text-slate-500 dark:text-slate-400"}`}>
                     {m.units}u
                   </span>
                 </button>
@@ -359,9 +385,9 @@ export function JobForm({ initial, onSaved }: Props) {
           </div>
           {/* Domain-level pass: answers the one question page metrics can't —
               weak page on a STRONG site, or weak page on a weak site. */}
-          <div className="pt-2 border-t dark:border-neutral-800">
+          <div className="pt-2 border-t dark:border-slate-800">
             <div className="font-medium text-sm">{t.jobForm.ahrefsDomainMetrics}</div>
-            <div className="text-xs text-neutral-600 dark:text-neutral-400 mb-2">{t.jobForm.ahrefsDomainMetricsHelp}</div>
+            <div className="text-xs text-slate-600 dark:text-slate-400 mb-2">{t.jobForm.ahrefsDomainMetricsHelp}</div>
             <div className="flex flex-wrap gap-2">
               {(ahrefs?.metrics ?? [])
                 // url_rating is empty outside exact mode — don't offer to pay for it.
@@ -378,12 +404,12 @@ export function JobForm({ initial, onSaved }: Props) {
                         )
                       }
                       aria-pressed={on}
-                      className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${on ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 border-neutral-900 dark:border-white"
-                          : "border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                      className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${on ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 border-slate-900 dark:border-white"
+                          : "border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
                       }`}
                     >
                       {m.label}
-                      <span className={`ml-1.5 ${on ? "opacity-60" : "text-neutral-500 dark:text-neutral-400"}`}>
+                      <span className={`ml-1.5 ${on ? "opacity-60" : "text-slate-500 dark:text-slate-400"}`}>
                         {m.units}u
                       </span>
                     </button>
@@ -391,14 +417,14 @@ export function JobForm({ initial, onSaved }: Props) {
                 })}
             </div>
             {ahrefsDomainMetrics.length === 0 && (
-              <div className="text-xs text-neutral-600 dark:text-neutral-400 mt-1.5">{t.jobForm.ahrefsDomainOff}</div>
+              <div className="text-xs text-slate-600 dark:text-slate-400 mt-1.5">{t.jobForm.ahrefsDomainOff}</div>
             )}
           </div>
 
           {/* Domain age. Its own switch rather than part of the Ahrefs block
               because it bills a different provider on a different basis: real
               dollars per DataForSEO request, not Ahrefs units. */}
-          <div className="pt-2 border-t dark:border-neutral-800">
+          <div className="pt-2 border-t dark:border-slate-800">
             <label className="flex items-start gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -408,13 +434,13 @@ export function JobForm({ initial, onSaved }: Props) {
               />
               <span>
                 <span className="font-medium text-sm">{t.jobForm.whois}</span>
-                <span className="block text-xs text-neutral-600 dark:text-neutral-400">
+                <span className="block text-xs text-slate-600 dark:text-slate-400">
                   {t.jobForm.whoisHelp}
                 </span>
               </span>
             </label>
             {whoisEnabled && (
-              <div className="text-xs text-neutral-600 dark:text-neutral-400 mt-1.5 pl-6">
+              <div className="text-xs text-slate-600 dark:text-slate-400 mt-1.5 pl-6">
                 {t.jobForm.whoisCost}
                 {!dataforseoReady && (
                   <span className="block text-amber-700 dark:text-amber-300 mt-1">
@@ -425,7 +451,7 @@ export function JobForm({ initial, onSaved }: Props) {
             )}
           </div>
 
-          <div className="text-xs text-neutral-600 dark:text-neutral-400 pt-2 border-t dark:border-neutral-800">
+          <div className="text-xs text-slate-600 dark:text-slate-400 pt-2 border-t dark:border-slate-800">
             {t.jobForm.ahrefsUnitsEstimate(ahrefsUrlCount, perUrlUnits, ahrefsUnits)}
             {perDomainUnits > 0 && (
               <> {t.jobForm.ahrefsDomainUnits(perDomainUnits, domainUnits, ahrefsUnits + domainUnits)}</>
@@ -447,14 +473,14 @@ export function JobForm({ initial, onSaved }: Props) {
         <select
           value={provider}
           onChange={e => setProvider(e.target.value)}
-          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700"
+          className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700"
         >
           <option value="serpapi">SerpAPI</option>
           <option value="brightdata">Bright Data</option>
           <option value="oxylabs">Oxylabs</option>
           <option value="dataforseo">DataForSEO</option>
         </select>
-        <p className="text-xs text-neutral-600 dark:text-neutral-400">
+        <p className="text-xs text-slate-600 dark:text-slate-400">
           {t.jobForm.providerHelpPrefix}
           <a href="/settings" className="underline">{t.jobForm.providerHelpLink}</a>
           {t.jobForm.providerHelpSuffix}
@@ -560,16 +586,16 @@ export function JobForm({ initial, onSaved }: Props) {
             type="number" min={1} max={100}
             value={topN}
             onChange={e => setTopN(Number(e.target.value) || 10)}
-            className="w-full px-3 py-2 rounded-md border bg-white dark:bg-neutral-900 dark:border-neutral-700"
+            className="w-full px-3 py-2 rounded-md border bg-white dark:bg-slate-900 dark:border-slate-700"
           />
         </div>
       </div>
 
-      <div className="border rounded-md p-4 dark:border-neutral-700 space-y-3">
+      <div className="border rounded-md p-4 dark:border-slate-700 space-y-3">
         <div className="flex items-center justify-between">
           <div>
             <div className="font-medium text-sm">{t.jobForm.schedule}</div>
-            <div className="text-xs text-neutral-600 dark:text-neutral-400">
+            <div className="text-xs text-slate-600 dark:text-slate-400">
               {t.jobForm.cronHelpPrefix(schedTz)}
               {schedTz === "UTC" && t.jobForm.cronEditHint}
             </div>
@@ -587,7 +613,7 @@ export function JobForm({ initial, onSaved }: Props) {
           value={cron}
           onChange={e => setCron(e.target.value)}
           placeholder={t.jobForm.cronPlaceholder}
-          className="w-full px-3 py-2 rounded-md border font-mono text-sm bg-white dark:bg-neutral-900 dark:border-neutral-700"
+          className="w-full px-3 py-2 rounded-md border font-mono text-sm bg-white dark:bg-slate-900 dark:border-slate-700"
         />
         <div className="flex flex-wrap gap-2 text-xs">
           {[
@@ -599,19 +625,19 @@ export function JobForm({ initial, onSaved }: Props) {
           ].map(([label, expr]) => (
             <button
               key={expr} type="button"
-              className="px-2 py-1 rounded border dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+              className="px-2 py-1 rounded border dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
               onClick={() => setCron(expr)}
             >{label}</button>
           ))}
         </div>
       </div>
 
-      <div className="border rounded-md p-4 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900/50">
+      <div className="border rounded-md p-4 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
         <div className="grid sm:grid-cols-2 gap-4">
           <div>
             <div className="text-sm font-medium mb-1">{t.jobForm.estimateTitle}</div>
             <div className="text-2xl font-semibold">{estimate?.total ?? 0}</div>
-            <div className="text-xs text-neutral-600 dark:text-neutral-400 mt-1">
+            <div className="text-xs text-slate-600 dark:text-slate-400 mt-1">
               {t.jobForm.estimateBreakdown(estimate?.breakdown.google ?? 0, estimate?.breakdown.yandex ?? 0)}
             </div>
           </div>
@@ -622,7 +648,7 @@ export function JobForm({ initial, onSaved }: Props) {
                 (estimate?.total ?? 0) * billingUnits(provider, topN) * (rates?.rates[provider] ?? 0)
               )}
             </div>
-            <div className="text-xs text-neutral-600 dark:text-neutral-400 mt-1">
+            <div className="text-xs text-slate-600 dark:text-slate-400 mt-1">
               {t.jobForm.estimateRate(formatUsd(rates?.rates[provider] ?? 0))}
               {" · "}
               <a href="/settings" className="underline">{t.jobForm.estimateEditRate}</a>
@@ -636,7 +662,7 @@ export function JobForm({ initial, onSaved }: Props) {
             )}
           </div>
         </div>
-        <div className="text-xs text-neutral-600 dark:text-neutral-400 mt-3">
+        <div className="text-xs text-slate-600 dark:text-slate-400 mt-3">
           {t.jobForm.estimateApprox}
         </div>
       </div>
@@ -645,14 +671,14 @@ export function JobForm({ initial, onSaved }: Props) {
         <button
           disabled={saving}
           onClick={() => save(false)}
-          className="px-4 py-2 rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 disabled:opacity-50"
+          className="px-4 py-2 rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 disabled:opacity-50"
         >
           {initial ? t.jobForm.saveChanges : t.jobForm.saveCreate}
         </button>
         <button
           disabled={saving}
           onClick={() => save(true)}
-          className="px-4 py-2 rounded-md border dark:border-neutral-700 disabled:opacity-50"
+          className="px-4 py-2 rounded-md border dark:border-slate-700 disabled:opacity-50"
         >
           {initial ? t.jobForm.saveAndRunUpdate : t.jobForm.saveAndRunCreate}
         </button>
@@ -715,7 +741,7 @@ function GranBadge({ g }: { g: Granularity }) {
   const cls =
     g === "city" ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
     : g === "country" ? "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
-    : "bg-neutral-200 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400";
+    : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400";
   const label =
     g === "city" ? t.jobForm.targeting.gran.city
     : g === "country" ? t.jobForm.targeting.gran.country
@@ -734,9 +760,9 @@ function EngineRow({
   const name = engine === "google" ? t.jobForm.targeting.engineGoogle : t.jobForm.targeting.engineYandex;
   return (
     <div className="flex items-center gap-2 text-xs">
-      <span className="w-14 text-neutral-600 dark:text-neutral-400">{name}</span>
+      <span className="w-14 text-slate-600 dark:text-slate-400">{name}</span>
       <GranBadge g={outcome.granularity} />
-      <span className="text-neutral-600 dark:text-neutral-400 font-mono truncate">
+      <span className="text-slate-600 dark:text-slate-400 font-mono truncate">
         {outcome.via}{outcome.detail ? `  ${outcome.detail}` : ""}
       </span>
     </div>
@@ -754,7 +780,7 @@ function EffectiveTargetingPanel({
   const { t } = useT();
   if (locations.length === 0) {
     return (
-      <div className="text-xs text-neutral-600 dark:text-neutral-400 italic">
+      <div className="text-xs text-slate-600 dark:text-slate-400 italic">
         {t.jobForm.targeting.noLocations}
       </div>
     );
@@ -763,21 +789,21 @@ function EffectiveTargetingPanel({
   const showYandex = engines.includes("yandex");
 
   return (
-    <div className="border rounded-md p-3 dark:border-neutral-700 space-y-2">
-      <div className="text-xs uppercase tracking-wide font-semibold text-neutral-600 dark:text-neutral-400">
+    <div className="border rounded-md p-3 dark:border-slate-700 space-y-2">
+      <div className="text-xs uppercase tracking-wide font-semibold text-slate-600 dark:text-slate-400">
         {t.jobForm.targeting.header(provider)}
       </div>
       <div className="space-y-2">
         {locations.map(loc => {
           const saved = savedByCanonical.get(loc.canonical_name);
           return (
-            <div key={loc.canonical_name} className="border-t pt-2 first:border-t-0 first:pt-0 dark:border-neutral-800">
+            <div key={loc.canonical_name} className="border-t pt-2 first:border-t-0 first:pt-0 dark:border-slate-800">
               <div className="text-sm font-medium break-all">{loc.canonical_name}</div>
               <div className="space-y-1 mt-1">
                 {showGoogle && <EngineRow engine="google" outcome={googleOutcome(provider, loc, saved)} />}
                 {showYandex && <EngineRow engine="yandex" outcome={yandexOutcome(provider, loc, saved)} />}
                 {!showGoogle && !showYandex && (
-                  <div className="text-xs text-neutral-600 dark:text-neutral-400 italic">{t.jobForm.targeting.noEngines}</div>
+                  <div className="text-xs text-slate-600 dark:text-slate-400 italic">{t.jobForm.targeting.noEngines}</div>
                 )}
               </div>
               {/* Skip the lr hint for DataForSEO — Yandex won't run there at

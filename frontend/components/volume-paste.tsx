@@ -48,14 +48,14 @@ export function VolumePastePanel({
   }
 
   return (
-    <div className="px-4 py-3 border-b dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/50 space-y-2">
+    <div className="px-4 py-3 border-b dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 space-y-2">
       <div className="flex items-baseline gap-2">
         <span className="font-medium text-sm">{t.analysis.pasteTitle}</span>
-        <span className="text-xs text-neutral-600 dark:text-neutral-400">{t.analysis.pasteHelp(market)}</span>
+        <span className="text-xs text-slate-600 dark:text-slate-400">{t.analysis.pasteHelp(market)}</span>
         <button
           type="button"
           onClick={onClose}
-          className="ml-auto text-xs text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100"
+          className="ml-auto text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
         >
           {t.common.cancel}
         </button>
@@ -67,7 +67,7 @@ export function VolumePastePanel({
         onChange={e => setText(e.target.value)}
         placeholder={t.analysis.pastePlaceholder}
         rows={6}
-        className="w-full px-2 py-1.5 text-xs font-mono rounded border bg-white dark:bg-neutral-900 dark:border-neutral-700"
+        className="w-full px-2 py-1.5 text-xs font-mono rounded border bg-white dark:bg-slate-900 dark:border-slate-700"
       />
 
       {text.trim() && (
@@ -76,11 +76,11 @@ export function VolumePastePanel({
               checking before applying, since Ahrefs rows carry several
               numbers and only one of them is the search volume. */}
           {parsed.header ? (
-            <div className="text-neutral-600 dark:text-neutral-300">
+            <div className="text-slate-600 dark:text-slate-300">
               {t.analysis.pasteColumns(parsed.header.keyword, parsed.header.volume)}
             </div>
           ) : (
-            <div className="text-neutral-600 dark:text-neutral-400">{t.analysis.pasteNoHeader}</div>
+            <div className="text-slate-600 dark:text-slate-400">{t.analysis.pasteNoHeader}</div>
           )}
 
           {wrongCountry && (
@@ -106,13 +106,13 @@ export function VolumePastePanel({
           )}
 
           {parsed.skipped.length > 0 && (
-            <div className="text-neutral-600 dark:text-neutral-400">
+            <div className="text-slate-600 dark:text-slate-400">
               {t.analysis.pasteSkipped(parsed.skipped.length)}
             </div>
           )}
 
           {parsed.missing.length > 0 && (
-            <div className="text-neutral-600 dark:text-neutral-400">
+            <div className="text-slate-600 dark:text-slate-400">
               {t.analysis.pasteMissing(
                 parsed.missing.length,
                 parsed.missing.slice(0, 5).join(", ")
@@ -128,7 +128,7 @@ export function VolumePastePanel({
           type="button"
           onClick={apply}
           disabled={saving || parsed.matched.length === 0}
-          className="px-3 py-1 text-xs rounded-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 disabled:opacity-40"
+          className="px-3 py-1 text-xs rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 disabled:opacity-40"
         >
           {saving
             ? t.common.loading

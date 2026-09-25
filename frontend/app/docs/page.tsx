@@ -7,20 +7,20 @@ export const metadata: Metadata = {
 
 /* Утилитарные стили: типографика для длинного текста на чистом Tailwind
    (без плагина @tailwindcss/typography). */
-const H2 = "text-2xl font-semibold pt-10 mt-2 border-t dark:border-neutral-800 pt-8 scroll-mt-20";
+const H2 = "text-2xl font-semibold pt-10 mt-2 border-t dark:border-slate-800 pt-8 scroll-mt-20";
 const H3 = "text-lg font-semibold mt-6 mb-2";
 const H4 = "text-base font-semibold mt-4 mb-1";
-const P = "text-sm leading-7 text-neutral-700 dark:text-neutral-300";
-const UL = "list-disc list-outside ml-6 space-y-1 text-sm leading-7 text-neutral-700 dark:text-neutral-300";
-const OL = "list-decimal list-outside ml-6 space-y-1 text-sm leading-7 text-neutral-700 dark:text-neutral-300";
+const P = "text-sm leading-7 text-slate-700 dark:text-slate-300";
+const UL = "list-disc list-outside ml-6 space-y-1 text-sm leading-7 text-slate-700 dark:text-slate-300";
+const OL = "list-decimal list-outside ml-6 space-y-1 text-sm leading-7 text-slate-700 dark:text-slate-300";
 const TABLE = "w-full text-sm border-collapse my-3";
-const TH = "text-left font-semibold border-b dark:border-neutral-700 px-3 py-2 align-top";
-const TD = "border-b dark:border-neutral-800 px-3 py-2 align-top text-neutral-700 dark:text-neutral-300";
-const CODE = "font-mono text-[0.85em] bg-neutral-100 dark:bg-neutral-800 px-1 py-0.5 rounded";
-const PRE = "font-mono text-xs bg-neutral-100 dark:bg-neutral-800 rounded p-3 overflow-x-auto my-3 leading-relaxed";
-const CALLOUT_NOTE = "border-l-4 border-blue-400 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30 px-4 py-3 my-3 text-sm leading-7 text-neutral-700 dark:text-neutral-300";
-const CALLOUT_WARN = "border-l-4 border-amber-400 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 my-3 text-sm leading-7 text-neutral-700 dark:text-neutral-300";
-const CALLOUT_TIP = "border-l-4 border-emerald-400 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 px-4 py-3 my-3 text-sm leading-7 text-neutral-700 dark:text-neutral-300";
+const TH = "text-left font-semibold border-b dark:border-slate-700 px-3 py-2 align-top";
+const TD = "border-b dark:border-slate-800 px-3 py-2 align-top text-slate-700 dark:text-slate-300";
+const CODE = "font-mono text-[0.85em] bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded";
+const PRE = "font-mono text-xs bg-slate-100 dark:bg-slate-800 rounded p-3 overflow-x-auto my-3 leading-relaxed";
+const CALLOUT_NOTE = "border-l-4 border-blue-400 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30 px-4 py-3 my-3 text-sm leading-7 text-slate-700 dark:text-slate-300";
+const CALLOUT_WARN = "border-l-4 border-amber-400 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 my-3 text-sm leading-7 text-slate-700 dark:text-slate-300";
+const CALLOUT_TIP = "border-l-4 border-emerald-400 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 px-4 py-3 my-3 text-sm leading-7 text-slate-700 dark:text-slate-300";
 
 const TOC: { id: string; title: string }[] = [
   { id: "intro", title: "Что делает SERP Monitor" },
@@ -40,7 +40,7 @@ export default function DocsPage() {
     <article className="max-w-3xl mx-auto pb-20">
       <header className="mb-6">
         <h1 className="text-3xl font-bold">Документация</h1>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400 mt-1">
+        <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
           Подробное руководство по работе с SERP Monitor — на русском, единое для обоих
           языков интерфейса.
         </p>
@@ -49,7 +49,7 @@ export default function DocsPage() {
       {/* Содержание */}
       <nav
         aria-label="Содержание"
-        className="border rounded-md p-4 my-6 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900/40"
+        className="border rounded-md p-4 my-6 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40"
       >
         <div className="text-sm font-semibold mb-2">Содержание</div>
         <ol className="list-decimal list-outside ml-5 space-y-1 text-sm">
@@ -974,7 +974,7 @@ docker compose up -d web`}
         </pre>
       </section>
 
-      <footer className="mt-16 pt-6 border-t dark:border-neutral-800 text-xs text-neutral-600 dark:text-neutral-400">
+      <footer className="mt-16 pt-6 border-t dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400">
         <p>
           Не нашли ответа на свой вопрос? Откройте логи API через{" "}
           <code className={CODE}>docker compose logs api --since=15m</code> — большинство проблем

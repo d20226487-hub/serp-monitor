@@ -475,6 +475,8 @@ melbet	kz	34	20,000	0.45`,
     notes: "Notes",
     jobsCount: (n: number) => `${n} job(s)`,
     andMore: (n: number) => `+${n} more`,
+    showAllDomains: (n: number) => `+${n} more — show all`,
+    showFewerDomains: "show fewer",
     deleteConfirm: (name: string, jobs: number) =>
       jobs > 0
         ? `Delete the project "${name}"? Its ${jobs} job(s) are kept — they become ungrouped, with their runs and schedules intact.`
@@ -497,12 +499,23 @@ melbet	kz	34	20,000	0.45`,
     colKeyword: "Keyword",
     colOurPositions: "Our positions",
     colChecked: "Checked",
+    showRaw: (n: number) => `Show the host each link actually opens (${n} differ)`,
+    serpCount: (n: number) => `${n} SERP(s)`,
+    substituted: "displayed under a different host",
+    substitutedHint: (shown: string, linked: string) =>
+      `Displayed as ${shown}, links to ${linked}`,
+    unresolvedHint:
+      "This job resolves to the displayed site, but the engine reported none for this result — the host below is the raw link.",
+
     notRanking: "not in the captured results",
     ranking: (ranking: number, total: number) =>
       `ranking for ${ranking} of ${total} keyword(s)`,
     footnote: "Each row shows its most recent run inside the range, listing every project domain that ranked, best position first. A keyword with nothing listed had no project domain among the positions that run captured — which is not the same as not ranking at all.",
     noDomains: "This project has no domains yet. Add some by editing the project, and their positions will appear here.",
     noRuns: "No runs in this range. Run one of the project's jobs, or widen the range.",
+    geos: "Locations",
+    engines: "Search engines",
+    noGeo: "no geo",
     scheduled: "Scheduled jobs",
     noScheduled: "No job in this project is on a schedule. Positions will only update when a job is run by hand.",
     manualJobs: (n: number) => `${n} more job(s) in this project run only when started by hand.`,
@@ -549,6 +562,11 @@ melbet	kz	34	20,000	0.45`,
     name: "Name",
     namePlaceholder: "e.g. Brand monitoring — KZ/RU",
     keywords: "Keywords",
+    preferShownHost: "Resolve AMP and CDN results to the site shown",
+    preferShownHostHelp:
+      "An AMP or CDN result links to a delivery host while the engine prints the publisher — by.tribuna.com displayed over a cloudfront.net link. With this on, the displayed site is what counts as ranking. Raw hosts are always stored and stay one click away.",
+    preferShownHostWarn:
+      "This is the same field a doorway spoofs: a result printing someone else's brand will be reported under that brand. Substituted results are marked ⇄ so you can see which ones moved.",
     project: "Project",
     noProject: "— no project —",
     projectHint: "Jobs with a project are grouped under its folder in the jobs list.",
@@ -1418,6 +1436,8 @@ melbet	kz	34	20 000	0,45`,
     notes: "Заметки",
     jobsCount: (n: number) => `задач: ${n}`,
     andMore: (n: number) => `ещё ${n}`,
+    showAllDomains: (n: number) => `ещё ${n} — показать все`,
+    showFewerDomains: "свернуть",
     deleteConfirm: (name: string, jobs: number) =>
       jobs > 0
         ? `Удалить проект «${name}»? Задачи (${jobs}) сохранятся — они станут без проекта, вместе со всеми прогонами и расписанием.`
@@ -1440,12 +1460,23 @@ melbet	kz	34	20 000	0,45`,
     colKeyword: "Запрос",
     colOurPositions: "Наши позиции",
     colChecked: "Проверено",
+    showRaw: (n: number) => `Показать хост, на который ведёт ссылка (отличается: ${n})`,
+    serpCount: (n: number) => `выдач: ${n}`,
+    substituted: "показан под другим хостом",
+    substitutedHint: (shown: string, linked: string) =>
+      `Показан как ${shown}, ведёт на ${linked}`,
+    unresolvedHint:
+      "Задача приводит к показанному сайту, но поисковик его не сообщил для этого результата — ниже исходная ссылка.",
+
     notRanking: "нет в снятых результатах",
     ranking: (ranking: number, total: number) =>
       `ранжируется по ${ranking} из ${total} запросов`,
     footnote: "В каждой строке — последний прогон внутри периода: перечислены все домены проекта, которые ранжируются, начиная с лучшей позиции. Если у запроса ничего не указано, ни одного домена проекта не было среди снятых позиций этого прогона, а это не то же самое, что «не ранжируется вовсе».",
     noDomains: "У проекта пока нет доменов. Добавьте их в настройках проекта — и здесь появятся позиции.",
     noRuns: "За этот период прогонов не было. Запустите задачу проекта или расширьте период.",
+    geos: "Локации",
+    engines: "Поисковики",
+    noGeo: "без гео",
     scheduled: "Задачи по расписанию",
     noScheduled: "Ни одна задача проекта не стоит на расписании. Позиции будут обновляться только при ручном запуске.",
     manualJobs: (n: number) => `Ещё задач в проекте, запускаемых вручную: ${n}.`,
@@ -1492,6 +1523,11 @@ melbet	kz	34	20 000	0,45`,
     name: "Название",
     namePlaceholder: "напр. Мониторинг бренда — KZ/RU",
     keywords: "Ключевые слова",
+    preferShownHost: "Приводить AMP и CDN к показанному сайту",
+    preferShownHostHelp:
+      "AMP- или CDN-результат ведёт на технический хост, а поисковик печатает издателя — by.tribuna.com над ссылкой на cloudfront.net. С этой опцией ранжируется показанный сайт. Исходные хосты всегда сохраняются и доступны в один клик.",
+    preferShownHostWarn:
+      "Это то же поле, которое подделывает дорвей: результат, печатающий чужой бренд, будет засчитан этому бренду. Подменённые результаты помечены ⇄, чтобы было видно, что изменилось.",
     project: "Проект",
     noProject: "— без проекта —",
     projectHint: "Задачи с проектом группируются в его папке в списке задач.",

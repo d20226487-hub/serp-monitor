@@ -67,8 +67,8 @@ export function RunPhases({
             {i > 0 && (
               <span
                 className={`w-4 h-px ${state === "todo"
-                  ? "bg-neutral-300 dark:bg-neutral-700"
-                  : "bg-neutral-400 dark:bg-neutral-500"
+                  ? "bg-slate-300 dark:bg-slate-700"
+                  : "bg-slate-400 dark:bg-slate-500"
                 }`}
               />
             )}
@@ -80,7 +80,7 @@ export function RunPhases({
                     ? "border-amber-300 text-amber-900 bg-amber-50 dark:border-amber-800 dark:text-amber-200 dark:bg-amber-950/40"
                     : state === "stopped"
                       ? "border-red-300 text-red-800 bg-red-50 dark:border-red-900 dark:text-red-200 dark:bg-red-950/40"
-                      : "border-neutral-200 text-neutral-500 dark:border-neutral-700 dark:text-neutral-400"
+                      : "border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400"
               }`}
             >
               {state === "done" ? (

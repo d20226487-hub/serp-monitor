@@ -60,7 +60,7 @@ export default function ReportPage() {
     return <div className="text-sm text-red-600 dark:text-red-400">{error}</div>;
   }
   if (!analysis || !run) {
-    return <div className="text-sm text-neutral-600 dark:text-neutral-400">{t.common.loading}</div>;
+    return <div className="text-sm text-slate-600 dark:text-slate-400">{t.common.loading}</div>;
   }
   if (analysis.mode !== "analyzer") {
     return (
@@ -68,7 +68,7 @@ export default function ReportPage() {
         <Link href={`/runs/${id}`} className="text-sm text-blue-700 dark:text-blue-300 hover:underline">
           ← {t.run.title(id)}
         </Link>
-        <div className="text-sm text-neutral-600 dark:text-neutral-400">{t.analysis.empty}</div>
+        <div className="text-sm text-slate-600 dark:text-slate-400">{t.analysis.empty}</div>
       </div>
     );
   }

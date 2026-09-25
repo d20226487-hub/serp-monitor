@@ -10,7 +10,7 @@ export default function NewJobPage() {
       <h1 className="text-2xl font-semibold">{t.jobs.newTitle}</h1>
       {/* JobForm reads ?project= to preselect the folder, and useSearchParams
           opts a route out of prerendering unless a boundary catches it. */}
-      <Suspense fallback={<div className="text-sm text-neutral-600 dark:text-neutral-400">{t.common.loading}</div>}>
+      <Suspense fallback={<div className="text-sm text-slate-600 dark:text-slate-400">{t.common.loading}</div>}>
         <JobForm />
       </Suspense>
     </div>

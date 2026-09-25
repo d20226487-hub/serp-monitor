@@ -77,31 +77,31 @@ export function CsvColumnPicker({
   }
 
   return (
-    <div className="px-4 py-3 border-b dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/50 space-y-3">
+    <div className="px-4 py-3 border-b dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 space-y-3">
       <div className="flex flex-wrap items-baseline gap-2">
         <span className="font-medium text-sm">{t.analysis.csvColumnsTitle}</span>
-        <span className="text-xs text-neutral-600 dark:text-neutral-400">
+        <span className="text-xs text-slate-600 dark:text-slate-400">
           {t.analysis.csvSelected(selected.length, columns.length)}
         </span>
         <div className="flex items-center gap-1.5 ml-2">
           <button
             type="button"
             onClick={() => setEvery(true)}
-            className="px-2 py-0.5 text-xs rounded-md border dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+            className="px-2 py-0.5 text-xs rounded-md border dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             {t.analysis.csvSelectAll}
           </button>
           <button
             type="button"
             onClick={() => setEvery(false)}
-            className="px-2 py-0.5 text-xs rounded-md border dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+            className="px-2 py-0.5 text-xs rounded-md border dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             {t.analysis.csvSelectNone}
           </button>
           <button
             type="button"
             onClick={() => onChange(() => ({}))}
-            className="px-2 py-0.5 text-xs rounded-md border dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+            className="px-2 py-0.5 text-xs rounded-md border dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             {t.analysis.csvSelectDefault}
           </button>
@@ -109,13 +109,13 @@ export function CsvColumnPicker({
         <button
           type="button"
           onClick={onClose}
-          className="ml-auto text-xs text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100"
+          className="ml-auto text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
         >
           {t.common.close}
         </button>
       </div>
 
-      <p className="text-xs text-neutral-600 dark:text-neutral-400 max-w-3xl">
+      <p className="text-xs text-slate-600 dark:text-slate-400 max-w-3xl">
         {t.analysis.csvColumnsHint}
       </p>
 
@@ -130,15 +130,15 @@ export function CsvColumnPicker({
               <button
                 type="button"
                 onClick={() => toggleGroup(group)}
-                className="flex items-center gap-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-neutral-100 mb-1"
+                className="flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 mb-1"
               >
                 <span
                   className={`inline-block w-2 h-2 rounded-sm border ${
                     all
-                      ? "bg-neutral-900 border-neutral-900 dark:bg-neutral-100 dark:border-neutral-100"
+                      ? "bg-slate-900 border-slate-900 dark:bg-slate-100 dark:border-slate-100"
                       : some
-                        ? "bg-neutral-400 border-neutral-400 dark:bg-neutral-500 dark:border-neutral-500"
-                        : "border-neutral-400 dark:border-neutral-600"
+                        ? "bg-slate-400 border-slate-400 dark:bg-slate-500 dark:border-slate-500"
+                        : "border-slate-400 dark:border-slate-600"
                   }`}
                 />
                 {t.analysis.csvGroupLabels[group] ?? group}
@@ -151,15 +151,15 @@ export function CsvColumnPicker({
                         type="checkbox"
                         checked={isColumnOn(col, overrides)}
                         onChange={() => toggle(col)}
-                        className="accent-neutral-900 dark:accent-neutral-100 self-center shrink-0"
+                        className="accent-slate-900 dark:accent-slate-100 self-center shrink-0"
                       />
-                      <span className="text-neutral-800 dark:text-neutral-200 min-w-0">
+                      <span className="text-slate-800 dark:text-slate-200 min-w-0">
                         {columnLabel(col, t.analysis)}
                       </span>
                       {/* What the spreadsheet will actually receive. Never
                           truncated — the label beside it is translated, this is
                           the name the receiving sheet will hold. */}
-                      <span className="ml-auto pl-2 font-mono text-[11px] text-neutral-500 dark:text-neutral-400 shrink-0">
+                      <span className="ml-auto pl-2 font-mono text-[11px] text-slate-500 dark:text-slate-400 shrink-0">
                         {col.header}
                       </span>
                     </label>
@@ -172,12 +172,12 @@ export function CsvColumnPicker({
       </div>
 
       <div>
-        <div className="text-xs text-neutral-600 dark:text-neutral-400 mb-1">
+        <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">
           {t.analysis.csvHeaderPreview}
         </div>
         {/* The one thing worth checking before downloading: nothing else on
             this panel tells you what order the columns come out in. */}
-        <pre className="text-[11px] font-mono whitespace-pre-wrap break-all p-2 rounded border dark:border-neutral-800 bg-white dark:bg-neutral-950 text-neutral-700 dark:text-neutral-300 max-h-24 overflow-y-auto">
+        <pre className="text-[11px] font-mono whitespace-pre-wrap break-all p-2 rounded border dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 max-h-24 overflow-y-auto">
           {selected.map(c => c.header).join(",") || "—"}
         </pre>
       </div>
