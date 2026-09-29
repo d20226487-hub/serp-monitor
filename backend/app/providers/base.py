@@ -74,6 +74,47 @@ def shown_host(display: str | None) -> str | None:
     return host if host and "." in host else None
 
 
+# A result link that goes through the engine's own redirector instead of to the
+# site. Google's «/goto?url=CAES…» carries an opaque token — it does not decode
+# to a destination — so the address the engine PRINTS is the only thing left to
+# work with. «/url?q=» is the older form and does carry the target, but it is
+# still a redirect and its `q` is what we want.
+_REDIRECT_MARKERS = ("/goto?url=", "/url?q=", "/an/count/", "/aclk?")
+
+
+def is_search_redirect(url: str | None) -> bool:
+    """True when a result URL points at the search engine's redirector.
+
+    Such a URL is useless for this tool: every result collapses to the same
+    host, so the domain/URL distribution counts the ENGINE instead of the sites
+    that ranked.
+    """
+    if not url:
+        return False
+    low = url.lower()
+    return any(m in low for m in _REDIRECT_MARKERS)
+
+
+def display_url(display: str | None) -> str | None:
+    """A clickable URL built from the address the engine displays.
+
+    «https://zazino-casino.kz»        -> https://zazino-casino.kz
+    «https://zazino.online › casino»  -> https://zazino.online
+
+    Breadcrumb crumbs are DROPPED rather than rebuilt into a path: they are
+    display text — localised category names, sometimes truncated — not path
+    segments, so joining them would invent a URL that may not resolve. In a
+    tool whose job is verifying what really ranks, a host that works beats a
+    path that might be fiction.
+    """
+    host = shown_host(display)
+    if not host:
+        return None
+    text = str(display or "").split("›")[0].strip()
+    scheme = "http://" if text.lower().startswith("http://") else "https://"
+    return scheme + host
+
+
 class SerpProvider(ABC):
     """Common interface. All methods are async + bounded by an internal
     semaphore. Implementations must be safe to instantiate per-request."""

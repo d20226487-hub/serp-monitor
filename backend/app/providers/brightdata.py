@@ -20,6 +20,8 @@ from ..app_settings import get_provider_creds
 from .base import (
     ProviderConfigError, ProviderError, ResultRow, SerpProvider, domain_of,
     shown_host,
+    display_url,
+    is_search_redirect,
 )
 from .uule import google_uule
 from .yandex_html import parse_yandex_html
@@ -97,6 +99,16 @@ def _parse_results(payload: dict, top_n: int) -> list[ResultRow]:
         if not isinstance(r, dict):
             continue
         url = r.get("url") or r.get("link") or r.get("href")
+        display = r.get("display_link")
+        # Bright Data's Full JSON returns Google's own redirector in `link`
+        # (https://www.google.kz/goto?url=CAES…) and the real address only in
+        # `display_link`. There is no field carrying the resolved destination,
+        # and the goto token is opaque, so without this every row would store
+        # google.<tld> as its domain and the distribution tables would count
+        # Google instead of the sites that ranked. Fall back to the displayed
+        # address, which is what a person reading the SERP sees.
+        if is_search_redirect(url):
+            url = display_url(display) or url
         rows.append({
             "position": r.get("rank") or r.get("position") or (len(rows) + 1),
             "url": url,
