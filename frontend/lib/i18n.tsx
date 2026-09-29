@@ -1077,7 +1077,9 @@ melbet	kz	34	20,000	0.45`,
     retrying: "Retrying…",
     basis: (common: number, total: number) =>
       common === total
-        ? `Domains and URLs below are totalled over all ${total} queries — every provider answered each one.`
+        ? total === 1
+          ? "Domains and URLs below come from the one query in this run — every provider answered it."
+          : `Domains and URLs below are totalled over all ${total} queries — every provider answered each one.`
         : `Domains and URLs below are totalled over the ${common} of ${total} queries every provider answered. The rest are left out so that one provider's failed request does not read as missing domains — they are in “Results per SERP”.`,
     nobodyAnswered: (engine: string) =>
       `No provider answered any ${engine} query, so there is nothing to compare yet.`,
@@ -2209,7 +2211,9 @@ melbet	kz	34	20 000	0,45`,
     retrying: "Повторяем…",
     basis: (common: number, total: number) =>
       common === total
-        ? `Домены и URL ниже посчитаны по всем ${total} запросам — каждый провайдер ответил на каждый.`
+        ? total === 1
+          ? "Домены и URL ниже — по единственному запросу прогона, на него ответил каждый провайдер."
+          : `Домены и URL ниже посчитаны по всем ${total} ${pluralRu(total, ["запросу", "запросам", "запросам"])} — каждый провайдер ответил на каждый.`
         : `Домены и URL ниже посчитаны по ${common} из ${total} запросов, на которые ответили все провайдеры. Остальные исключены, чтобы ошибка одного провайдера не выглядела как пропавшие домены — они видны в таблице «Результаты по SERP».`,
     nobodyAnswered: (engine: string) =>
       `Ни один провайдер не ответил ни на один запрос ${engine} — сравнивать пока нечего.`,

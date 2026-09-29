@@ -1329,6 +1329,21 @@ async def _retry_compare(db: Session, run: JobRun, job: Job) -> None:
 
     recovered = 0
     costs = {p: dict(c) for p, c in (run.provider_costs or {}).items()}
+    # A run cut short — the process restarted mid-scrape — never reached the
+    # point where the first pass's spend is written, so providers that DID
+    # answer have no cost entry. Rebuild those from their recorded answers
+    # before the top-up is added on top; otherwise the run would show only
+    # what the retry cost. Rebuilt figures are rate-based estimates even for a
+    # provider that reports real spend: its reported total died with the process.
+    answered_before: dict[str, int] = {}
+    for (p,) in db.query(RunQuery.provider).filter(
+        RunQuery.run_id == run.id, RunQuery.status == "ok",
+    ):
+        answered_before[p] = answered_before.get(p, 0) + 1
+    for p, n in answered_before.items():
+        if p not in costs:
+            costs[p] = {"cost": round(n * get_provider_rate(p), 6),
+                        "source": "estimate", "queries": n}
 
     async def one_provider(name: str, vs: list[dict]) -> None:
         nonlocal recovered
