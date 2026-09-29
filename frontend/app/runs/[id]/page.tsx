@@ -281,7 +281,11 @@ export default function RunPage() {
         </div>
       )}
 
-      {(missingQueries > 0 || retrying) && (
+      {/* Analyzer mode only. The banner's whole point is that a missing SERP
+          costs that keyword its Ahrefs metrics, domain age and AI verdict —
+          none of which exist in SERP-monitoring mode, where a keyword with no
+          results is just an empty row in the distribution tables. */}
+      {analysis?.mode === "analyzer" && (missingQueries > 0 || retrying) && (
         <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-md px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
           <span className="text-amber-900 dark:text-amber-200">
             {t.run.missingQueries(missingQueries, run.queries_total)}
