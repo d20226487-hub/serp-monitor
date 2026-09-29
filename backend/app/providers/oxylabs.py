@@ -117,6 +117,41 @@ def _build_yandex_url(*, keyword: str, language: str | None,
     return f"https://{domain}/search/?{urlencode(params, quote_via=quote)}"
 
 
+# Oxylabs reports the outcome of the scrape job INSIDE a successful HTTP 200
+# response: results[0].status_code is the job's own status, and only 200 means
+# the page was fetched. Measured: a Google query Oxylabs could not scrape came
+# back HTTP 200 with results[0].status_code=613 and content=[] — which the
+# parser read as an EMPTY SERP, i.e. "Oxylabs found nothing". In compare mode
+# that is worse than an error: an empty answer counts as an answer, so every
+# domain the other providers found showed as missing from Oxylabs' column.
+_JOB_STATUS = {
+    204: "the job had not finished",
+    612: "an undefined internal error at Oxylabs",
+    613: "the job faulted after too many retries — Oxylabs could not fetch the page",
+}
+
+
+def _check_job(data: dict, context: str) -> dict:
+    """Raise unless Oxylabs actually fetched the page; return results[0].
+
+    The HTTP layer already succeeded by the time this runs, so a failure here is
+    never a credentials problem — the message says so, to keep anyone from
+    rotating keys over a scrape that simply did not go through.
+    """
+    first = (data.get("results") or [None])[0]
+    if not isinstance(first, dict):
+        raise ProviderError(f"Oxylabs {context}: the response held no result")
+    code = first.get("status_code")
+    if code is not None and code != 200:
+        why = _JOB_STATUS.get(code, "the page was not fetched")
+        raise ProviderError(
+            f"Oxylabs {context}: job status {code} — {why}. The request itself "
+            "succeeded (HTTP 200), so credentials are fine; retry later, or use "
+            "another provider for this query."
+        )
+    return first
+
+
 def _organic_from_oxylabs(payload: dict, top_n: int, *, context: str = "") -> list[ResultRow]:
     """Walk the Oxylabs envelope to find the organic list. Shape varies
     between sources/plans:
@@ -251,7 +286,28 @@ class OxylabsProvider(SerpProvider):
         if language:
             body["locale"] = language
         data = await self._post(body)
-        return _organic_from_oxylabs(data, top_n, context=f"google '{keyword}'")
+        context = f"google '{keyword}'"
+        first = _check_job(data, context)
+        content = first.get("content")
+        # A parsed Google job answers with an object. Anything else on a 200
+        # job is not a SERP we can read — refuse it rather than report it as
+        # an empty one.
+        if not isinstance(content, dict):
+            raise ProviderError(
+                f"Oxylabs {context}: the job reported success but returned no "
+                f"parsed SERP (content was {type(content).__name__})."
+            )
+        rows = _organic_from_oxylabs(data, top_n, context=context)
+        # An empty organic list is a real answer only when Oxylabs says the
+        # parse succeeded (12000). With any other parse status it could not
+        # read the page, which is a failure, not an empty SERP.
+        parse_code = content.get("parse_status_code")
+        if not rows and parse_code not in (None, 12000):
+            raise ProviderError(
+                f"Oxylabs {context}: the page was fetched but not parsed "
+                f"(parse_status_code {parse_code}), so no results could be read."
+            )
+        return rows
 
     async def search_yandex(
         self, *, keyword, device, language,
@@ -286,9 +342,11 @@ class OxylabsProvider(SerpProvider):
 
         data = await self._post(body)
 
-        # With parse omitted, results[0].content is the raw HTML string.
-        first = (data.get("results") or [{}])[0]
-        content = first.get("content") if isinstance(first, dict) else None
+        # With parse omitted, results[0].content is the raw HTML string. Same
+        # trap as Google: a faulted job arrives as HTTP 200 with empty
+        # content, which would otherwise fall through to an empty parse below.
+        first = _check_job(data, f"yandex '{keyword}'")
+        content = first.get("content")
         if isinstance(content, str) and content:
             return parse_yandex_html(content, top_n)
 
@@ -306,7 +364,9 @@ class OxylabsProvider(SerpProvider):
             "limit": 10,
         }
         data = await self._post(body)
-        first = (data.get("results") or [None])[0] or {}
+        # Previously "ok" whatever the job status said, so the Test button
+        # passed while every real query faulted.
+        first = _check_job(data, "credentials test")
         return {
             "ok": True,
             "status_code": first.get("status_code"),

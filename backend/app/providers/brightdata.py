@@ -218,6 +218,24 @@ class BrightDataProvider(SerpProvider):
                 "(The zone's permissions are fine; it is simply switched off, "
                 "which is also what happens when billing lapses.)"
             )
+        if status == "active":
+            # The zone is fine, so nothing on the account explains this: Bright
+            # Data took the request and could not serve it. Measured repeatedly
+            # on Google, far more often with brd_mobile=1 than without — say so
+            # rather than send anyone to check billing on an active zone.
+            mobile = "brd_mobile=1" in url
+            return (
+                f'Bright Data returned an EMPTY response for zone "{zone}" '
+                f"(url={url!r}) although the zone is active — Bright Data could "
+                "not serve this request. Nothing on the account needs fixing; "
+                "retry later"
+                + (
+                    ". Mobile Google requests (brd_mobile=1) are where this has "
+                    "been seen most, so another provider is the reliable choice "
+                    "for mobile Google."
+                    if mobile else ", or use another provider for this query."
+                )
+            )
         return (
             f'Bright Data returned an EMPTY response for zone "{zone}" '
             f"(url={url!r}). That usually means the zone is disabled or out of "
