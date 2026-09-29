@@ -483,6 +483,9 @@ export type Result = {
   /** Which provider returned the row. null on rows from before this was
    *  recorded — those came from the run's single provider. */
   provider?: string | null;
+  /** The host the engine DISPLAYED, when it reported one (null = nothing
+   *  reported — never "same as the link"). */
+  shown_host?: string | null;
 };
 
 export const api = {

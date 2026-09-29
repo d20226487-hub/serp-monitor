@@ -3,6 +3,7 @@ import { Result, RunQuery } from "@/lib/api";
 import {
   byKeyword,
   compareVariants,
+  countedHost,
   countRows,
   crossDiffers,
   crossTab,
@@ -242,6 +243,62 @@ describe("compareVariants", () => {
       res("b", 1, "http://x.kz"),
     ], qs, scope);
     expect(v.differs).toBe(false);
+  });
+});
+
+describe("displayed-host rule (prefer_shown_host)", () => {
+  // The same AMP/CDN result as two providers report it. Bright Data's Google
+  // results carry only the displayed address; SerpAPI reports the link itself.
+  const viaDisplay = () =>
+    res("brightdata", 1, "https://by.tribuna.com", { shown_host: "by.tribuna.com" });
+  const viaLink = () =>
+    res("serpapi", 1, "https://d1234.cloudfront.net/amp/news/1", { shown_host: "by.tribuna.com" });
+  const qs = [q("brightdata", "ok", 1), q("serpapi", "ok", 1)];
+
+  it("is off by default: the linked hosts disagree", () => {
+    const [scope] = engineScopes(["brightdata", "serpapi"], qs);
+    const rows = crossTab([viaDisplay(), viaLink()], scope, "domain");
+    expect(rows.map(r => r.key).sort()).toEqual(["by.tribuna.com", "d1234.cloudfront.net"]);
+    expect(rows.every(r => crossDiffers(r, scope))).toBe(true);
+  });
+
+  it("on: both providers found the same site, and the substitution is recorded", () => {
+    const [scope] = engineScopes(["brightdata", "serpapi"], qs);
+    const rows = crossTab([viaDisplay(), viaLink()], scope, "domain", null, true);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].key).toBe("by.tribuna.com");
+    expect(rows[0].foundBy).toBe(2);
+    expect(rows[0].substitutedFrom).toEqual(["d1234.cloudfront.net"]);
+  });
+
+  it("never rewrites URLs: a CDN path says nothing about the publisher's page", () => {
+    const [scope] = engineScopes(["brightdata", "serpapi"], qs);
+    const rows = crossTab([viaDisplay(), viaLink()], scope, "url", null, true);
+    expect(rows).toHaveLength(2);
+  });
+
+  it("reads the pair as the same site on a different page, not a missing site", () => {
+    const [scope] = engineScopes(["brightdata", "serpapi"], qs);
+    const off = compareVariants([viaDisplay(), viaLink()], qs, scope);
+    expect(off[0].columns.flatMap(c => c.rows.map(r => r.mark))).toEqual(["site", "site"]);
+    const on = compareVariants([viaDisplay(), viaLink()], qs, scope, null, true);
+    expect(on[0].columns.flatMap(c => c.rows.map(r => r.mark))).toEqual(["page", "page"]);
+    const serp = on[0].columns.find(c => c.provider === "serpapi")!.rows[0];
+    expect(serp.host).toMatchObject({ host: "by.tribuna.com", linked: "d1234.cloudfront.net", substituted: true });
+  });
+
+  it("falls back to the link, visibly, when the engine displayed nothing", () => {
+    const r = res("serpapi", 1, "https://d1234.cloudfront.net/x", { shown_host: null });
+    expect(countedHost(r, true)).toMatchObject({
+      host: "d1234.cloudfront.net", substituted: false, unresolved: true,
+    });
+    // Off: nothing asked for, so nothing is unresolved.
+    expect(countedHost(r, false).unresolved).toBe(false);
+  });
+
+  it("does not mark a result whose displayed host is its own host", () => {
+    const r = res("serpapi", 1, "https://www.vk.ru/zazino", { shown_host: "vk.ru" });
+    expect(countedHost(r, true)).toMatchObject({ host: "vk.ru", substituted: false, unresolved: false });
   });
 });
 

@@ -67,6 +67,10 @@ export default function RunPage() {
   const [analysis, setAnalysis] = useState<RunAnalysis | null>(null);
   // Compare runs only: each query's outcome on each provider.
   const [queries, setQueries] = useState<RunQuery[]>([]);
+  // Compare runs only: the job's "resolve AMP and CDN to the site shown".
+  // Read from the job as it is NOW, the way the positions view reads it, so
+  // unticking it on the job re-reads old comparisons without a re-run.
+  const [preferShown, setPreferShown] = useState(false);
 
   async function load() {
     const r = await api.getRun(id);
@@ -74,6 +78,7 @@ export default function RunPage() {
     setResults(await api.getResults(id));
     if (r.providers?.length) {
       try { setQueries(await api.getRunQueries(id)); } catch { /* keep last */ }
+      try { setPreferShown(!!(await api.getJob(r.job_id)).prefer_shown_host); } catch { /* keep last */ }
     }
     // Cheap even for serp-mode runs — returns mode + empty rows.
     try { setAnalysis(await api.getAnalysis(id)); } catch { /* keep last */ }
@@ -336,6 +341,7 @@ export default function RunPage() {
           filter={filterKw}
           onRetry={retryRun}
           retrying={retrying}
+          preferShown={preferShown}
         />
       ) : analysis?.mode === "analyzer" ? (
         // The analyzer table runs to twelve columns before its nested per-URL

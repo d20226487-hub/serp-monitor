@@ -50,6 +50,46 @@ export function domainKey(domain: string | null | undefined, url?: string | null
   return host.replace(/^www\./, "");
 }
 
+/** The host a result COUNTS as, and how it got there.
+ *
+ * Mirrors the backend rule in routers/project_positions.py exactly, so a job's
+ * "Resolve AMP and CDN results to the site shown" means the same thing here as
+ * in the positions view: with it on, the host the engine DISPLAYED counts —
+ * but only when the engine reported one; otherwise the linked host stands.
+ *
+ * In a comparison this matters more than anywhere else. Providers disagree on
+ * WHICH host they report: Bright Data's Google results carry only the
+ * displayed address (its link is Google's goto redirect), while SerpAPI and
+ * DataForSEO report the link itself. An AMP or CDN result would then read as
+ * by.tribuna.com in one column and cloudfront.net in the next — two providers
+ * that found the same result, shown as disagreeing.
+ */
+export type CountedHost = {
+  /** The comparison host (see domainKey). */
+  host: string;
+  /** The raw linked host, normalised the same way. */
+  linked: string;
+  /** The displayed host replaced a different linked one. */
+  substituted: boolean;
+  /** The job asked for the displayed host and the engine reported none, so
+   *  the linked host stands in. Kept visible rather than silent: a quiet
+   *  fallback is a wrong answer that looks right. */
+  unresolved: boolean;
+};
+
+export function countedHost(r: Result, preferShown: boolean): CountedHost {
+  const linked = domainKey(r.domain, r.url);
+  const shown = domainKey(r.shown_host);
+  if (!preferShown) return { host: linked, linked, substituted: false, unresolved: false };
+  const host = shown || linked;
+  return {
+    host,
+    linked,
+    substituted: !!shown && !!linked && shown !== linked,
+    unresolved: !shown,
+  };
+}
+
 /** A URL for comparison. The scheme, a leading www., a trailing slash and the
  *  fragment are ignored — providers disagree on those for the very same page,
  *  and flagging them would bury the real differences. The path's case and the
@@ -168,18 +208,26 @@ export type CrossRow = {
   foundBy: number;
   /** Result rows across all providers. */
   total: number;
+  /** Domain rows only: linked hosts that were counted as this displayed host
+   *  (AMP/CDN resolved). Empty when nothing was substituted. */
+  substitutedFrom: string[];
 };
 
 /** Domains or URLs against providers, for one engine, over the common queries.
  *  A cell counts result rows (the same count the distribution tables use) and
- *  averages their positions. */
+ *  averages their positions.
+ *
+ *  `preferShown` applies the job's displayed-host rule to DOMAINS only. A URL
+ *  cannot be resolved the same way — a CDN link's path says nothing about the
+ *  publisher's page — so URLs are always compared as linked. */
 export function crossTab(
   results: Result[],
   scope: EngineScope,
   field: "domain" | "url",
   runProvider?: string | null,
+  preferShown = false,
 ): CrossRow[] {
-  type Acc = { key: string; label: string; href: string | null;
+  type Acc = { key: string; label: string; href: string | null; subs: Set<string>;
     cells: Record<string, { count: number; sumPos: number; bestPos: number }> };
   const rows = new Map<string, Acc>();
   const answering = new Set(scope.answering);
@@ -188,7 +236,8 @@ export function crossTab(
     const p = providerOf(r, runProvider);
     if (!p || !answering.has(p)) continue;
     if (!scope.common.has(variantKey(r))) continue;
-    const key = field === "domain" ? domainKey(r.domain, r.url) : urlKey(r.url);
+    const counted = field === "domain" ? countedHost(r, preferShown) : null;
+    const key = counted ? counted.host : urlKey(r.url);
     if (!key) continue;
     let row = rows.get(key);
     if (!row) {
@@ -196,10 +245,12 @@ export function crossTab(
         key,
         label: field === "domain" ? key : (r.url ?? key),
         href: field === "url" ? r.url : null,
+        subs: new Set(),
         cells: {},
       };
       rows.set(key, row);
     }
+    if (counted?.substituted) row.subs.add(counted.linked);
     const c = row.cells[p] ?? { count: 0, sumPos: 0, bestPos: Number.POSITIVE_INFINITY };
     c.count += 1;
     c.sumPos += r.position;
@@ -214,7 +265,8 @@ export function crossTab(
       total += c.count;
     }
     return { key: row.key, label: row.label, href: row.href, cells,
-      foundBy: Object.keys(cells).length, total };
+      foundBy: Object.keys(cells).length, total,
+      substitutedFrom: Array.from(row.subs).sort() };
   });
 }
 
@@ -266,7 +318,7 @@ export function countRows(scope: EngineScope, queries: RunQuery[]): CountRow[] {
  *    solo — no other provider answered, so there is nothing to compare. */
 export type Mark = "same" | "page" | "site" | "solo";
 
-export type SerpCell = { result: Result; mark: Mark };
+export type SerpCell = { result: Result; mark: Mark; host: CountedHost };
 
 export type SerpColumn = { provider: string; outcome: Outcome; rows: SerpCell[] };
 
@@ -281,12 +333,15 @@ export type VariantCompare = {
   differs: boolean;
 };
 
-/** Side-by-side SERPs for each of one engine's queries. */
+/** Side-by-side SERPs for each of one engine's queries. `preferShown` applies
+ *  the job's displayed-host rule to the site comparison (see countedHost);
+ *  pages are always matched on the linked URL. */
 export function compareVariants(
   results: Result[],
   queries: RunQuery[],
   scope: EngineScope,
   runProvider?: string | null,
+  preferShown = false,
 ): VariantCompare[] {
   const idx = outcomeIndex(queries);
   const serps = new Map<string, Map<string, Result[]>>();
@@ -311,7 +366,7 @@ export function compareVariants(
     for (const p of ok) {
       const rows = byP.get(p) ?? [];
       urls.set(p, new Set(rows.map(r => urlKey(r.url)).filter(Boolean)));
-      hosts.set(p, new Set(rows.map(r => domainKey(r.domain, r.url)).filter(Boolean)));
+      hosts.set(p, new Set(rows.map(r => countedHost(r, preferShown).host).filter(Boolean)));
     }
     let diffCount = 0;
     const columns: SerpColumn[] = scope.providers.map(p => {
@@ -321,18 +376,18 @@ export function compareVariants(
         provider: p,
         outcome: outcomes.get(p)!,
         rows: rows.map(result => {
+          const host = countedHost(result, preferShown);
           let mark: Mark;
           if (others.length === 0) {
             mark = "solo";
           } else {
             const u = urlKey(result.url);
-            const h = domainKey(result.domain, result.url);
             if (others.every(o => urls.get(o)!.has(u))) mark = "same";
-            else if (others.every(o => hosts.get(o)!.has(h))) mark = "page";
+            else if (others.every(o => hosts.get(o)!.has(host.host))) mark = "page";
             else mark = "site";
           }
           if (mark === "page" || mark === "site") diffCount += 1;
-          return { result, mark };
+          return { result, mark, host };
         }),
       };
     });

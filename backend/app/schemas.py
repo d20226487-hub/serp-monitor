@@ -178,6 +178,9 @@ class ResultOut(BaseModel):
     description: str | None
     domain: str | None
     provider: str | None = None
+    # The host the engine DISPLAYED, when it reported one. Needed wherever a
+    # job's prefer_shown_host is honoured client-side (the compare view).
+    shown_host: str | None = None
 
 
 class RunQueryOut(BaseModel):

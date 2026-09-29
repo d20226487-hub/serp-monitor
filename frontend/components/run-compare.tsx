@@ -20,6 +20,7 @@ import {
 } from "@/lib/compare";
 import { providerLabel } from "@/lib/providers";
 import { formatUsd } from "@/lib/cost";
+import { Tip } from "@/components/tip";
 import {
   Badge,
   Button,
@@ -66,12 +67,16 @@ export function RunCompare({
   filter,
   onRetry,
   retrying,
+  preferShown,
 }: {
   run: JobRun;
   results: Result[];
   queries: RunQuery[];
   /** Keyword filter from the run page; narrows the per-SERP views. */
   filter: string;
+  /** The job's "resolve AMP and CDN to the site shown" — read from the job's
+   *  CURRENT setting, as the positions view does, so it stays reversible. */
+  preferShown: boolean;
   onRetry: () => void;
   retrying: boolean;
 }) {
@@ -91,8 +96,8 @@ export function RunCompare({
   // Computed up here, unconditionally: hooks may not sit inside the branch
   // below, which renders nothing until the run has outcomes.
   const domainRows = useMemo(
-    () => (scope ? crossTab(results, scope, "domain", run.provider) : []),
-    [results, scope, run.provider],
+    () => (scope ? crossTab(results, scope, "domain", run.provider, preferShown) : []),
+    [results, scope, run.provider, preferShown],
   );
   const urlRows = useMemo(
     () => (scope ? crossTab(results, scope, "url", run.provider) : []),
@@ -144,6 +149,7 @@ export function RunCompare({
           </div>
 
           <BasisNote scope={scope} engine={engineLabel(scope.engine)} />
+          {preferShown && <Callout tone="info" icon="info">{t.compare.shownHostOn}</Callout>}
 
           <CrossTable
             title={t.compare.domainsTitle}
@@ -171,6 +177,7 @@ export function RunCompare({
             runProvider={run.provider}
             onlyDiff={onlyDiff}
             filter={filter}
+            preferShown={preferShown}
           />
           <p className="text-xs text-slate-600 dark:text-slate-400">{t.compare.footnote}</p>
         </>
@@ -326,7 +333,20 @@ function CrossTable({
                           className="break-all font-mono text-xs text-blue-700 hover:underline dark:text-blue-300">
                           {r.label}
                         </a>
-                      ) : <span className="break-all">{r.label}</span>}
+                      ) : (
+                        <span className="break-all">
+                          {r.label}
+                          {r.substitutedFrom.length > 0 && (
+                            <Tip
+                              text={t.compare.substitutedRow(r.substitutedFrom.join(", "))}
+                              label={t.positions.substituted}
+                              className="ml-1 text-amber-700 dark:text-amber-400"
+                            >
+                              ⇄
+                            </Tip>
+                          )}
+                        </span>
+                      )}
                     </td>
                     {scope.providers.map(p => {
                       if (!scope.answering.includes(p)) {
@@ -456,7 +476,7 @@ function Legend() {
 }
 
 function KeywordSerps({
-  scope, results, queries, runProvider, onlyDiff, filter,
+  scope, results, queries, runProvider, onlyDiff, filter, preferShown,
 }: {
   scope: EngineScope;
   results: Result[];
@@ -464,11 +484,12 @@ function KeywordSerps({
   runProvider?: string | null;
   onlyDiff: boolean;
   filter: string;
+  preferShown: boolean;
 }) {
   const { t } = useT();
   const keywords = useMemo(
-    () => byKeyword(compareVariants(results, queries, scope, runProvider)),
-    [results, queries, scope, runProvider],
+    () => byKeyword(compareVariants(results, queries, scope, runProvider, preferShown)),
+    [results, queries, scope, runProvider, preferShown],
   );
   const f = filter.trim().toLowerCase();
   const shown = keywords
@@ -525,6 +546,7 @@ function ColumnHead({ provider, outcome }: { provider: string; outcome: Outcome 
 }
 
 function SerpGrid({ v }: { v: VariantCompare }) {
+  const { t } = useT();
   const rows = Array.from({ length: v.depth }, (_, i) => i);
   return (
     <div className="space-y-1.5">
@@ -552,7 +574,7 @@ function SerpGrid({ v }: { v: VariantCompare }) {
                   const cell = c.rows[i];
                   if (!cell) return <td key={c.provider} className="px-3 py-1.5" />;
                   const r = cell.result;
-                  const host = (r.domain ?? "").replace(/^www\./, "");
+                  const host = cell.host.host;
                   return (
                     <td key={c.provider} className={`px-3 py-1.5 ${MARK_WASH[cell.mark]}`}>
                       <div className="flex items-baseline gap-1.5">
@@ -560,6 +582,24 @@ function SerpGrid({ v }: { v: VariantCompare }) {
                           <span className="font-mono text-[11px] text-slate-500">#{r.position}</span>
                         )}
                         <span className="truncate font-medium" title={host}>{host || "—"}</span>
+                        {cell.host.substituted && (
+                          <Tip
+                            text={t.positions.substitutedHint(cell.host.host, cell.host.linked)}
+                            label={t.positions.substituted}
+                            className="shrink-0 text-amber-700 dark:text-amber-400"
+                          >
+                            ⇄
+                          </Tip>
+                        )}
+                        {cell.host.unresolved && (
+                          <Tip
+                            text={t.positions.unresolvedHint}
+                            label={t.positions.unresolvedHint}
+                            className="shrink-0 text-slate-400"
+                          >
+                            ?
+                          </Tip>
+                        )}
                       </div>
                       {r.url && (
                         <a href={r.url} target="_blank" rel="noreferrer" title={r.url}
