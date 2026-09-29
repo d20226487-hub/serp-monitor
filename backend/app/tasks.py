@@ -3,6 +3,7 @@ to SerpAPI with bounded concurrency. Results are persisted as they arrive."""
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import timedelta, timezone
 from urllib.parse import urlsplit
@@ -23,11 +24,12 @@ from .models import (
     Result,
     RunDomainMetric,
     RunKeywordAnalysis,
+    RunQuery,
     RunUrlMetric,
     SavedLocation,
     utcnow,
 )
-from .providers import get_provider
+from .providers import PROVIDERS, get_provider, supports
 
 log = logging.getLogger(__name__)
 
@@ -110,7 +112,182 @@ def estimate_queries(job: Job) -> dict:
     by_engine: dict[str, int] = {}
     for v in variants:
         by_engine[v["engine"]] = by_engine.get(v["engine"], 0) + 1
-    return {"total_queries": len(variants), "by_engine": by_engine}
+    out = {"total_queries": len(variants), "by_engine": by_engine}
+    if (getattr(job, "mode", None) or "serp") == "compare":
+        # Every provider gets every query it can run, so the requests — and the
+        # bill — multiply by the provider count, minus the engines a provider
+        # is never sent (DataForSEO has no Yandex).
+        plan = _compare_plan(_compare_providers(job), variants)
+        out["by_provider"] = {p: len(vs) for p, vs in plan.items()}
+        out["total_queries"] = sum(out["by_provider"].values())
+    return out
+
+
+# --- Compare mode -------------------------------------------------------------
+
+def _compare_providers(job: Job) -> list[str]:
+    """A compare job's providers: known ones only, deduplicated, in order."""
+    out: list[str] = []
+    for p in (getattr(job, "providers", None) or []):
+        if p in PROVIDERS and p not in out:
+            out.append(p)
+    return out
+
+
+def _compare_plan(providers: list[str], variants: list[dict]) -> dict[str, list[dict]]:
+    """The queries each provider will actually be sent."""
+    return {p: [v for v in variants if supports(p, v["engine"])] for p in providers}
+
+
+def _variant_key(engine, keyword, device, location, language, google_domain) -> str:
+    """One query's identity as a string.
+
+    The ONLY place this is built, so a result row and an outcome row for the
+    same query always produce the same key. JSON rather than a joined string
+    because a keyword may contain any separator we might pick.
+    """
+    return json.dumps(
+        [engine, keyword, device, location, language, google_domain],
+        ensure_ascii=False,
+    )
+
+
+def _variant_key_of(v: dict) -> str:
+    loc = (v["location"] or {}).get("canonical_name") if v["location"] else None
+    return _variant_key(
+        v["engine"], v["keyword"], v["device"], loc, v["language"], v["google_domain"],
+    )
+
+
+def _record_query(
+    db: Session, run_id: int, provider: str, v: dict, *,
+    status: str, count: int = 0, error: str | None = None,
+) -> None:
+    """Upsert one query's outcome on one provider. A retry updates the row the
+    first attempt wrote, so the table always holds the latest word."""
+    key = _variant_key_of(v)
+    row = (
+        db.query(RunQuery)
+        .filter(RunQuery.run_id == run_id, RunQuery.provider == provider,
+                RunQuery.variant_key == key)
+        .first()
+    )
+    if row is None:
+        loc = (v["location"] or {}).get("canonical_name") if v["location"] else None
+        row = RunQuery(
+            run_id=run_id, provider=provider, variant_key=key,
+            keyword=v["keyword"], engine=v["engine"], device=v["device"],
+            location=loc, country_code=v["country_code"],
+            language=v["language"], google_domain=v["google_domain"],
+            status=status,
+        )
+        db.add(row)
+    row.status = status
+    row.result_count = count
+    row.error = error
+
+
+def _provider_spend(name: str, provider, queries_ok: int) -> dict:
+    """What one provider cost for the queries it answered. Same rule as a
+    single-provider run: reported spend where the provider gives it,
+    answered queries x the configured rate otherwise."""
+    if getattr(provider, "reports_cost", False):
+        return {"cost": round(provider.reported_cost, 6), "source": "actual",
+                "queries": queries_ok}
+    return {"cost": round(queries_ok * get_provider_rate(name), 6),
+            "source": "estimate", "queries": queries_ok}
+
+
+def _set_run_cost_from_providers(run: JobRun, costs: dict[str, dict]) -> None:
+    # Reassigned, never mutated in place: SQLAlchemy's plain JSON type does not
+    # notice in-place changes and would silently drop them.
+    run.provider_costs = {p: dict(c) for p, c in costs.items()}
+    run.cost = round(sum(c["cost"] for c in costs.values()), 6)
+    # "actual" only if every provider reported real spend; one estimated
+    # component makes the total an estimate.
+    run.cost_source = (
+        "actual" if costs and all(c["source"] == "actual" for c in costs.values())
+        else "estimate"
+    )
+
+
+async def _scrape_compare(
+    db: Session, run: JobRun, job: Job, variants: list[dict], providers: list[str],
+) -> None:
+    """Send every query to every provider that can run it, concurrently.
+
+    Providers run side by side — each has its own upstream and its own
+    concurrency limit, so there is no reason to queue one behind another — and
+    every query's outcome is recorded per provider, including the ones a
+    provider is never sent because it cannot run that engine.
+    """
+    run.providers = list(providers)
+    # A compare run has no single provider; `providers` is its answer.
+    run.provider = None
+    plan = _compare_plan(providers, variants)
+
+    # Known gaps are recorded, not attempted: DataForSEO + Yandex fails every
+    # time, and sending it would only bill nothing and log a failure.
+    for p in providers:
+        planned = {_variant_key_of(v) for v in plan[p]}
+        for v in variants:
+            if _variant_key_of(v) not in planned:
+                _record_query(db, run.id, p, v, status="unsupported")
+    run.queries_total = sum(len(vs) for vs in plan.values())
+    db.commit()
+    _enter_phase(
+        db, run, "scrape",
+        f"{run.queries_total} queries across {len(providers)} providers "
+        f"({', '.join(providers)}) (job {job.id})",
+    )
+
+    failures: dict[tuple[str, str], int] = {}
+    costs: dict[str, dict] = {}
+
+    async def one_provider(name: str) -> None:
+        answered = 0
+        async with get_provider(name) as provider:
+            async def worker(v: dict):
+                nonlocal answered
+                try:
+                    rows = await _execute_variant(provider, v, job.top_n or 10)
+                    _persist_results(db, run.id, v, rows, provider=name)
+                    _record_query(db, run.id, name, v, status="ok", count=len(rows))
+                    run.queries_done += 1
+                    answered += 1
+                except Exception as e:  # noqa: BLE001
+                    run.queries_failed += 1
+                    log.exception("compare variant failed on %s: %s", name, v)
+                    msg = redact(f"{type(e).__name__}: {e}")
+                    _record_query(db, run.id, name, v, status="failed", error=msg[:1000])
+                    # Keyed by provider AND engine: in a comparison "which
+                    # provider" is the first thing a failure has to say.
+                    key = (f"{name} · {v.get('engine') or '?'}", msg)
+                    failures[key] = failures.get(key, 0) + 1
+                    if not run.error:
+                        run.error = msg
+                finally:
+                    db.commit()
+
+            await asyncio.gather(*(worker(v) for v in plan[name]))
+            costs[name] = _provider_spend(name, provider, answered)
+
+    outcomes = await asyncio.gather(
+        *(one_provider(p) for p in providers), return_exceptions=True,
+    )
+    # One provider blowing up outside its per-query handling (it cannot even be
+    # opened) must not take the other providers' results down with it.
+    for name, outcome in zip(providers, outcomes):
+        if isinstance(outcome, Exception):
+            log.error("compare provider %s crashed: %s", name, outcome)
+            key = (name, redact(f"{type(outcome).__name__}: {outcome}"))
+            failures[key] = failures.get(key, 0) + 1
+            costs.setdefault(name, {"cost": 0.0, "source": "estimate", "queries": 0})
+
+    _set_run_cost_from_providers(run, costs)
+    if failures:
+        run.error = _summarise_failures(failures, run.queries_failed, run.queries_total)
+    db.commit()
 
 
 async def _execute_variant(provider, v: dict, top_n: int) -> list[dict]:
@@ -143,11 +320,14 @@ async def _execute_variant(provider, v: dict, top_n: int) -> list[dict]:
         raise ValueError(f"unsupported engine: {v['engine']}")
 
 
-def _persist_results(db: Session, run_id: int, variant: dict, rows: list[dict]) -> None:
+def _persist_results(
+    db: Session, run_id: int, variant: dict, rows: list[dict], *, provider: str | None = None,
+) -> None:
     location_name = (variant["location"] or {}).get("canonical_name") if variant["location"] else None
     for r in rows:
         db.add(Result(
             run_id=run_id,
+            provider=provider,
             keyword=variant["keyword"],
             engine=variant["engine"],
             device=variant["device"],
@@ -810,6 +990,21 @@ def _enter_phase(db: Session, run: JobRun, phase: str, detail: str = "") -> None
     log.info("run %s: %s%s", run.id, phase, f" — {detail}" if detail else "")
 
 
+def _finish_run(db: Session, run: JobRun) -> None:
+    """Close a run out: its status from what it managed, and the end time."""
+    run.status = "done" if run.queries_failed == 0 else (
+        "failed" if run.queries_done == 0 else "done"
+    )
+    run.finished_at = utcnow()
+    db.commit()
+    log.info(
+        "run %s: %s — %s/%s queries, %s failed, cost %s",
+        run.id, run.status, run.queries_done, run.queries_total,
+        run.queries_failed,
+        "n/a" if run.cost is None else f"${run.cost:.4f}",
+    )
+
+
 async def run_job_async(run_id: int) -> None:
     """Top-level entrypoint scheduled by the API/scheduler. Owns its own DB session."""
     db = SessionLocal()
@@ -835,6 +1030,37 @@ async def run_job_async(run_id: int) -> None:
         lr_map = _yandex_lr_lookup(db, canonical_names)
 
         variants = _expand_variants(job, lr_map=lr_map)
+
+        if (getattr(job, "mode", None) or "serp") == "compare":
+            providers = _compare_providers(job)
+            if len(providers) < 2:
+                run.status = "failed"
+                run.error = (
+                    "Compare mode needs at least two providers; this job has "
+                    f"{len(providers)}. Edit the job and pick the providers to compare."
+                )
+                run.finished_at = utcnow()
+                db.commit()
+                return
+            # The cap is on requests actually sent, which in compare mode is
+            # every query once per provider that can run it.
+            planned = sum(len(vs) for vs in _compare_plan(providers, variants).values())
+            if planned > settings.max_queries_per_run:
+                run.status = "failed"
+                run.error = (
+                    f"{planned} requests ({len(variants)} queries x "
+                    f"{len(providers)} providers) exceeds MAX_QUERIES_PER_RUN="
+                    f"{settings.max_queries_per_run}"
+                )
+                run.finished_at = utcnow()
+                db.commit()
+                return
+            run.status = "running"
+            db.commit()
+            await _scrape_compare(db, run, job, variants, providers)
+            _finish_run(db, run)
+            return
+
         if len(variants) > settings.max_queries_per_run:
             run.status = "failed"
             run.error = (
@@ -869,7 +1095,7 @@ async def run_job_async(run_id: int) -> None:
             async def worker(v: dict):
                 try:
                     rows = await _execute_variant(provider, v, job.top_n or 10)
-                    _persist_results(db, run.id, v, rows)
+                    _persist_results(db, run.id, v, rows, provider=provider_name)
                     run.queries_done += 1
                 except Exception as e:  # noqa: BLE001
                     run.queries_failed += 1
@@ -959,17 +1185,7 @@ async def run_job_async(run_id: int) -> None:
             run.cost = round(run.queries_done * get_provider_rate(provider_name), 6)
             run.cost_source = "estimate"
 
-        run.status = "done" if run.queries_failed == 0 else (
-            "failed" if run.queries_done == 0 else "done"
-        )
-        run.finished_at = utcnow()
-        db.commit()
-        log.info(
-            "run %s: %s — %s/%s queries, %s failed, cost %s",
-            run.id, run.status, run.queries_done, run.queries_total,
-            run.queries_failed,
-            "n/a" if run.cost is None else f"${run.cost:.4f}",
-        )
+        _finish_run(db, run)
     except Exception as e:  # noqa: BLE001
         log.exception("run %s crashed", run_id)
         run = db.get(JobRun, run_id)
@@ -1011,15 +1227,105 @@ def _missing_variants(db: Session, run: JobRun, job: Job) -> list[dict]:
     return missing
 
 
+def _missing_compare_pairs(db: Session, run: JobRun, job: Job) -> list[tuple[str, dict]]:
+    """(provider, query) pairs a compare run should hold and has no answer for.
+
+    Read from the recorded outcomes, not from the results: in a comparison a
+    provider that returned an empty SERP ANSWERED — re-asking would bill it
+    again for the same nothing — so only pairs without an "ok" outcome count.
+    Unsupported pairs are never missing; they were never meant to be sent.
+    """
+    providers = run.providers or _compare_providers(job)
+    answered = {
+        (p, k) for p, k in db.query(RunQuery.provider, RunQuery.variant_key)
+        .filter(RunQuery.run_id == run.id, RunQuery.status == "ok")
+    }
+    canonical = {(l or {}).get("canonical_name") for l in (job.locations or []) if l}
+    lr_map = _yandex_lr_lookup(db, {c for c in canonical if c})
+    missing: list[tuple[str, dict]] = []
+    for v in _expand_variants(job, lr_map=lr_map):
+        key = _variant_key_of(v)
+        for p in providers:
+            if supports(p, v["engine"]) and (p, key) not in answered:
+                missing.append((p, v))
+    return missing
+
+
 def count_missing_variants(run_id: int) -> int:
     """How many queries a retry would re-issue. Read-only."""
     db = SessionLocal()
     try:
         run = db.get(JobRun, run_id)
         job = db.get(Job, run.job_id) if run else None
-        return len(_missing_variants(db, run, job)) if run and job else 0
+        if not (run and job):
+            return 0
+        if run.providers:
+            return len(_missing_compare_pairs(db, run, job))
+        return len(_missing_variants(db, run, job))
     finally:
         db.close()
+
+
+async def _retry_compare(db: Session, run: JobRun, job: Job) -> None:
+    """Re-ask each provider only for the queries it has no answer to."""
+    pairs = _missing_compare_pairs(db, run, job)
+    if not pairs:
+        log.info("retry: compare run %s has nothing missing", run.id)
+        return
+    by_provider: dict[str, list[dict]] = {}
+    for p, v in pairs:
+        by_provider.setdefault(p, []).append(v)
+    log.info("retry: compare run %s re-issuing %s requests across %s",
+             run.id, len(pairs), sorted(by_provider))
+
+    recovered = 0
+    costs = {p: dict(c) for p, c in (run.provider_costs or {}).items()}
+
+    async def one_provider(name: str, vs: list[dict]) -> None:
+        nonlocal recovered
+        answered = 0
+        async with get_provider(name) as provider:
+            async def worker(v: dict):
+                nonlocal recovered, answered
+                try:
+                    rows = await _execute_variant(provider, v, job.top_n or 10)
+                    _persist_results(db, run.id, v, rows, provider=name)
+                    _record_query(db, run.id, name, v, status="ok", count=len(rows))
+                    recovered += 1
+                    answered += 1
+                except Exception as e:  # noqa: BLE001
+                    log.exception("compare retry failed on %s: %s", name, v)
+                    msg = redact(f"{type(e).__name__}: {e}")
+                    _record_query(db, run.id, name, v, status="failed", error=msg[:1000])
+                    run.error = msg
+                finally:
+                    db.commit()
+
+            await asyncio.gather(*(worker(v) for v in vs))
+            spend = _provider_spend(name, provider, answered)
+        # Added to the first pass, never replacing it: the retry is extra
+        # spend on top of what the run already cost.
+        prev = costs.get(name) or {"cost": 0.0, "source": spend["source"], "queries": 0}
+        costs[name] = {
+            "cost": round((prev.get("cost") or 0.0) + spend["cost"], 6),
+            "source": spend["source"],
+            "queries": (prev.get("queries") or 0) + answered,
+        }
+
+    outcomes = await asyncio.gather(
+        *(one_provider(p, vs) for p, vs in by_provider.items()), return_exceptions=True,
+    )
+    for name, outcome in zip(by_provider, outcomes):
+        if isinstance(outcome, Exception):
+            log.error("compare retry: provider %s crashed: %s", name, outcome)
+
+    _set_run_cost_from_providers(run, costs)
+    run.queries_done += recovered
+    run.queries_failed = max(0, run.queries_failed - recovered)
+    if recovered and not run.queries_failed:
+        run.status = "done"
+        run.error = None
+    db.commit()
 
 
 # Runs currently being retried, for the same reason _ai_phase_running exists.
@@ -1055,6 +1361,11 @@ async def retry_failed_queries(run_id: int) -> None:
         job = db.get(Job, run.job_id)
         if not job:
             return
+        if run.providers:
+            # A compare run's gaps are per provider; nothing downstream of the
+            # scrape exists in this mode, so the top-up is the whole retry.
+            await _retry_compare(db, run, job)
+            return
         missing = _missing_variants(db, run, job)
         if not missing:
             log.info("retry: run %s has no missing queries", run_id)
@@ -1068,7 +1379,7 @@ async def retry_failed_queries(run_id: int) -> None:
                 nonlocal recovered
                 try:
                     rows = await _execute_variant(provider, v, job.top_n or 10)
-                    _persist_results(db, run.id, v, rows)
+                    _persist_results(db, run.id, v, rows, provider=provider_name)
                     recovered += 1
                 except Exception as e:  # noqa: BLE001
                     log.exception("retry variant failed: %s", v)

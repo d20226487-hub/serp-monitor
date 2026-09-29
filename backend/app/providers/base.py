@@ -139,6 +139,12 @@ class SerpProvider(ABC):
     #: Only DataForSEO does today; SerpAPI/Bright Data/Oxylabs return no price.
     reports_cost: bool = False
 
+    #: Engines this provider can query at all. A class attribute so the runner
+    #: and the estimator can ask without instantiating anything; compare mode
+    #: uses it to mark a provider's cells "not supported" instead of sending
+    #: queries that are certain to fail.
+    engines: frozenset[str] = frozenset({"google", "yandex"})
+
     def __init__(self, *, concurrency: int | None = None, timeout: float = 60.0):
         self._sem = asyncio.Semaphore(concurrency or settings.serpapi_concurrency)
         self._timeout = timeout

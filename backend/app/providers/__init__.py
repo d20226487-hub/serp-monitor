@@ -22,10 +22,17 @@ def get_provider(name: str) -> SerpProvider:
     return cls()
 
 
+def supports(name: str, engine: str) -> bool:
+    """Whether a provider can query an engine at all — no request needed."""
+    cls = PROVIDERS.get(name)
+    return cls is not None and engine in cls.engines
+
+
 __all__ = [
     "SerpProvider",
     "ProviderError",
     "ProviderConfigError",
     "PROVIDERS",
     "get_provider",
+    "supports",
 ]

@@ -82,6 +82,7 @@ const messagesEn = {
     runNow: "Run now",
     fields: {
       provider: "Provider",
+      providers: "Providers",
       keywords: "Keywords",
       engines: "Engines",
       devices: "Devices",
@@ -590,6 +591,16 @@ melbet	kz	34	20,000	0.45`,
     modeAnalyzer: "2 · SERP analyzer",
     modeAnalyzerHelp:
       "Scrape SERPs, then pull Ahrefs metrics for every result URL and show ranking difficulty per keyword.",
+    modeCompare: "3 · Compare SERP APIs",
+    modeCompareHelp:
+      "Send the same queries through several providers and compare domains, URLs and result counts side by side.",
+    compareProviders: "Providers to compare",
+    compareProvidersHelp:
+      "Every query goes to every selected provider, and each provider bills for its own requests — the estimate below adds them up.",
+    compareNeedTwo: "Pick at least two providers to compare.",
+    compareYandexGap: (names: string) =>
+      `${names} cannot run Yandex. Those cells will read “not supported” — they are never sent and never billed, and they do not count as differences.`,
+    estimateByProvider: "Per provider",
     ahrefsMetrics: "Ahrefs metrics",
     ahrefsMetricsHelp:
       "Which metrics to pull for each result URL. Analysed in exact-URL mode, so UR is per page rather than per domain.",
@@ -642,6 +653,8 @@ melbet	kz	34	20,000	0.45`,
     providerHelpLink: "Settings",
     providerHelpSuffix:
       " first. Each provider differs slightly: SerpAPI and DataForSEO accept canonical_name locations; Bright Data & Oxylabs only honor country / yandex_lr.",
+    dataforseoNeedsLanguage:
+      "⚠ DataForSEO needs a language for every query — unlike Google, it has no default and refuses the request without one. Pick a language (for Kazakhstan, usually ru), or its queries will fail.",
     dataforseoNoYandex:
       "⚠ DataForSEO has no Yandex endpoint — their SERP API covers Google, Bing, Yahoo, Baidu, Naver and Seznam only. Yandex searches in this job will fail. Use SerpAPI, Bright Data or Oxylabs for Yandex, or remove Yandex from Engines and keep DataForSEO for Google.",
     engines: "Engines",
@@ -1044,6 +1057,62 @@ melbet	kz	34	20,000	0.45`,
     actualHint: "Actual cost reported by the provider",
     estimateHint: "Estimated: queries × the rate configured in Settings",
   },
+  compare: {
+    title: "Provider comparison",
+    subtitle: "The same queries, sent to every provider",
+    summaryTitle: "Providers",
+    colProvider: "Provider",
+    colAnswered: "Answered",
+    colFailed: "Failed",
+    colUnsupported: "Not supported",
+    colResults: "Results",
+    colAvgResults: "Avg per SERP",
+    colCost: "Cost",
+    answeredOf: (ok: number, total: number) => `${ok} of ${total}`,
+    retry: (n: number) => `Retry ${n} failed`,
+    retrying: "Retrying…",
+    basis: (common: number, total: number) =>
+      common === total
+        ? `Domains and URLs below are totalled over all ${total} queries — every provider answered each one.`
+        : `Domains and URLs below are totalled over the ${common} of ${total} queries every provider answered. The rest are left out so that one provider's failed request does not read as missing domains — they are in “Results per SERP”.`,
+    nobodyAnswered: (engine: string) =>
+      `No provider answered any ${engine} query, so there is nothing to compare yet.`,
+    onlyOneAnswered: (engine: string) =>
+      `Only one provider answered ${engine} queries, so there is nothing to compare it with.`,
+    noAnswers: "no answers",
+    noAnswersHint: "Every request to this provider failed for this engine, so it is left out of the comparison.",
+    onlyDifferences: "Only differences",
+    domainsTitle: "Domains",
+    urlsTitle: "URLs",
+    countsTitle: "Results per SERP",
+    colDomain: "Domain",
+    colUrl: "URL",
+    colFoundBy: "Found by",
+    colQuery: "Query",
+    cellHint: (count: number, avg: string, best: number) =>
+      `${count} ${count === 1 ? "result" : "results"} · average position ${avg} · best ${best}`,
+    notReturned: "not returned by this provider",
+    statusFailed: "failed",
+    statusUnsupported: "n/a",
+    statusUnsupportedHint: "This provider cannot run this engine; the query was never sent.",
+    statusPending: "…",
+    statusPendingHint: "No answer recorded yet.",
+    noRows: "Nothing to show.",
+    noDifferences: "No differences — every provider agrees.",
+    keywordsTitle: "SERPs by keyword",
+    keywordSummary: (queries: number, differing: number) =>
+      `${queries} ${queries === 1 ? "query" : "queries"} · ${differing ? `${differing} with differences` : "no differences"}`,
+    colPosition: "#",
+    legendTitle: "Highlighting",
+    markSame: "In every provider’s SERP",
+    markPage: "Same site elsewhere, different page",
+    markSite: "Site missing from another provider’s SERP",
+    serpFailed: "Request failed",
+    serpEmpty: "Empty SERP",
+    serpUnsupported: "Not supported",
+    footnote:
+      "URLs are matched ignoring http/https, a leading www., a trailing slash and the #fragment, because providers disagree on those for the very same page. Domains ignore www. Everything else — the path and the query string — has to match.",
+  },
 };
 
 type Messages = typeof messagesEn;
@@ -1112,6 +1181,7 @@ const messagesRu: Messages = {
     runNow: "Запустить сейчас",
     fields: {
       provider: "Провайдер",
+      providers: "Провайдеры",
       keywords: "Ключевые слова",
       engines: "Поисковики",
       devices: "Устройства",
@@ -1632,6 +1702,16 @@ melbet	kz	34	20 000	0,45`,
     modeAnalyzer: "2 · Анализатор выдачи",
     modeAnalyzerHelp:
       "Снять выдачу, затем получить метрики Ahrefs для каждого URL и показать сложность ранжирования по каждому ключевому слову.",
+    modeCompare: "3 · Сравнение SERP API",
+    modeCompareHelp:
+      "Отправить одни и те же запросы через несколько провайдеров и сравнить домены, URL и количество результатов бок о бок.",
+    compareProviders: "Провайдеры для сравнения",
+    compareProvidersHelp:
+      "Каждый запрос уходит к каждому выбранному провайдеру, и каждый провайдер берёт плату за свои запросы — оценка ниже их суммирует.",
+    compareNeedTwo: "Выберите минимум двух провайдеров для сравнения.",
+    compareYandexGap: (names: string) =>
+      `${names} не умеет работать с Яндексом. Эти ячейки будут помечены «не поддерживается» — такие запросы не отправляются, не оплачиваются и не считаются расхождениями.`,
+    estimateByProvider: "По провайдерам",
     ahrefsMetrics: "Метрики Ahrefs",
     ahrefsMetricsHelp:
       "Какие метрики запрашивать для каждого URL из выдачи. Анализ идёт в режиме точного URL, поэтому UR считается по странице, а не по домену.",
@@ -1685,6 +1765,8 @@ melbet	kz	34	20 000	0,45`,
     providerHelpLink: "Настройки",
     providerHelpSuffix:
       ". Провайдеры немного отличаются: SerpAPI и DataForSEO принимают локации в формате canonical_name; Bright Data и Oxylabs учитывают только страну / yandex_lr.",
+    dataforseoNeedsLanguage:
+      "⚠ DataForSEO требует язык для каждого запроса — в отличие от Google, у него нет значения по умолчанию, и без языка запрос отклоняется. Выберите язык (для Казахстана обычно ru), иначе его запросы завершатся ошибкой.",
     dataforseoNoYandex:
       "⚠ У DataForSEO нет эндпоинта для Яндекса — их SERP API поддерживает только Google, Bing, Yahoo, Baidu, Naver и Seznam. Запросы к Яндексу в этой задаче завершатся ошибкой. Используйте SerpAPI, Bright Data или Oxylabs для Яндекса, либо уберите Яндекс из поисковиков и оставьте DataForSEO для Google.",
     engines: "Поисковики",
@@ -2099,6 +2181,62 @@ melbet	kz	34	20 000	0,45`,
     estimated: "оц.",
     actualHint: "Фактическая стоимость, полученная от провайдера",
     estimateHint: "Оценка: количество запросов × ставка из «Настроек»",
+  },
+  compare: {
+    title: "Сравнение провайдеров",
+    subtitle: "Одни и те же запросы, отправленные каждому провайдеру",
+    summaryTitle: "Провайдеры",
+    colProvider: "Провайдер",
+    colAnswered: "Ответил",
+    colFailed: "Ошибки",
+    colUnsupported: "Не поддерж.",
+    colResults: "Результаты",
+    colAvgResults: "В среднем на SERP",
+    colCost: "Стоимость",
+    answeredOf: (ok: number, total: number) => `${ok} из ${total}`,
+    retry: (n: number) => `Повторить ошибочные: ${n}`,
+    retrying: "Повторяем…",
+    basis: (common: number, total: number) =>
+      common === total
+        ? `Домены и URL ниже посчитаны по всем ${total} запросам — каждый провайдер ответил на каждый.`
+        : `Домены и URL ниже посчитаны по ${common} из ${total} запросов, на которые ответили все провайдеры. Остальные исключены, чтобы ошибка одного провайдера не выглядела как пропавшие домены — они видны в таблице «Результаты по SERP».`,
+    nobodyAnswered: (engine: string) =>
+      `Ни один провайдер не ответил ни на один запрос ${engine} — сравнивать пока нечего.`,
+    onlyOneAnswered: (engine: string) =>
+      `На запросы ${engine} ответил только один провайдер — сравнивать не с чем.`,
+    noAnswers: "нет ответов",
+    noAnswersHint: "Все запросы к этому провайдеру по этому поисковику завершились ошибкой, поэтому он исключён из сравнения.",
+    onlyDifferences: "Только расхождения",
+    domainsTitle: "Домены",
+    urlsTitle: "URL",
+    countsTitle: "Результаты по SERP",
+    colDomain: "Домен",
+    colUrl: "URL",
+    colFoundBy: "Нашли",
+    colQuery: "Запрос",
+    cellHint: (count: number, avg: string, best: number) =>
+      `${count} ${pluralRu(count, ["результат", "результата", "результатов"])} · средняя позиция ${avg} · лучшая ${best}`,
+    notReturned: "этот провайдер его не вернул",
+    statusFailed: "ошибка",
+    statusUnsupported: "н/д",
+    statusUnsupportedHint: "Провайдер не умеет работать с этим поисковиком; запрос не отправлялся.",
+    statusPending: "…",
+    statusPendingHint: "Ответ ещё не записан.",
+    noRows: "Нечего показать.",
+    noDifferences: "Расхождений нет — все провайдеры совпадают.",
+    keywordsTitle: "Выдача по ключевым словам",
+    keywordSummary: (queries: number, differing: number) =>
+      `${queries} ${pluralRu(queries, ["запрос", "запроса", "запросов"])} · ${differing ? `с расхождениями: ${differing}` : "расхождений нет"}`,
+    colPosition: "#",
+    legendTitle: "Подсветка",
+    markSame: "Есть в выдаче каждого провайдера",
+    markPage: "Сайт есть у других, но другая страница",
+    markSite: "Сайта нет в выдаче другого провайдера",
+    serpFailed: "Запрос завершился ошибкой",
+    serpEmpty: "Пустая выдача",
+    serpUnsupported: "Не поддерживается",
+    footnote:
+      "URL сравниваются без учёта http/https, ведущего www., завершающего слэша и #якоря — провайдеры расходятся в этом для одной и той же страницы. Домены сравниваются без www. Всё остальное — путь и параметры запроса — должно совпадать.",
   },
 };
 

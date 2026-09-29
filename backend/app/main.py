@@ -146,6 +146,13 @@ def _migrate_sqlite_columns() -> None:
         ("run_keyword_analysis", "temperature", "FLOAT"),
         ("run_keyword_analysis", "prompt", "TEXT"),
         ("run_keyword_analysis", "raw_response", "TEXT"),
+        # Compare mode: the providers a job sends its queries to, the set a run
+        # actually used, what each one cost, and which provider returned each
+        # result row. All NULL/empty on everything that predates the mode.
+        ("jobs", "providers", "JSON"),
+        ("job_runs", "providers", "JSON"),
+        ("job_runs", "provider_costs", "JSON"),
+        ("results", "provider", "VARCHAR(20)"),
     ]
     # Values to backfill into rows that predate a column. ALTER TABLE ADD COLUMN
     # without a DEFAULT leaves existing rows NULL, which then fails response
@@ -154,6 +161,9 @@ def _migrate_sqlite_columns() -> None:
     backfills = [
         ("jobs", "ahrefs_metrics", "'[]'"),
         ("jobs", "ahrefs_domain_metrics", "'[]'"),
+        # Same trap as ahrefs_metrics: a list[str] field left NULL would 500
+        # GET /jobs for every job created before compare mode.
+        ("jobs", "providers", "'[]'"),
     ]
     with engine.begin() as conn:
         for table, column, ddl in additions:

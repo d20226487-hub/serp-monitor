@@ -60,7 +60,9 @@ class JobBase(BaseModel):
     cron: str | None = None
     schedule_enabled: bool = False
     provider: str = "serpapi"
-    mode: str = "serp"  # "serp" | "analyzer"
+    # Compare mode: every provider the queries go to. Empty in other modes.
+    providers: list[str] = Field(default_factory=list)
+    mode: str = "serp"  # "serp" | "analyzer" | "compare"
     ahrefs_metrics: list[str] = Field(default_factory=list)
     ahrefs_domain_metrics: list[str] = Field(default_factory=list)
     whois_enabled: bool = False
@@ -87,6 +89,7 @@ class JobUpdate(BaseModel):
     cron: str | None = None
     schedule_enabled: bool | None = None
     provider: str | None = None
+    providers: list[str] | None = None
     mode: str | None = None
     ahrefs_metrics: list[str] | None = None
     ahrefs_domain_metrics: list[str] | None = None
@@ -106,7 +109,7 @@ class JobOut(JobBase):
     # value here genuinely means "nothing selected".
     @field_validator("keywords", "engines", "devices", "locations", "languages",
                      "google_domains", "scrape_fields", "ahrefs_metrics",
-                     "ahrefs_domain_metrics", mode="before")
+                     "ahrefs_domain_metrics", "providers", mode="before")
     @classmethod
     def _none_to_empty_list(cls, v):
         return [] if v is None else v
@@ -139,6 +142,11 @@ class JobRunOut(BaseModel):
     # scrape | ahrefs | whois | ai — the phase most recently entered. NULL on
     # runs that predate phase tracking.
     phase: str | None = None
+    provider: str | None = None
+    # Compare runs only (NULL otherwise): the providers compared, and each
+    # one's spend as {provider: {"cost", "source", "queries"}}.
+    providers: list[str] | None = None
+    provider_costs: dict | None = None
 
 
 class JobPage(BaseModel):
@@ -169,11 +177,31 @@ class ResultOut(BaseModel):
     title: str | None
     description: str | None
     domain: str | None
+    provider: str | None = None
+
+
+class RunQueryOut(BaseModel):
+    """One query's outcome on one provider, in a compare run."""
+    model_config = ConfigDict(from_attributes=True)
+    provider: str
+    keyword: str
+    engine: str
+    device: str
+    location: str | None
+    country_code: str | None
+    language: str | None
+    google_domain: str | None
+    status: str  # ok | failed | unsupported
+    result_count: int
+    error: str | None
 
 
 class CostEstimate(BaseModel):
     total_queries: int
     by_engine: dict[str, int]
+    # Compare mode: queries each provider will actually be sent (a provider is
+    # not sent the engines it cannot run). Empty in other modes.
+    by_provider: dict[str, int] = Field(default_factory=dict)
 
 
 class SavedLocationCreate(BaseModel):

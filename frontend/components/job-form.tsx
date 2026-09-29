@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AhrefsSettings, api, Job, LocationRef, Project, ProviderRates, SavedLocation } from "@/lib/api";
+import { AhrefsSettings, api, Job, JobMode, LocationRef, Project, ProviderRates, SavedLocation } from "@/lib/api";
 import { MultiCombobox, Option } from "./multi-combobox";
 import { useT } from "@/lib/i18n";
-import { Button, inputClass } from "@/components/ui";
+import { Button, FilterChip, inputClass } from "@/components/ui";
+import { PROVIDER_IDS, providerLabel, providerSupports } from "@/lib/providers";
 import { formatUsd, billingUnits } from "@/lib/cost";
 
 /** How many keywords one job may carry.
@@ -70,7 +71,12 @@ export function JobForm({ initial, onSaved }: Props) {
   const [cron, setCron] = useState<string>(initial?.cron ?? "");
   const [scheduleEnabled, setScheduleEnabled] = useState<boolean>(initial?.schedule_enabled ?? false);
   const [provider, setProvider] = useState<string>(initial?.provider ?? "serpapi");
-  const [mode, setMode] = useState<"serp" | "analyzer">(initial?.mode ?? "serp");
+  const [mode, setMode] = useState<JobMode>(initial?.mode ?? "serp");
+  // Compare mode's provider set. Seeded from the job, or — switching an
+  // existing single-provider job to compare — from the provider it already has.
+  const [compareProviders, setCompareProviders] = useState<string[]>(
+    initial?.providers?.length ? initial.providers : [initial?.provider ?? "serpapi"],
+  );
   const [ahrefsMetrics, setAhrefsMetrics] = useState<string[]>(
     initial?.ahrefs_metrics ?? []
   );
@@ -205,7 +211,10 @@ export function JobForm({ initial, onSaved }: Props) {
     top_n: topN,
     cron: cron.trim() || null,
     schedule_enabled: !!cron.trim() && scheduleEnabled,
-    provider,
+    // In compare mode the job's single provider is the first compared one, so
+    // anything reading one provider still gets a real one.
+    provider: mode === "compare" ? (compareProviders[0] ?? provider) : provider,
+    providers: mode === "compare" ? compareProviders : [],
     mode,
     ahrefs_metrics: mode === "analyzer" ? ahrefsMetrics : [],
     ahrefs_domain_metrics: mode === "analyzer" ? ahrefsDomainMetrics : [],
@@ -221,6 +230,7 @@ export function JobForm({ initial, onSaved }: Props) {
       if (!keywords.length) throw new Error("At least 1 keyword is required");
       if (!engines.length) throw new Error("Pick at least one engine");
       if (!devices.length) throw new Error("Pick at least one device");
+      if (mode === "compare" && compareProviders.length < 2) throw new Error(t.jobForm.compareNeedTwo);
       const job = initial
         ? await api.updateJob(initial.id, payload)
         : await api.createJob(payload);
@@ -324,8 +334,8 @@ export function JobForm({ initial, onSaved }: Props) {
           mode 2 adds the Ahrefs enrichment phase after the scrape. */}
       <div className="space-y-1.5">
         <label className="text-sm font-medium">{t.jobForm.mode}</label>
-        <div className="grid sm:grid-cols-2 gap-2">
-          {(["serp", "analyzer"] as const).map(m => (
+        <div className="grid sm:grid-cols-3 gap-2">
+          {(["serp", "analyzer", "compare"] as const).map(m => (
             <button
               key={m}
               type="button"
@@ -336,10 +346,10 @@ export function JobForm({ initial, onSaved }: Props) {
               }`}
             >
               <div className="text-sm font-medium">
-                {m === "serp" ? t.jobForm.modeSerp : t.jobForm.modeAnalyzer}
+                {m === "serp" ? t.jobForm.modeSerp : m === "analyzer" ? t.jobForm.modeAnalyzer : t.jobForm.modeCompare}
               </div>
               <div className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                {m === "serp" ? t.jobForm.modeSerpHelp : t.jobForm.modeAnalyzerHelp}
+                {m === "serp" ? t.jobForm.modeSerpHelp : m === "analyzer" ? t.jobForm.modeAnalyzerHelp : t.jobForm.modeCompareHelp}
               </div>
             </button>
           ))}
@@ -469,31 +479,72 @@ export function JobForm({ initial, onSaved }: Props) {
         </div>
       )}
 
-      <div className="space-y-1.5">
-        <label className="text-sm font-medium">{t.jobForm.provider}</label>
-        <select
-          value={provider}
-          onChange={e => setProvider(e.target.value)}
-          className={inputClass}
-        >
-          <option value="serpapi">SerpAPI</option>
-          <option value="brightdata">Bright Data</option>
-          <option value="oxylabs">Oxylabs</option>
-          <option value="dataforseo">DataForSEO</option>
-        </select>
-        <p className="text-xs text-slate-600 dark:text-slate-400">
-          {t.jobForm.providerHelpPrefix}
-          <a href="/settings" className="underline">{t.jobForm.providerHelpLink}</a>
-          {t.jobForm.providerHelpSuffix}
-        </p>
-        {/* DataForSEO has no Yandex endpoint at all — warn at build time rather
-            than letting the run fail per-variant with a ProviderConfigError. */}
-        {provider === "dataforseo" && engines.includes("yandex") && (
-          <div className="text-xs text-amber-700 dark:text-amber-300 border-l-4 border-amber-400 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 rounded">
-            {t.jobForm.dataforseoNoYandex}
+      {mode === "compare" ? (
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">{t.jobForm.compareProviders}</label>
+          <div className="flex flex-wrap gap-2">
+            {PROVIDER_IDS.map(p => {
+              const on = compareProviders.includes(p);
+              return (
+                <FilterChip
+                  key={p}
+                  selected={on}
+                  onClick={() =>
+                    // Kept in PROVIDER_IDS order so the comparison's columns
+                    // do not depend on the order they were ticked in.
+                    setCompareProviders(prev =>
+                      on ? prev.filter(x => x !== p) : PROVIDER_IDS.filter(x => x === p || prev.includes(x)),
+                    )
+                  }
+                >
+                  {providerLabel(p)}
+                </FilterChip>
+              );
+            })}
           </div>
-        )}
-      </div>
+          <p className="text-xs text-slate-600 dark:text-slate-400">
+            {t.jobForm.compareProvidersHelp}{" "}
+            {t.jobForm.providerHelpPrefix}
+            <a href="/settings" className="underline">{t.jobForm.providerHelpLink}</a>.
+          </p>
+          {compareProviders.length < 2 && (
+            <div className="text-xs text-amber-700 dark:text-amber-300 border-l-4 border-amber-400 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 rounded">
+              {t.jobForm.compareNeedTwo}
+            </div>
+          )}
+          {/* A known gap, not a failure: the runner never sends these. */}
+          {engines.includes("yandex") && compareProviders.some(p => !providerSupports(p, "yandex")) && (
+            <div className="text-xs text-slate-700 dark:text-slate-300 border-l-4 border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/60 px-3 py-2 rounded">
+              {t.jobForm.compareYandexGap(
+                compareProviders.filter(p => !providerSupports(p, "yandex")).map(providerLabel).join(", "),
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">{t.jobForm.provider}</label>
+          <select
+            value={provider}
+            onChange={e => setProvider(e.target.value)}
+            className={inputClass}
+          >
+            {PROVIDER_IDS.map(p => <option key={p} value={p}>{providerLabel(p)}</option>)}
+          </select>
+          <p className="text-xs text-slate-600 dark:text-slate-400">
+            {t.jobForm.providerHelpPrefix}
+            <a href="/settings" className="underline">{t.jobForm.providerHelpLink}</a>
+            {t.jobForm.providerHelpSuffix}
+          </p>
+          {/* DataForSEO has no Yandex endpoint at all — warn at build time rather
+              than letting the run fail per-variant with a ProviderConfigError. */}
+          {provider === "dataforseo" && engines.includes("yandex") && (
+            <div className="text-xs text-amber-700 dark:text-amber-300 border-l-4 border-amber-400 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 rounded">
+              {t.jobForm.dataforseoNoYandex}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid sm:grid-cols-2 gap-4">
         <MultiCombobox
@@ -550,12 +601,19 @@ export function JobForm({ initial, onSaved }: Props) {
         isEqual={(a, b) => a.canonical_name === b.canonical_name}
       />
 
-      <EffectiveTargetingPanel
-        provider={provider}
-        engines={engines}
-        locations={locations}
-        savedByCanonical={savedByCanonical}
-      />
+      {/* In compare mode, one panel per provider: how each targets geography
+          is itself one of the reasons their SERPs differ. */}
+      {(mode === "compare" ? compareProviders : [provider]).map(p => (
+        <EffectiveTargetingPanel
+          key={p}
+          provider={p}
+          // Compare mode already says which engines a provider cannot run;
+          // a single-provider job keeps its row explaining the gap.
+          engines={mode === "compare" ? engines.filter(e => providerSupports(p, e)) : engines}
+          locations={locations}
+          savedByCanonical={savedByCanonical}
+        />
+      ))}
 
       <div className="grid sm:grid-cols-2 gap-4">
         <MultiCombobox
@@ -573,6 +631,14 @@ export function JobForm({ initial, onSaved }: Props) {
           placeholder={t.jobForm.googleDomainsPlaceholder}
         />
       </div>
+      {/* DataForSEO refuses a query without a language, where Google falls
+          back to the domain's own — say so before the run, not after it. */}
+      {languages.length === 0 && engines.includes("google") &&
+        (mode === "compare" ? compareProviders.includes("dataforseo") : provider === "dataforseo") && (
+        <div className="text-xs text-amber-700 dark:text-amber-300 border-l-4 border-amber-400 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 rounded">
+          {t.jobForm.dataforseoNeedsLanguage}
+        </div>
+      )}
 
       <div className="grid sm:grid-cols-2 gap-4">
         <MultiCombobox
@@ -631,6 +697,15 @@ export function JobForm({ initial, onSaved }: Props) {
         </div>
       </div>
 
+      {mode === "compare" ? (
+        <CompareEstimate
+          providers={compareProviders}
+          google={estimate?.breakdown.google ?? 0}
+          yandex={estimate?.breakdown.yandex ?? 0}
+          topN={topN}
+          rates={rates}
+        />
+      ) : (
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/50">
         <div className="grid sm:grid-cols-2 gap-4">
           <div>
@@ -665,6 +740,7 @@ export function JobForm({ initial, onSaved }: Props) {
           {t.jobForm.estimateApprox}
         </div>
       </div>
+      )}
 
       <div className="flex flex-wrap gap-3">
         <Button variant="primary"
@@ -677,6 +753,70 @@ export function JobForm({ initial, onSaved }: Props) {
           onClick={() => save(true)}>
           {initial ? t.jobForm.saveAndRunUpdate : t.jobForm.saveAndRunCreate}
         </Button>
+      </div>
+    </div>
+  );
+}
+
+
+/* ---------------- Compare-mode estimate ---------------- */
+
+/** Requests and spend for a comparison: every query goes to every provider
+ *  that can run its engine, and each provider bills at its own rate — so the
+ *  totals are sums over providers, and the per-provider lines say where the
+ *  money goes. Mirrors the backend's estimate_queries + _provider_spend. */
+function CompareEstimate({
+  providers, google, yandex, topN, rates,
+}: {
+  providers: string[];
+  google: number;
+  yandex: number;
+  topN: number;
+  rates: ProviderRates | null;
+}) {
+  const { t } = useT();
+  const lines = providers.map(p => {
+    const queries = google + (providerSupports(p, "yandex") ? yandex : 0);
+    const rate = rates?.rates[p] ?? 0;
+    return { p, queries, cost: queries * billingUnits(p, topN) * rate, deep: billingUnits(p, topN) > 1 };
+  });
+  const total = lines.reduce((n, l) => n + l.queries, 0);
+  const cost = lines.reduce((n, l) => n + l.cost, 0);
+  const deep = lines.find(l => l.deep);
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/50">
+      <div className="grid sm:grid-cols-2 gap-4">
+        <div>
+          <div className="text-sm font-medium mb-1">{t.jobForm.estimateTitle}</div>
+          <div className="text-2xl font-semibold">{total}</div>
+          <div className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+            {t.jobForm.estimateBreakdown(google, yandex)}
+          </div>
+        </div>
+        <div>
+          <div className="text-sm font-medium mb-1">{t.jobForm.estimateCostTitle}</div>
+          <div className="text-2xl font-semibold">{formatUsd(cost)}</div>
+          <div className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+            <a href="/settings" className="underline">{t.jobForm.estimateEditRate}</a>
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 space-y-0.5">
+        <div className="text-xs font-medium text-slate-700 dark:text-slate-300">{t.jobForm.estimateByProvider}</div>
+        {lines.map(l => (
+          <div key={l.p} className="flex justify-between gap-3 text-xs tabular-nums text-slate-600 dark:text-slate-400">
+            <span>{providerLabel(l.p)}</span>
+            <span>{l.queries} · {formatUsd(l.cost)}</span>
+          </div>
+        ))}
+      </div>
+      {deep && (
+        <div className="text-xs text-amber-700 dark:text-amber-300 mt-2">
+          {t.jobForm.estimateDepthNote(billingUnits(deep.p, topN), topN)}
+        </div>
+      )}
+      <div className="text-xs text-slate-600 dark:text-slate-400 mt-3">
+        {t.jobForm.estimateApprox}
       </div>
     </div>
   );

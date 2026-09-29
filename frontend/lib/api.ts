@@ -205,8 +205,11 @@ export type Job = {
   cron: string | null;
   schedule_enabled: boolean;
   provider: string;
-  /** "serp" = SERP monitoring only. "analyzer" = + Ahrefs URL metrics. */
-  mode: "serp" | "analyzer";
+  /** Compare mode: every provider the queries go to. Empty otherwise. */
+  providers: string[];
+  /** "serp" = SERP monitoring only. "analyzer" = + Ahrefs URL metrics.
+   *  "compare" = the same queries through several providers, side by side. */
+  mode: JobMode;
   /** Ahrefs batch-analysis field ids for the URL-level (exact mode) pass. */
   ahrefs_metrics: string[];
   /** Field ids for the domain-level pass. Empty = domain enrichment off. */
@@ -334,8 +337,10 @@ export type AIAnalysisSettings = {
   max_output_tokens_default: number;
 };
 
+export type JobMode = "serp" | "analyzer" | "compare";
+
 export type RunAnalysis = {
-  mode: "serp" | "analyzer";
+  mode: JobMode;
   metrics: string[];
   domain_metrics: string[];
   rows: AnalysisRow[];
@@ -395,6 +400,37 @@ export type JobRun = {
   /** The phase most recently ENTERED. Kept after the run ends, so on a failed
    *  run it says where it stopped. null on runs that predate phase tracking. */
   phase?: RunPhase | null;
+  /** The single provider that produced the run; null on compare runs. */
+  provider?: string | null;
+  /** Compare runs only: the providers compared. Its presence is what marks a
+   *  run as a comparison, whatever mode the job is in now. */
+  providers?: string[] | null;
+  /** Compare runs only: each provider's spend. */
+  provider_costs?: Record<string, ProviderCost> | null;
+};
+
+export type ProviderCost = {
+  cost: number;
+  source: "actual" | "estimate";
+  /** Queries this provider answered. */
+  queries: number;
+};
+
+/** One query's outcome on one provider, in a compare run. */
+export type RunQuery = {
+  provider: string;
+  keyword: string;
+  engine: string;
+  device: string;
+  location: string | null;
+  country_code: string | null;
+  language: string | null;
+  google_domain: string | null;
+  /** ok = answered (possibly with 0 results); failed = the request failed;
+   *  unsupported = never sent, the provider cannot run this engine. */
+  status: "ok" | "failed" | "unsupported";
+  result_count: number;
+  error: string | null;
 };
 
 export type RunPhase = "scrape" | "ahrefs" | "whois" | "ai";
@@ -444,6 +480,9 @@ export type Result = {
   title: string | null;
   description: string | null;
   domain: string | null;
+  /** Which provider returned the row. null on rows from before this was
+   *  recorded — those came from the run's single provider. */
+  provider?: string | null;
 };
 
 export const api = {
@@ -512,10 +551,11 @@ export const api = {
     req<Job>(`/jobs/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteJob: (id: number) => req(`/jobs/${id}`, { method: "DELETE" }),
   estimate: (id: number) =>
-    req<{ total_queries: number; by_engine: Record<string, number> }>(`/jobs/${id}/estimate`),
+    req<{ total_queries: number; by_engine: Record<string, number>; by_provider?: Record<string, number> }>(`/jobs/${id}/estimate`),
   runJob: (id: number) => req<JobRun>(`/jobs/${id}/run`, { method: "POST" }),
   listRuns: (id: number) => req<JobRun[]>(`/jobs/${id}/runs`),
   getRun: (id: number) => req<JobRun>(`/runs/${id}`),
+  getRunQueries: (id: number) => req<RunQuery[]>(`/runs/${id}/queries`),
   getResults: (id: number, q?: { keyword?: string; engine?: string }) => {
     const qs = new URLSearchParams();
     if (q?.keyword) qs.set("keyword", q.keyword);

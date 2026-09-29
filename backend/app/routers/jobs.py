@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from ..db import IS_SQLITE, get_db
 from ..models import Job, JobRun, Project
+from ..providers import PROVIDERS
 from ..scheduler import remove_schedule, schedule_info, scheduler_timezone, upsert_schedule, validate_cron
 from ..schemas import CostEstimate, JobCreate, JobOut, JobPage, JobRunOut, JobUpdate
 from ..search import CONTAINS_CI
@@ -32,6 +33,36 @@ def _validate_cron_or_400(cron: str | None) -> None:
             f"Invalid cron expression: {e}. "
             "Format is `minute hour day month dow` (e.g. `30 9 3 5 *` = May 3 at 09:30).",
         )
+
+
+_MODES = ("serp", "analyzer", "compare")
+
+
+def _check_mode(data: dict, current: Job | None = None) -> None:
+    """Validate mode + providers as they will stand after this write.
+
+    On an update either field may arrive alone, so the check runs against the
+    merged result: switching an existing job to compare without sending a
+    provider list must still be refused. For a compare job the list is
+    normalised in place — deduplicated, order kept — and `provider` is set to
+    its first entry, so code that reads a single provider still gets a real one.
+    """
+    mode = data.get("mode", current.mode if current else "serp") or "serp"
+    if mode not in _MODES:
+        raise HTTPException(400, f"unknown mode {mode!r}; expected one of {', '.join(_MODES)}")
+    if mode != "compare":
+        return
+    raw = data.get("providers") if "providers" in data else (current.providers if current else [])
+    unknown = [p for p in (raw or []) if p not in PROVIDERS]
+    if unknown:
+        raise HTTPException(400, f"unknown provider(s): {', '.join(unknown)}")
+    providers = list(dict.fromkeys(raw or []))
+    if len(providers) < 2:
+        raise HTTPException(
+            400, "Compare mode needs at least two providers to compare.",
+        )
+    data["providers"] = providers
+    data["provider"] = providers[0]
 
 
 def _check_project(db: Session, project_id: int | None) -> None:
@@ -104,6 +135,7 @@ def create_job(payload: JobCreate, db: Session = Depends(get_db)):
     _validate_cron_or_400(payload.cron)
     _check_project(db, payload.project_id)
     data = _to_orm_data(payload.model_dump())
+    _check_mode(data)
     job = Job(**data)
     db.add(job)
     db.commit()
@@ -130,6 +162,7 @@ def update_job(job_id: int, payload: JobUpdate, db: Session = Depends(get_db)):
     if "project_id" in payload.model_fields_set:
         _check_project(db, payload.project_id)
     data = _to_orm_data(payload.model_dump(exclude_unset=True))
+    _check_mode(data, current=job)
     for k, v in data.items():
         setattr(job, k, v)
     db.commit()

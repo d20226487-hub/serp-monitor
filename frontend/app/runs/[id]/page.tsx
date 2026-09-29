@@ -2,13 +2,15 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { api, JobRun, Result, RunAnalysis, SavedLocation } from "@/lib/api";
+import { api, JobRun, Result, RunAnalysis, RunQuery, SavedLocation } from "@/lib/api";
 import { RunAnalysisTable } from "@/components/run-analysis";
 import { buildBrowserUrl, variantLabel } from "@/lib/browser-urls";
 import { ExternalLink } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import { Button, inputClass } from "@/components/ui";
 import { RunOverview } from "@/components/run-overview";
+import { RunCompare } from "@/components/run-compare";
+import { providerLabel } from "@/lib/providers";
 import { RunPhases } from "@/components/run-phases";
 import { formatUsd } from "@/lib/cost";
 
@@ -63,10 +65,16 @@ export default function RunPage() {
   const [lrByCanonical, setLrByCanonical] = useState<Map<string, number>>(new Map());
   // Null until loaded; `mode` inside tells us which view this run wants.
   const [analysis, setAnalysis] = useState<RunAnalysis | null>(null);
+  // Compare runs only: each query's outcome on each provider.
+  const [queries, setQueries] = useState<RunQuery[]>([]);
 
   async function load() {
-    setRun(await api.getRun(id));
+    const r = await api.getRun(id);
+    setRun(r);
     setResults(await api.getResults(id));
+    if (r.providers?.length) {
+      try { setQueries(await api.getRunQueries(id)); } catch { /* keep last */ }
+    }
     // Cheap even for serp-mode runs — returns mode + empty rows.
     try { setAnalysis(await api.getAnalysis(id)); } catch { /* keep last */ }
   }
@@ -171,11 +179,13 @@ export default function RunPage() {
   }
 
   function copyAll() {
-    const header = ["keyword","engine","device","country","language","location","position","url","title","description"];
+    const header = ["keyword","engine","device","country","language","location","provider","position","url","title","description"];
     const lines = [header.join("\t")];
     for (const r of results) {
+      // Rows from before providers were recorded came from the run's one provider.
+      const provider = r.provider ?? run?.provider ?? "";
       lines.push([r.keyword, r.engine, r.device, r.country_code ?? "", r.language ?? "",
-                  r.location ?? "", r.position, r.url ?? "", r.title ?? "", r.description ?? ""]
+                  r.location ?? "", provider, r.position, r.url ?? "", r.title ?? "", r.description ?? ""]
         .map(x => x.toString().replace(/\t/g, " ")).join("\t"));
     }
     navigator.clipboard.writeText(lines.join("\n"));
@@ -229,6 +239,10 @@ export default function RunPage() {
 
   if (!run) return <div className="text-sm text-slate-600 dark:text-slate-400">{t.common.loading}</div>;
 
+  // Decided by the RUN, not the job: a job switched out of compare mode later
+  // must not re-render its old comparisons as ordinary runs.
+  const isCompare = !!run.providers?.length;
+
   const statusLabels = t.jobs.statusBadge as Record<string, string>;
 
   return (
@@ -238,6 +252,7 @@ export default function RunPage() {
         <span className="text-xs text-slate-600 dark:text-slate-400">
           {new Date(run.started_at).toLocaleString()} · {statusLabels[run.status] ?? run.status} · {t.run.headerStats(run.queries_done, run.queries_total)}
           {run.queries_failed > 0 && <span className="text-red-600 dark:text-red-400"> · {t.run.failed(run.queries_failed)}</span>}
+          {isCompare && <> · {run.providers!.map(providerLabel).join(" · ")}</>}
           {run.cost != null && (
             <>
               {" · "}
@@ -313,7 +328,16 @@ export default function RunPage() {
 
       {/* Analyzer mode replaces the domain/URL distribution with the
           per-keyword difficulty table — different question, different view. */}
-      {analysis?.mode === "analyzer" ? (
+      {isCompare ? (
+        <RunCompare
+          run={run}
+          results={results}
+          queries={queries}
+          filter={filterKw}
+          onRetry={retryRun}
+          retrying={retrying}
+        />
+      ) : analysis?.mode === "analyzer" ? (
         // The analyzer table runs to twelve columns before its nested per-URL
         // and per-domain tables, which the page's max-w-6xl container clips.
         // Break out of that container and re-centre at a width the table can
@@ -375,7 +399,7 @@ export default function RunPage() {
         </details>
       )}
 
-      <div className="space-y-8">
+      {!isCompare && <div className="space-y-8">
         {groups.map(g => {
           const totalRows = g.variants.reduce((n, v) => n + v.rows.length, 0);
           return (
@@ -442,9 +466,9 @@ export default function RunPage() {
             </details>
           );
         })}
-      </div>
+      </div>}
 
-      {groups.length === 0 && (
+      {!isCompare && groups.length === 0 && (
         <div className="text-sm text-slate-600 dark:text-slate-400">
           {run.status === "running" ? t.run.streaming : t.run.noResults}
         </div>

@@ -3,6 +3,7 @@ import { Suspense, useCallback, useEffect, useState, type ReactNode } from "reac
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api, Job, Project } from "@/lib/api";
+import { providerLabel } from "@/lib/providers";
 import { useT } from "@/lib/i18n";
 import { Button, Empty, ErrorNote, inputClass } from "@/components/ui";
 import { Icon, type IconName } from "@/components/icons";
@@ -254,7 +255,11 @@ function JobsList() {
                     {/* The facts that distinguish one job from another, as
                         chips rather than a dot-separated run-on line. */}
                     <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-                      <Chip icon="robot">{j.provider || "serpapi"}</Chip>
+                      {j.mode === "compare" && j.providers?.length ? (
+                        <Chip icon="compare" tone="info">{j.providers.map(providerLabel).join(" · ")}</Chip>
+                      ) : (
+                        <Chip icon="robot">{j.provider || "serpapi"}</Chip>
+                      )}
                       <Chip icon="keywords">{t.home.kwCount(j.keywords.length)}</Chip>
                       <Chip icon="globe">{j.engines.join(", ") || "—"}</Chip>
                       <Chip icon={j.devices.includes("mobile") ? "phone" : "desktop"}>

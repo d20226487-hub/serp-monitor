@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api, Job, JobRun, ScheduleInfo } from "@/lib/api";
 import { JobForm } from "@/components/job-form";
+import { providerLabel } from "@/lib/providers";
 import { useT } from "@/lib/i18n";
 import { formatUsd, sumCost, hasAnyCost } from "@/lib/cost";
 
@@ -68,7 +69,11 @@ export default function JobPage() {
       </div>
 
       <div className="grid sm:grid-cols-2 gap-3 text-sm">
-        <Field label={t.jobs.fields.provider} value={job.provider || "serpapi"} />
+        {job.mode === "compare" && job.providers?.length ? (
+          <Field label={t.jobs.fields.providers} value={job.providers.map(providerLabel).join(" · ")} />
+        ) : (
+          <Field label={t.jobs.fields.provider} value={job.provider || "serpapi"} />
+        )}
         <Field label={t.jobs.fields.keywords} value={t.jobs.keywordsCount(job.keywords.length)} />
         <Field label={t.jobs.fields.engines} value={job.engines.join(", ") || "—"} />
         <Field label={t.jobs.fields.devices} value={job.devices.join(", ") || "—"} />

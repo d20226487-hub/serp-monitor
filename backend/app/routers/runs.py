@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import (
     DomainWhois, Job, JobRun, KeywordVolume, Result, RunDomainMetric,
-    RunKeywordAnalysis, RunUrlMetric,
+    RunKeywordAnalysis, RunQuery, RunUrlMetric,
 )
 from ..app_settings import (
     DEFAULT_OPPORTUNITY_FORMULA,
@@ -16,7 +16,7 @@ from ..providers.ahrefs_batch import canonical_domain_metrics, canonical_metrics
 from ..providers.dataforseo_whois import domain_age_days
 from ..providers.registrable import registrable_domain
 from ..providers.url_normalize import normalize_url
-from ..schemas import JobRunOut, ResultOut
+from ..schemas import JobRunOut, ResultOut, RunQueryOut
 
 router = APIRouter(prefix="/runs", tags=["runs"])
 
@@ -132,6 +132,24 @@ def get_results(
     if engine:
         q = q.filter(Result.engine == engine)
     return q.order_by(Result.keyword, Result.engine, Result.device, Result.position).all()
+
+
+@router.get("/{run_id}/queries", response_model=list[RunQueryOut])
+def get_run_queries(run_id: int, db: Session = Depends(get_db)):
+    """Every query's outcome on every provider, for a compare run.
+
+    What the counts table reads: whether a provider answered (and with how
+    many results), failed, or was never sent the query because it cannot run
+    that engine. Empty for runs that are not comparisons.
+    """
+    if not db.get(JobRun, run_id):
+        raise HTTPException(404)
+    return (
+        db.query(RunQuery)
+        .filter(RunQuery.run_id == run_id)
+        .order_by(RunQuery.keyword, RunQuery.engine, RunQuery.device, RunQuery.provider)
+        .all()
+    )
 
 
 def _host_of(url: str) -> str:

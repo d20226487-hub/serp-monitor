@@ -137,6 +137,8 @@ class DataForSEOProvider(SerpProvider):
     # DataForSEO returns the exact charge on every response, so runs get real
     # spend recorded rather than an estimate from the configured rate.
     reports_cost = True
+    # No Yandex endpoint exists in DataForSEO's SERP API — see search_yandex.
+    engines = frozenset({"google"})
 
     def __init__(self, **kw):
         super().__init__(**kw)
@@ -233,6 +235,19 @@ class DataForSEOProvider(SerpProvider):
         self, *, keyword, device, location, language,
         google_domain, country_code, top_n,
     ) -> list[ResultRow]:
+        # DataForSEO's Live SERP REQUIRES a language; without one it answers
+        # "Invalid Field: 'language_name'" for every query. Google itself falls
+        # back to the domain's language, so SerpAPI and the others run fine on
+        # the same job — which is why this is refused here, before any request
+        # is billed, rather than defaulted: a guessed language would make
+        # DataForSEO quietly search differently from the providers it is being
+        # compared with.
+        if not language:
+            raise ProviderConfigError(
+                "DataForSEO needs a language for every query and has no default "
+                "the way Google does. Add one under the job's Languages (for "
+                "Kazakhstan, usually ru)."
+            )
         task: dict[str, Any] = {
             "keyword": keyword,
             "location_name": _location_name(location, country_code),

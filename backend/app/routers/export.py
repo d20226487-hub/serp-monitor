@@ -19,7 +19,7 @@ router = APIRouter(prefix="/runs", tags=["export"])
 
 _COLS = [
     "keyword", "engine", "device", "country_code", "location",
-    "language", "google_domain", "position", "url", "title",
+    "language", "google_domain", "provider", "position", "url", "title",
     "description", "domain",
 ]
 
@@ -61,7 +61,7 @@ def export_csv(
         .filter(Result.position <= top)
         .order_by(
             Result.keyword, Result.engine, Result.device,
-            Result.country_code, Result.language, Result.position,
+            Result.country_code, Result.language, Result.provider, Result.position,
         )
         .all()
     )
@@ -70,7 +70,12 @@ def export_csv(
     writer = csv.writer(buf)
     writer.writerow(_COLS)
     for r in rows:
-        writer.writerow([getattr(r, c) for c in _COLS])
+        # Rows from before providers were recorded per result came from the
+        # run's single provider, so that is their honest answer.
+        writer.writerow([
+            (r.provider or run.provider) if c == "provider" else getattr(r, c)
+            for c in _COLS
+        ])
     buf.seek(0)
 
     job_slug = _slugify(job.name) if job else "job"

@@ -77,6 +77,10 @@ class Job(Base):
 
     # Provider that runs this job's queries: "serpapi" | "brightdata" | "oxylabs".
     provider: Mapped[str] = mapped_column(String(20), default="serpapi")
+    # Compare mode only: every provider the same queries are sent to, in the
+    # order their columns appear. `provider` above then holds the first of
+    # them, so anything that reads a single provider still gets a real one.
+    providers: Mapped[list] = mapped_column(JSON, default=list)
 
     # Job mode:
     #   "serp"     — the original behaviour: scrape SERPs, show domain/URL
@@ -84,6 +88,8 @@ class Job(Base):
     #   "analyzer" — scrape SERPs, then run Ahrefs /batch-analysis over every
     #                unique result URL (mode=exact) and surface per-keyword
     #                median metrics as a ranking-difficulty view.
+    #   "compare"  — send the same queries through several providers at once
+    #                and compare what each returned, side by side.
     mode: Mapped[str] = mapped_column(String(20), default="serp")
     # Ahrefs batch-analysis field ids to request in analyzer mode. Empty falls
     # back to ahrefs_batch.DEFAULT_METRICS. Each selected field bills ~1 unit
@@ -181,6 +187,17 @@ class JobRun(Base):
     # positions are not comparable across providers, so history has to keep
     # its own answer. NULL on runs from before this was recorded.
     provider: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Compare runs only: the providers this run sent its queries to, pinned for
+    # the same reason `provider` is — the job's list is a live setting. Its
+    # presence is also what marks a run as a comparison, so a job later
+    # switched back to mode 1 does not re-render its old comparisons as
+    # ordinary runs. NULL on every other run.
+    providers: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Compare runs only: spend per provider,
+    # {provider: {"cost": usd, "source": "actual"|"estimate", "queries": n}}.
+    # `cost` above stays the run's total. Kept per provider because cost is one
+    # of the things being compared, and a total cannot be split back apart.
+    provider_costs: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     job: Mapped[Job] = relationship(back_populates="runs")
     results: Mapped[list["Result"]] = relationship(back_populates="run", cascade="all,delete-orphan")
@@ -417,5 +434,48 @@ class Result(Base):
     # would hide exactly the case worth seeing. NULL means the provider
     # reported nothing — never "same as the link".
     shown_host: Mapped[str | None] = mapped_column(String(255), index=True, nullable=True)
+    # Which provider returned this row. Needed the moment one run holds several
+    # providers' SERPs for the same query. NULL on rows written before it was
+    # recorded — those runs had exactly one provider, `JobRun.provider`.
+    provider: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     run: Mapped[JobRun] = relationship(back_populates="results")
+
+
+class RunQuery(Base):
+    """What happened to one query on one provider, in a compare run.
+
+    The results table alone cannot tell the three outcomes a comparison has to
+    keep apart: a provider that returned an EMPTY SERP, one whose request
+    FAILED, and one that cannot run this engine at all (DataForSEO has no
+    Yandex endpoint). All three leave zero result rows. Reported as one they
+    would make a known gap look like a failure and a failure look like an
+    empty SERP — and the counts table exists to show which is which.
+
+    `variant_key` is the query's identity (engine, keyword, device, location,
+    language, google_domain) as one string, built by tasks._variant_key and
+    nowhere else, so results and outcomes always join the same way.
+    """
+    __tablename__ = "run_queries"
+    __table_args__ = (
+        UniqueConstraint("run_id", "provider", "variant_key", name="uq_run_queries"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("job_runs.id", ondelete="CASCADE"), index=True
+    )
+    provider: Mapped[str] = mapped_column(String(20))
+    variant_key: Mapped[str] = mapped_column(Text)
+    keyword: Mapped[str] = mapped_column(String(500))
+    engine: Mapped[str] = mapped_column(String(20))
+    device: Mapped[str] = mapped_column(String(20))
+    location: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    country_code: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    language: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    google_domain: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # ok | failed | unsupported
+    status: Mapped[str] = mapped_column(String(16))
+    result_count: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
