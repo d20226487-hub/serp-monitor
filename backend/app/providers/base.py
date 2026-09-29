@@ -107,10 +107,23 @@ def display_url(display: str | None) -> str | None:
     tool whose job is verifying what really ranks, a host that works beats a
     path that might be fiction.
     """
+    text = str(display or "").split("›")[0].strip()
     host = shown_host(display)
     if not host:
+        # shown_host is deliberately strict — it rejects anything containing a
+        # space, because it defines "the host the engine displayed" and that
+        # meaning is shared with site-auditor. Mobile SERPs print the site name
+        # beside the address («Zazino-casino.kz https://zazino-casino.kz»), so
+        # the strict reading gives up and we lose the only usable address.
+        # Widening shown_host would change what the doorway check means in two
+        # tools; picking the first host-like token here does not.
+        for token in text.split():
+            host = shown_host(token)
+            if host:
+                text = token
+                break
+    if not host:
         return None
-    text = str(display or "").split("›")[0].strip()
     scheme = "http://" if text.lower().startswith("http://") else "https://"
     return scheme + host
 

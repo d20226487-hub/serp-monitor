@@ -108,7 +108,10 @@ def _parse_results(payload: dict, top_n: int) -> list[ResultRow]:
         # Google instead of the sites that ranked. Fall back to the displayed
         # address, which is what a person reading the SERP sees.
         if is_search_redirect(url):
-            url = display_url(display) or url
+            # `source` is Bright Data's second copy of the address and is often
+            # a bare host when display_link is awkwardly formatted, so it is
+            # worth trying before giving up and keeping the useless redirect.
+            url = display_url(display) or display_url(r.get("source")) or url
         rows.append({
             "position": r.get("rank") or r.get("position") or (len(rows) + 1),
             "url": url,

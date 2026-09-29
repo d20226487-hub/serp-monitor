@@ -124,6 +124,16 @@ def _extract_one(item) -> ResultRow | None:
     }
 
 
+# Yandex routes paid clicks through its own counter. Any of these in a result's
+# href means the item is an advertisement, not an organic ranking.
+_AD_URL_MARKERS = ("/an/count/", "yabs.yandex.", "/an/click", "direct.yandex.")
+
+
+def _is_ad_url(url: str | None) -> bool:
+    low = (url or "").lower()
+    return any(m in low for m in _AD_URL_MARKERS)
+
+
 def parse_yandex_html(html: str, top_n: int) -> list[ResultRow]:
     """Strict organic extraction from a Yandex SERP page.
 
@@ -163,13 +173,27 @@ def parse_yandex_html(html: str, top_n: int) -> list[ResultRow]:
             break
 
     rows: list[ResultRow] = []
+    ads_skipped = 0
     for it in items:
         row = _extract_one(it)
         if row and row["url"]:
+            # Yandex.Direct ads sit in the same result containers as organic
+            # items and are only distinguishable by their click-counter URL.
+            # Left in, they are stored as organic rankings: a run for "zazino"
+            # recorded a Sharm El Sheikh hotel ad at position 6, which then
+            # counts toward the domain distribution as yandex.kz and, in
+            # analyzer mode, gets Ahrefs metrics bought for it.
+            if _is_ad_url(row["url"]):
+                ads_skipped += 1
+                continue
+            # Position is the ORGANIC rank: assigned after ads are dropped, so
+            # an ad at visual slot 6 does not push the real sixth result to 7.
             row["position"] = len(rows) + 1
             rows.append(row)
             if len(rows) >= top_n:
                 break
+    if ads_skipped:
+        log.info("yandex html parser: skipped %d Direct ad(s)", ads_skipped)
 
     if not rows:
         # No permissive fallback — better an empty run than results scraped
