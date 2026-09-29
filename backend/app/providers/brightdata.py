@@ -25,6 +25,8 @@ from .uule import google_uule
 from .yandex_html import parse_yandex_html
 
 REQUEST_URL = "https://api.brightdata.com/request"
+# Zone state lookup, used to explain an empty 200 accurately.
+ZONE_STATUS_URL = "https://api.brightdata.com/zone/status"
 
 
 def _build_google_url(
@@ -158,12 +160,56 @@ class BrightDataProvider(SerpProvider):
                     raise httpx.HTTPStatusError(f"upstream {r.status_code}",
                                                 request=r.request, response=r)
                 r.raise_for_status()
+                # A DISABLED zone answers 200 with an empty body rather than an
+                # error. Without this check the empty string falls through to
+                # _coerce_json, which reports "no SERP parser configured" — the
+                # wrong cause, and one that sends you to the wrong dashboard
+                # page. Ask Bright Data what the zone's actual status is and say
+                # so. Measured: zone serp_api1 -> {"status":"disabled"}.
+                if not r.text.strip():
+                    zone = zone_override or creds["zone"]
+                    raise ProviderError(await self._explain_empty(creds["token"], zone, url))
                 return self._coerce_json(r) if expect_json else r.text
             except (httpx.HTTPError, httpx.TimeoutException) as e:
                 last = e
                 await asyncio.sleep(min(2 ** attempt, 8))
         assert last is not None
         raise ProviderError(redact(f"Bright Data request failed: {last}")) from last
+
+    async def _explain_empty(self, token: str, zone: str, url: str) -> str:
+        """Turn an empty 200 into an actionable message.
+
+        Bright Data exposes the zone's state at /zone/status, so we can name the
+        real problem instead of guessing. The probe is best-effort: if it fails
+        we still return a message that mentions the likely cause, because a
+        diagnostic call failing must not replace the original error.
+        """
+        status: str | None = None
+        try:
+            r = await self._client.get(
+                f"{ZONE_STATUS_URL}?zone={zone}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if r.status_code == 200:
+                status = (r.json() or {}).get("status")
+        except Exception:  # noqa: BLE001 — diagnosis is a bonus, never fatal
+            pass
+
+        if status and status != "active":
+            return (
+                f'Bright Data zone "{zone}" is {status} — it returned an empty '
+                "response. Re-enable it in the Bright Data dashboard under "
+                "Proxies & Scraping Infrastructure, then run the job again. "
+                "(The zone's permissions are fine; it is simply switched off, "
+                "which is also what happens when billing lapses.)"
+            )
+        return (
+            f'Bright Data returned an EMPTY response for zone "{zone}" '
+            f"(url={url!r}). That usually means the zone is disabled or out of "
+            "funds — check it in the Bright Data dashboard. It does not mean "
+            "the SERP parser is misconfigured; a parser problem returns HTML, "
+            "not an empty body."
+        )
 
     @staticmethod
     def _coerce_json(r: httpx.Response) -> dict:
@@ -190,9 +236,10 @@ class BrightDataProvider(SerpProvider):
                     "stay as the Google provider on a separate job."
                 )
             raise ProviderError(
-                "Bright Data returned non-JSON. Two likely causes: (1) your zone "
-                "doesn't have a SERP parser configured for this engine — enable "
-                "it in the Bright Data dashboard, or (2) the target URL is wrong. "
+                "Bright Data returned non-JSON. Likely causes: (1) your zone doesn't "
+                "have a SERP parser configured for this engine — enable it in the "
+                "Bright Data dashboard; (2) the zone is disabled or out of funds; "
+                "or (3) the target URL is wrong. "
                 f"First 300 chars of response: {text}"
             )
         # Case (a): already parsed

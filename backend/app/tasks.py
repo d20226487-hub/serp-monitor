@@ -165,6 +165,37 @@ def _persist_results(db: Session, run_id: int, variant: dict, rows: list[dict]) 
     db.commit()
 
 
+# Enough distinct causes to see that engines failed differently, without
+# turning the run page into a log file.
+_MAX_FAILURE_LINES = 6
+_FAILURE_MSG_LIMIT = 400
+
+
+def _summarise_failures(
+    failures: dict[tuple[str, str], int], failed: int, total: int
+) -> str:
+    """One line per distinct (engine, error), most frequent first.
+
+    Grouped by engine because that is the axis on which providers actually
+    differ — Bright Data uses a separate zone per engine, and DataForSEO has no
+    Yandex endpoint at all, so "which engine" is the first thing you need.
+    """
+    if len(failures) == 1:
+        # A single cause reads better as itself than as a one-item list.
+        (engine, msg), _ = next(iter(failures.items()))
+        prefix = f"{failed}/{total} queries failed"
+        return f"{prefix} — [{engine}] {msg}"[: _FAILURE_MSG_LIMIT * 2]
+
+    ordered = sorted(failures.items(), key=lambda kv: (-kv[1], kv[0][0]))
+    lines = [f"{failed}/{total} queries failed, {len(failures)} distinct causes:"]
+    for (engine, msg), count in ordered[:_MAX_FAILURE_LINES]:
+        suffix = f" (x{count})" if count > 1 else ""
+        lines.append(f"• [{engine}] {msg[:_FAILURE_MSG_LIMIT]}{suffix}")
+    if len(ordered) > _MAX_FAILURE_LINES:
+        lines.append(f"…and {len(ordered) - _MAX_FAILURE_LINES} more distinct causes")
+    return "\n".join(lines)
+
+
 async def _run_ahrefs_analysis(db: Session, run_id: int, job: Job) -> int:
     """Analyzer mode phase 2: Ahrefs /batch-analysis over this run's URLs.
 
@@ -827,6 +858,13 @@ async def run_job_async(run_id: int) -> None:
             db, run, "scrape",
             f"{len(variants)} queries via {provider_name} (job {job.id})",
         )
+        # Distinct failures, keyed by (engine, message) with a count. A run that
+        # spans engines fails for DIFFERENT reasons per engine — keeping only
+        # the first error hid a disabled Google zone behind a missing Yandex
+        # one, and the run page showed a single message that explained half the
+        # problem. Deduped so 200 identical timeouts stay one line.
+        failures: dict[tuple[str, str], int] = {}
+
         async with get_provider(provider_name) as provider:
             async def worker(v: dict):
                 try:
@@ -836,16 +874,25 @@ async def run_job_async(run_id: int) -> None:
                 except Exception as e:  # noqa: BLE001
                     run.queries_failed += 1
                     log.exception("variant failed: %s", v)
+                    # redact() scrubs api_key/token/password from URL or
+                    # header strings before persistence — providers should
+                    # already redact at the source, but this is defense
+                    # in depth in case a future provider doesn't.
+                    msg = redact(f"{type(e).__name__}: {e}")
+                    key = (v.get("engine") or "?", msg)
+                    failures[key] = failures.get(key, 0) + 1
                     if not run.error:
-                        # redact() scrubs api_key/token/password from URL or
-                        # header strings before persistence — providers should
-                        # already redact at the source, but this is defense
-                        # in depth in case a future provider doesn't.
-                        run.error = redact(f"{type(e).__name__}: {e}")
+                        # Something to show while the run is still going; the
+                        # full summary replaces it once every variant is done.
+                        run.error = msg
                 finally:
                     db.commit()
 
             await asyncio.gather(*(worker(v) for v in variants))
+
+        if failures:
+            run.error = _summarise_failures(failures, run.queries_failed, len(variants))
+            db.commit()
 
         # Analyzer mode: enrich the SERP we just captured with Ahrefs metrics.
         # Runs AFTER the scrape because it needs the result URLs. Failures here
