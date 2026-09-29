@@ -197,6 +197,7 @@ function ProviderSummaryTable({ summaries }: { summaries: ReturnType<typeof prov
             <th className={`${TH} text-right`}>{t.compare.colAnswered}</th>
             <th className={`${TH} text-right`}>{t.compare.colFailed}</th>
             <th className={`${TH} text-right`}>{t.compare.colUnsupported}</th>
+            <th className={`${TH} text-right`} title={t.compare.retriedHint}>{t.compare.colRetried}</th>
             <th className={`${TH} text-right`}>{t.compare.colResults}</th>
             <th className={`${TH} text-right`}>{t.compare.colAvgResults}</th>
             <th className={`${TH} text-right`}>{t.compare.colCost}</th>
@@ -213,6 +214,10 @@ function ProviderSummaryTable({ summaries }: { summaries: ReturnType<typeof prov
                   {s.failed}
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{s.unsupported || "—"}</td>
+                <td className={`px-3 py-2 text-right tabular-nums ${s.retried ? "font-semibold text-amber-700 dark:text-amber-400" : "text-slate-500"}`}
+                  title={t.compare.retriedHint}>
+                  {s.retried || "—"}
+                </td>
                 <td className="px-3 py-2 text-right tabular-nums">{s.results}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{s.avgResults == null ? "—" : s.avgResults.toFixed(1)}</td>
                 <td className="px-3 py-2 text-right tabular-nums">
@@ -398,7 +403,21 @@ function VariantChips({ v }: { v: CountRow["variant"] }) {
 
 function OutcomeCell({ o }: { o: Outcome }) {
   const { t } = useT();
-  if (o.status === "ok") return <span className="font-medium tabular-nums">{o.count}</span>;
+  if (o.status === "ok") {
+    return (
+      <span className="font-medium tabular-nums">
+        {o.count}
+        {/* Answered, but only after an automatic retry — the result is good,
+            the provider was not, and a comparison should show both. */}
+        {o.attempts > 1 && (
+          <span className="ml-1 text-xs font-normal text-amber-700 dark:text-amber-400"
+            title={t.compare.answeredOnAttempt(o.attempts)}>
+            ↻{o.attempts}
+          </span>
+        )}
+      </span>
+    );
+  }
   if (o.status === "failed") {
     return <span title={o.error ?? undefined}><Pill tone="bad" icon="cross">{t.compare.statusFailed}</Pill></span>;
   }

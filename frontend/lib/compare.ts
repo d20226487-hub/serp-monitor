@@ -114,9 +114,15 @@ export type OutcomeStatus = RunQuery["status"] | "missing";
 
 /** What one provider did with one query. `missing` = no outcome recorded yet
  *  (the run is still going, or was cut short). */
-export type Outcome = { status: OutcomeStatus; count: number; error: string | null };
+export type Outcome = {
+  status: OutcomeStatus;
+  count: number;
+  error: string | null;
+  /** Tries it took, counting automatic retries of transient failures. */
+  attempts: number;
+};
 
-const MISSING: Outcome = { status: "missing", count: 0, error: null };
+const MISSING: Outcome = { status: "missing", count: 0, error: null, attempts: 0 };
 
 /** variant key -> provider -> outcome. */
 export function outcomeIndex(queries: RunQuery[]): Map<string, Map<string, Outcome>> {
@@ -128,7 +134,9 @@ export function outcomeIndex(queries: RunQuery[]): Map<string, Map<string, Outco
       byProvider = new Map();
       idx.set(k, byProvider);
     }
-    byProvider.set(q.provider, { status: q.status, count: q.result_count, error: q.error });
+    byProvider.set(q.provider, {
+      status: q.status, count: q.result_count, error: q.error, attempts: q.attempts ?? 1,
+    });
   }
   return idx;
 }
@@ -430,6 +438,9 @@ export type ProviderSummary = {
   unsupported: number;
   /** No outcome yet — still running, or cut short. */
   pending: number;
+  /** Queries that needed more than one try (answered or not). The automatic
+   *  retries would otherwise hide a flaky provider behind a clean result. */
+  retried: number;
   /** Result rows across the queries it answered. */
   results: number;
   /** Mean results per answered query. */
@@ -453,6 +464,7 @@ export function providerSummaries(
       failed: mine.filter(q => q.status === "failed").length,
       unsupported: mine.filter(q => q.status === "unsupported").length,
       pending: Math.max(0, variants.size - mine.length),
+      retried: mine.filter(q => (q.attempts ?? 1) > 1).length,
       results,
       avgResults: ok.length ? results / ok.length : null,
       cost: costs?.[p] ?? null,

@@ -18,7 +18,8 @@ import httpx
 from .._redact import redact
 from ..app_settings import get_provider_creds
 from .base import (
-    ProviderConfigError, ProviderError, ResultRow, SerpProvider, domain_of,
+    ProviderConfigError, ProviderError, ProviderTransientError, ResultRow,
+    SerpProvider, domain_of,
     shown_host,
     display_url,
     is_search_redirect,
@@ -183,7 +184,10 @@ class BrightDataProvider(SerpProvider):
                 # so. Measured: zone serp_api1 -> {"status":"disabled"}.
                 if not r.text.strip():
                     zone = zone_override or creds["zone"]
-                    raise ProviderError(await self._explain_empty(creds["token"], zone, url))
+                    msg, transient = await self._explain_empty(creds["token"], zone, url)
+                    # A disabled zone fails the same way every time; an active
+                    # (or unknown) one is Bright Data failing this one request.
+                    raise (ProviderTransientError if transient else ProviderError)(msg)
                 return self._coerce_json(r) if expect_json else r.text
             except (httpx.HTTPError, httpx.TimeoutException) as e:
                 last = e
@@ -191,8 +195,9 @@ class BrightDataProvider(SerpProvider):
         assert last is not None
         raise ProviderError(redact(f"Bright Data request failed: {last}")) from last
 
-    async def _explain_empty(self, token: str, zone: str, url: str) -> str:
-        """Turn an empty 200 into an actionable message.
+    async def _explain_empty(self, token: str, zone: str, url: str) -> tuple[str, bool]:
+        """Turn an empty 200 into an actionable message, and say whether it is
+        worth retrying (True unless the zone is known to be switched off).
 
         Bright Data exposes the zone's state at /zone/status, so we can name the
         real problem instead of guessing. The probe is best-effort: if it fails
@@ -211,38 +216,40 @@ class BrightDataProvider(SerpProvider):
             pass
 
         if status and status != "active":
-            return (
+            return ((
                 f'Bright Data zone "{zone}" is {status} — it returned an empty '
                 "response. Re-enable it in the Bright Data dashboard under "
                 "Proxies & Scraping Infrastructure, then run the job again. "
                 "(The zone's permissions are fine; it is simply switched off, "
                 "which is also what happens when billing lapses.)"
-            )
+            ), False)
         if status == "active":
             # The zone is fine, so nothing on the account explains this: Bright
             # Data took the request and could not serve it. Measured repeatedly
             # on Google, far more often with brd_mobile=1 than without — say so
             # rather than send anyone to check billing on an active zone.
             mobile = "brd_mobile=1" in url
-            return (
+            return ((
                 f'Bright Data returned an EMPTY response for zone "{zone}" '
                 f"(url={url!r}) although the zone is active — Bright Data could "
-                "not serve this request. Nothing on the account needs fixing; "
-                "retry later"
+                "not serve this request, even after retrying. Nothing on the "
+                "account needs fixing"
                 + (
                     ". Mobile Google requests (brd_mobile=1) are where this has "
                     "been seen most, so another provider is the reliable choice "
                     "for mobile Google."
-                    if mobile else ", or use another provider for this query."
+                    if mobile else "; retry later, or use another provider for this query."
                 )
-            )
+            ), True)
+        # Status unknown (the probe itself failed): treated as transient, since
+        # retrying costs a few seconds and the common cause is intermittent.
         return (
             f'Bright Data returned an EMPTY response for zone "{zone}" '
             f"(url={url!r}). That usually means the zone is disabled or out of "
             "funds — check it in the Bright Data dashboard. It does not mean "
             "the SERP parser is misconfigured; a parser problem returns HTML, "
             "not an empty body."
-        )
+        ), True
 
     @staticmethod
     def _coerce_json(r: httpx.Response) -> dict:

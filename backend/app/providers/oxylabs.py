@@ -32,8 +32,8 @@ import httpx
 from .._redact import redact
 from ..app_settings import get_provider_creds
 from .base import (
-    ProviderConfigError, ProviderError, ResultRow, SerpProvider, domain_of,
-    shown_host,
+    ProviderConfigError, ProviderError, ProviderTransientError, ResultRow,
+    SerpProvider, domain_of, shown_host,
 )
 from .yandex_html import parse_yandex_html
 
@@ -144,7 +144,10 @@ def _check_job(data: dict, context: str) -> dict:
     code = first.get("status_code")
     if code is not None and code != 200:
         why = _JOB_STATUS.get(code, "the page was not fetched")
-        raise ProviderError(
+        # The listed codes are Oxylabs failing this one job — the runner
+        # retries those. Any other job status is not known to clear up.
+        cls = ProviderTransientError if code in _JOB_STATUS else ProviderError
+        raise cls(
             f"Oxylabs {context}: job status {code} — {why}. The request itself "
             "succeeded (HTTP 200), so credentials are fine; retry later, or use "
             "another provider for this query."

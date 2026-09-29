@@ -19,6 +19,21 @@ class ProviderConfigError(ProviderError):
     Not retriable."""
 
 
+class ProviderTransientError(ProviderError):
+    """The provider took the request and could not serve it THIS time.
+
+    Raised only where a failure is known to be intermittent: Bright Data's empty
+    body on an active zone, an Oxylabs job that faulted, a captcha page behind a
+    rotating proxy. The runner retries these automatically before recording the
+    query as failed — measured: the same Bright Data mobile Google query failed
+    in runs 96, 97 and 99 and succeeded in 98 with nothing changed.
+
+    Everything else stays a plain ProviderError and fails at once: retrying a
+    missing language, a disabled zone or a 4xx would only fail the same way,
+    slower.
+    """
+
+
 class ResultRow(TypedDict, total=False):
     position: int
     url: str | None

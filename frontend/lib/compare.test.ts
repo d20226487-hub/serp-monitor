@@ -320,6 +320,24 @@ describe("byKeyword", () => {
   });
 });
 
+describe("retries", () => {
+  it("counts queries that needed more than one try, answered or not", () => {
+    const [s] = providerSummaries(["a"], [
+      q("a", "ok", 5, { attempts: 1 }),
+      q("a", "ok", 5, { attempts: 2, keyword: "k2" }),
+      q("a", "failed", 0, { attempts: 3, keyword: "k3" }),
+      q("a", "ok", 5, { attempts: null, keyword: "k4" }),
+    ], null);
+    expect(s.retried).toBe(2);
+  });
+
+  it("reads outcomes from before retries existed as one try", () => {
+    const [scope] = engineScopes(["a"], [q("a", "ok", 1, { attempts: null })]);
+    const [row] = countRows(scope, [q("a", "ok", 1, { attempts: null })]);
+    expect(row.cells.a.attempts).toBe(1);
+  });
+});
+
 describe("providerSummaries", () => {
   it("tallies each provider's outcomes, results and cost", () => {
     const qs = [
@@ -330,7 +348,7 @@ describe("providerSummaries", () => {
     const [a, b] = providerSummaries(["a", "b"], qs, {
       a: { cost: 0.02, source: "estimate", queries: 2 },
     });
-    expect(a).toMatchObject({ ok: 2, failed: 0, unsupported: 0, results: 16, avgResults: 8 });
+    expect(a).toMatchObject({ ok: 2, failed: 0, unsupported: 0, results: 16, avgResults: 8, retried: 0 });
     expect(a.cost?.cost).toBe(0.02);
     expect(b).toMatchObject({ ok: 1, unsupported: 1, results: 4, avgResults: 4, cost: null });
   });

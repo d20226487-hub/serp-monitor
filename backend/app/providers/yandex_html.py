@@ -17,7 +17,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from selectolax.parser import HTMLParser
 
-from .base import ProviderError, ResultRow, domain_of, shown_host
+from .base import ProviderError, ProviderTransientError, ResultRow, domain_of, shown_host
 
 log = logging.getLogger(__name__)
 
@@ -153,9 +153,11 @@ def parse_yandex_html(html: str, top_n: int) -> list[ResultRow]:
     page_title = _text(tree.css_first("title"))
 
     # Bail early on captcha/anti-bot pages — better to fail the variant than
-    # to scrape random links from the chrome of an interstitial.
+    # to scrape random links from the chrome of an interstitial. Transient:
+    # Bright Data and Oxylabs rotate the exit IP per request, so a retry
+    # usually comes from an address Yandex has not flagged.
     if _looks_like_captcha(html, page_title):
-        raise ProviderError(
+        raise ProviderTransientError(
             f"Yandex returned a captcha/anti-bot page (title='{page_title}'). "
             "The proxy IP is likely flagged. For Oxylabs, this often means "
             "the geo_location proxy pool is shared and rate-limited; consider "

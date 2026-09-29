@@ -30,6 +30,7 @@ from .models import (
     utcnow,
 )
 from .providers import PROVIDERS, get_provider, supports
+from .providers.base import ProviderTransientError
 
 log = logging.getLogger(__name__)
 
@@ -161,7 +162,7 @@ def _variant_key_of(v: dict) -> str:
 
 def _record_query(
     db: Session, run_id: int, provider: str, v: dict, *,
-    status: str, count: int = 0, error: str | None = None,
+    status: str, count: int = 0, error: str | None = None, attempts: int = 1,
 ) -> None:
     """Upsert one query's outcome on one provider. A retry updates the row the
     first attempt wrote, so the table always holds the latest word."""
@@ -185,6 +186,7 @@ def _record_query(
     row.status = status
     row.result_count = count
     row.error = error
+    row.attempts = attempts
 
 
 def _provider_spend(name: str, provider, queries_ok: int) -> dict:
@@ -250,16 +252,18 @@ async def _scrape_compare(
             async def worker(v: dict):
                 nonlocal answered
                 try:
-                    rows = await _execute_variant(provider, v, job.top_n or 10)
+                    rows, attempts = await _execute_with_retries(provider, v, job.top_n or 10)
                     _persist_results(db, run.id, v, rows, provider=name)
-                    _record_query(db, run.id, name, v, status="ok", count=len(rows))
+                    _record_query(db, run.id, name, v, status="ok", count=len(rows),
+                                  attempts=attempts)
                     run.queries_done += 1
                     answered += 1
                 except Exception as e:  # noqa: BLE001
                     run.queries_failed += 1
                     log.exception("compare variant failed on %s: %s", name, v)
-                    msg = redact(f"{type(e).__name__}: {e}")
-                    _record_query(db, run.id, name, v, status="failed", error=msg[:1000])
+                    msg = _failure_message(e)
+                    _record_query(db, run.id, name, v, status="failed", error=msg[:1000],
+                                  attempts=getattr(e, "attempts", 1))
                     # Keyed by provider AND engine: in a comparison "which
                     # provider" is the first thing a failure has to say.
                     key = (f"{name} · {v.get('engine') or '?'}", msg)
@@ -288,6 +292,51 @@ async def _scrape_compare(
     if failures:
         run.error = _summarise_failures(failures, run.queries_failed, run.queries_total)
     db.commit()
+
+
+# Transient provider failures — Bright Data's empty body on an active zone, an
+# Oxylabs job that faulted, a captcha page behind a rotating proxy — are retried
+# before a query is recorded as failed. They are intermittent by nature: the
+# same Bright Data mobile Google query failed in runs 96, 97 and 99 and was
+# answered in run 98 with nothing changed. Only ProviderTransientError is
+# retried; a missing language or a disabled zone would fail identically.
+# The pauses happen OUTSIDE the provider's concurrency slot (each request takes
+# the semaphore only for itself), so a query waiting to retry holds up nothing.
+TRANSIENT_ATTEMPTS = 3
+TRANSIENT_BACKOFF_S: tuple[float, ...] = (4.0, 10.0)
+
+
+async def _execute_with_retries(provider, v: dict, top_n: int) -> tuple[list[dict], int]:
+    """Run one query, retrying transient failures. Returns (rows, attempts).
+
+    When the last attempt still fails, the error carries `.attempts` so the
+    caller can say how hard it tried.
+    """
+    attempt = 1
+    while True:
+        try:
+            return await _execute_variant(provider, v, top_n), attempt
+        except ProviderTransientError as e:
+            if attempt >= TRANSIENT_ATTEMPTS:
+                e.attempts = attempt
+                raise
+            delay = TRANSIENT_BACKOFF_S[min(attempt - 1, len(TRANSIENT_BACKOFF_S) - 1)]
+            log.warning(
+                "transient failure on %s for %r (attempt %d/%d), retrying in %.0fs: %s",
+                getattr(provider, "name", "?"), v.get("keyword"), attempt,
+                TRANSIENT_ATTEMPTS, delay, e,
+            )
+            await asyncio.sleep(delay)
+            attempt += 1
+
+
+def _failure_message(e: Exception) -> str:
+    """The stored message for a failed query, noting automatic retries."""
+    msg = redact(f"{type(e).__name__}: {e}")
+    attempts = getattr(e, "attempts", 1)
+    if attempts > 1:
+        msg += f" [failed {attempts} times — transient errors are retried automatically]"
+    return msg
 
 
 async def _execute_variant(provider, v: dict, top_n: int) -> list[dict]:
@@ -1094,17 +1143,17 @@ async def run_job_async(run_id: int) -> None:
         async with get_provider(provider_name) as provider:
             async def worker(v: dict):
                 try:
-                    rows = await _execute_variant(provider, v, job.top_n or 10)
+                    rows, _attempts = await _execute_with_retries(provider, v, job.top_n or 10)
                     _persist_results(db, run.id, v, rows, provider=provider_name)
                     run.queries_done += 1
                 except Exception as e:  # noqa: BLE001
                     run.queries_failed += 1
                     log.exception("variant failed: %s", v)
-                    # redact() scrubs api_key/token/password from URL or
-                    # header strings before persistence — providers should
-                    # already redact at the source, but this is defense
-                    # in depth in case a future provider doesn't.
-                    msg = redact(f"{type(e).__name__}: {e}")
+                    # redact() (inside _failure_message) scrubs api_key/token/
+                    # password from URL or header strings before persistence —
+                    # providers should already redact at the source, but this
+                    # is defense in depth in case a future provider doesn't.
+                    msg = _failure_message(e)
                     key = (v.get("engine") or "?", msg)
                     failures[key] = failures.get(key, 0) + 1
                     if not run.error:
@@ -1288,15 +1337,17 @@ async def _retry_compare(db: Session, run: JobRun, job: Job) -> None:
             async def worker(v: dict):
                 nonlocal recovered, answered
                 try:
-                    rows = await _execute_variant(provider, v, job.top_n or 10)
+                    rows, attempts = await _execute_with_retries(provider, v, job.top_n or 10)
                     _persist_results(db, run.id, v, rows, provider=name)
-                    _record_query(db, run.id, name, v, status="ok", count=len(rows))
+                    _record_query(db, run.id, name, v, status="ok", count=len(rows),
+                                  attempts=attempts)
                     recovered += 1
                     answered += 1
                 except Exception as e:  # noqa: BLE001
                     log.exception("compare retry failed on %s: %s", name, v)
-                    msg = redact(f"{type(e).__name__}: {e}")
-                    _record_query(db, run.id, name, v, status="failed", error=msg[:1000])
+                    msg = _failure_message(e)
+                    _record_query(db, run.id, name, v, status="failed", error=msg[:1000],
+                                  attempts=getattr(e, "attempts", 1))
                     run.error = msg
                 finally:
                     db.commit()
@@ -1378,12 +1429,12 @@ async def retry_failed_queries(run_id: int) -> None:
             async def worker(v: dict):
                 nonlocal recovered
                 try:
-                    rows = await _execute_variant(provider, v, job.top_n or 10)
+                    rows, _attempts = await _execute_with_retries(provider, v, job.top_n or 10)
                     _persist_results(db, run.id, v, rows, provider=provider_name)
                     recovered += 1
                 except Exception as e:  # noqa: BLE001
                     log.exception("retry variant failed: %s", v)
-                    run.error = redact(f"{type(e).__name__}: {e}")
+                    run.error = _failure_message(e)
                 finally:
                     db.commit()
 

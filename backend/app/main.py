@@ -153,6 +153,8 @@ def _migrate_sqlite_columns() -> None:
         ("job_runs", "providers", "JSON"),
         ("job_runs", "provider_costs", "JSON"),
         ("results", "provider", "VARCHAR(20)"),
+        # Tries a compare query took, counting automatic transient retries.
+        ("run_queries", "attempts", "INTEGER"),
     ]
     # Values to backfill into rows that predate a column. ALTER TABLE ADD COLUMN
     # without a DEFAULT leaves existing rows NULL, which then fails response

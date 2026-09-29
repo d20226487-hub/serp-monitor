@@ -478,4 +478,10 @@ class RunQuery(Base):
     status: Mapped[str] = mapped_column(String(16))
     result_count: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # How many tries the last attempt at this query took, counting the
+    # automatic retries of transient failures. Recorded because otherwise the
+    # retries would hide exactly what a comparison should show: a provider that
+    # needs three tries per answer looks identical to one that answers first
+    # time. NULL on rows from before retries existed (= 1).
+    attempts: Mapped[int | None] = mapped_column(Integer, default=1, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

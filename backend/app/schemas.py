@@ -197,6 +197,8 @@ class RunQueryOut(BaseModel):
     status: str  # ok | failed | unsupported
     result_count: int
     error: str | None
+    # Tries it took, counting automatic retries of transient failures.
+    attempts: int | None = None
 
 
 class CostEstimate(BaseModel):

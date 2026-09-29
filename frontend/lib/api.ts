@@ -431,6 +431,9 @@ export type RunQuery = {
   status: "ok" | "failed" | "unsupported";
   result_count: number;
   error: string | null;
+  /** Tries it took, counting automatic retries of transient failures.
+   *  null on outcomes recorded before retries existed (= 1). */
+  attempts?: number | null;
 };
 
 export type RunPhase = "scrape" | "ahrefs" | "whois" | "ai";
