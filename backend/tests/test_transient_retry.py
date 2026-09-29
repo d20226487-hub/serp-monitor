@@ -94,6 +94,27 @@ class TestOxylabsJobStatus:
             _check_job({"results": [{"status_code": 400, "content": []}]}, "google 'x'")
         assert not isinstance(info.value, ProviderTransientError)
 
+    @pytest.mark.asyncio
+    async def test_a_fetched_but_unparsed_page_is_transient(self):
+        # Measured: the same SERP parsed with 3 results, then came back 12005
+        # with none minutes later — Oxylabs failing to read it that time.
+        from app.providers.oxylabs import OxylabsProvider
+
+        p = OxylabsProvider()
+        await p.aclose()
+
+        async def fake_post(body):
+            return {"results": [{"status_code": 200,
+                                 "content": {"parse_status_code": 12005, "results": {}}}]}
+
+        p._post = fake_post
+        with pytest.raises(ProviderTransientError):
+            await p.search_google(
+                keyword="boostwin", device="mobile",
+                location={"canonical_name": "Uzbekistan", "country_code": "uz"},
+                language="ru", google_domain="google.com", country_code="uz", top_n=10,
+            )
+
     def test_a_fetched_job_passes(self):
         first = _check_job({"results": [{"status_code": 200, "content": {}}]}, "google 'x'")
         assert first["status_code"] == 200

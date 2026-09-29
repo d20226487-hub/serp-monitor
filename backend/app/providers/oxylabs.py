@@ -304,9 +304,15 @@ class OxylabsProvider(SerpProvider):
         # An empty organic list is a real answer only when Oxylabs says the
         # parse succeeded (12000). With any other parse status it could not
         # read the page, which is a failure, not an empty SERP.
+        #
+        # Transient, not permanent: measured on one SERP ("boostwin", mobile,
+        # Uzbekistan) within minutes — parsed with 3 results, then fetched
+        # with parse_status_code 12005 and 0 results, then job status 613.
+        # The page had not changed (SerpAPI returned the same 3 throughout);
+        # Oxylabs failed to read it that time, so a retry is worth making.
         parse_code = content.get("parse_status_code")
         if not rows and parse_code not in (None, 12000):
-            raise ProviderError(
+            raise ProviderTransientError(
                 f"Oxylabs {context}: the page was fetched but not parsed "
                 f"(parse_status_code {parse_code}), so no results could be read."
             )
