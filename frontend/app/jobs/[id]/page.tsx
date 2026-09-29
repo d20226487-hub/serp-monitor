@@ -49,6 +49,12 @@ export default function JobPage() {
           onSaved={async (updated, { ranAfter }) => {
             setJob(updated);
             setEdit(false);
+            // "Registered" is the SCHEDULER's answer, not the job's, so re-ask
+            // it. Keeping the pre-save answer showed a freshly scheduled job as
+            // "enabled" beside "not registered with scheduler" — true a moment
+            // before the save, false after it — until the page was reloaded.
+            try { setSchedInfo(await api.getScheduleInfo(id)); }
+            catch { setSchedInfo(null); }
             // Refresh runs in case "Save & run now" added one.
             if (ranAfter) setRuns(await api.listRuns(id));
           }}
