@@ -47,6 +47,46 @@ export type ToolDelivery = {
 
 export type ProxyCheckerMode = "off" | "after_run" | "daily";
 
+/** The Blocks tab: one of the project's domains, in one country.
+ *  `kind` only orders and filters the rows — it is never shown as a label:
+ *  what is shown is each proxy's own status. */
+export type BlockKind = "not_pass" | "pass" | "unchecked";
+export type BlockRow = {
+  geo: string;
+  domain: string;
+  kind: BlockKind;
+  /** Proxy → status, as the Proxy Checker gave them ({"KG - Provider B": "PASS"}).
+   *  null while no proxy has reported. */
+  proxies: Record<string, string> | null;
+  /** When the proxies reported; null while none has. */
+  checked_at: string | null;
+  /** Distinct keywords it ranks for there, in each query's latest check. */
+  keywords: number;
+  engines: string[];
+  best_position: number | null;
+  best_keyword: string | null;
+  best_engine: string | null;
+  last_seen: string | null;
+  /** Its country is switched on for sending to the Proxy Checker. */
+  sending: boolean;
+  /** The last time it was sent for this country, and how that went. */
+  last_send: { at: string; ok: boolean; status_code: number | null } | null;
+};
+export type ProjectBlocks = {
+  window_days: number;
+  windows: number[];
+  /** The proxies' statuses are made up (the rows are real): a preview. */
+  demo: boolean;
+  /** Some proxy has reported on at least one of the rows. */
+  has_real: boolean;
+  connected: boolean;
+  geos: string[];
+  /** Country → the proxies that reported there: that country's columns. */
+  proxies: Record<string, string[]>;
+  counts: { in_serps: number; not_pass: number; pass: number; unchecked: number };
+  rows: BlockRow[];
+};
+
 /** Settings → Tools Connection. The token itself never comes back. */
 export type ProxyCheckerConnection = {
   /** "" until one is entered: no address is built in. */
@@ -716,6 +756,8 @@ export const api = {
     req<ProxyCheckerConnection>("/settings/tools/proxy-checker", { method: "PUT", body: JSON.stringify(body) }),
   clearProxyChecker: () =>
     req<ProxyCheckerConnection>("/settings/tools/proxy-checker", { method: "DELETE" }),
+  getProjectBlocks: (id: number, days: number, demo: boolean) =>
+    req<ProjectBlocks>(`/projects/${id}/blocks?days=${days}&demo=${demo ? "true" : "false"}`),
   getProjectProxyChecker: (id: number) => req<ProjectProxyChecker>(`/projects/${id}/proxy-checker`),
   getCountries: () => req<{ code: string; name: string }[]>("/lookup/countries"),
   getProjectGeos: (id: number) => req<ProjectGeos>(`/projects/${id}/geos`),

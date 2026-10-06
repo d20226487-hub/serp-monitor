@@ -36,6 +36,19 @@ Assumed, not known (the API's behaviour could only be probed without a token:
 403 on GET and POST): each request stands alone, so two projects sending for
 the same country do not overwrite one another; and any 2xx means accepted.
 
+What an accepted answer says (the user's example, 2026-10-06 — no live answer
+had been received yet, every request from here being refused with 403):
+
+    {"example1.com": {"KG - Provider A": "PASS", "KG - Provider B": "PASS", …}, …}
+
+One entry per domain, and in it one status per PROXY — several per country,
+named by the Proxy Checker. `read_answer` takes that apart and
+`record_statuses` keeps it per (country, domain) for the Blocks tab, which
+shows each proxy's status as given: the user, on a first table that reduced
+this to blocked / not blocked — "we do not show blocked or not blocked we
+display the status by each proxy". "PASS" is the only status seen so far; what
+else a proxy can say is the Proxy Checker's vocabulary, kept verbatim.
+
 The connection (URL, token) is global: Settings → Tools Connection. The token
 is stored like the SERP providers' and never returned to the browser. No
 address is built in: the Proxy Checker is somebody's own service, so both are
@@ -55,7 +68,7 @@ from sqlalchemy.orm import Session
 from ._redact import redact
 from .app_settings import _get, _set
 from .db import SessionLocal
-from .models import Job, JobRun, Project, Result, ToolDelivery
+from .models import DomainProxyCheck, Job, JobRun, Project, Result, ToolDelivery
 from .positions_csv import counted_host
 
 log = logging.getLogger(__name__)
@@ -291,6 +304,53 @@ class Sent(NamedTuple):
     excerpt: str                 # the start of the answer, for the log's one line
     request: dict                # as it went out, the token replaced by TOKEN_MARK
     raw: str                     # the answer as received, or the transport's error
+    data: object = None          # the answer's JSON, when it was JSON
+
+
+def read_answer(data: object, sent: list[str]) -> dict[str, dict[str, str]]:
+    """Domain → {proxy: status}, from an answer shaped as the module docstring
+    shows. Proxy names and statuses are kept exactly as given (trimmed).
+
+    A domain that was not in the request is not believed, so an answer about
+    something else cannot be pinned on ours; and an entry that is not a
+    proxy → status mapping is left out rather than guessed at.
+    """
+    if not isinstance(data, dict):
+        return {}
+    wanted = {d.lower(): d for d in sent}
+    found: dict[str, dict[str, str]] = {}
+    for name, proxies in data.items():
+        domain = wanted.get(str(name).strip().lower())
+        if domain is None or not isinstance(proxies, dict):
+            continue
+        statuses = {
+            str(proxy).strip(): str(status).strip()
+            for proxy, status in proxies.items()
+            if isinstance(status, (str, int, float, bool)) and str(proxy).strip() and str(status).strip()
+        }
+        if statuses:
+            found[domain] = statuses
+    return found
+
+
+def record_statuses(db: Session, geo: str, sent: list[str], data: object, delivery_id: int | None) -> int:
+    """Keep what an answer said about the domains it was asked about: one row
+    per (country, domain), the newest answer replacing the one before — its
+    whole set of proxies, so a proxy the Proxy Checker has stopped reporting
+    does not linger with a stale status. Not committed here."""
+    answered = read_answer(data, sent)
+    if not answered:
+        return 0
+    have = {c.domain: c for c in db.query(DomainProxyCheck).filter(
+        DomainProxyCheck.geo == geo, DomainProxyCheck.domain.in_(list(answered))).all()}
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    for domain, statuses in answered.items():
+        row = have.get(domain)
+        if row is None:
+            row = DomainProxyCheck(geo=geo, domain=domain)
+            db.add(row)
+        row.statuses, row.checked_at, row.delivery_id = statuses, now, delivery_id
+    return len(answered)
 
 
 def send_one(url: str, token: str, geo: str, domains: list[str],
@@ -309,8 +369,12 @@ def send_one(url: str, token: str, geo: str, domains: list[str],
     client = client or httpx.Client(timeout=30)
     try:
         r = client.post(url, content=body.encode("utf-8"), headers=dict(headers))
+        try:
+            data = r.json()
+        except ValueError:
+            data = None
         return Sent(200 <= r.status_code < 300, r.status_code,
-                    _mask(redact(r.text or ""), token)[:300], request, raw_response(r, token))
+                    _mask(redact(r.text or ""), token)[:300], request, raw_response(r, token), data)
     except (httpx.HTTPError, httpx.InvalidURL) as e:
         error = _mask(redact(f"{type(e).__name__}: {e}"), token)
         return Sent(False, None, error[:300], request, error[:RAW_BODY_LIMIT])
@@ -335,6 +399,9 @@ def deliver(db: Session, project: Project, by_geo: dict[str, list[str]], *, trig
                            request=sent.request, response_raw=sent.raw)
         db.add(row)
         out.append(row)
+        if sent.ok and sent.data is not None:
+            db.flush()               # the row's id, for the statuses to point back at
+            record_statuses(db, geo, domains, sent.data, row.id)
         if not sent.ok:
             log.warning("proxy checker refused %s for project %s: %s %s",
                         geo, project.id, sent.status_code, sent.excerpt[:120])

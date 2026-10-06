@@ -6,15 +6,19 @@ own setting, as the user asked. AMP Rotator comes later.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import datetime, timedelta, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from .. import blocks
 from .. import proxy_checker as pc
 from ..db import get_db
-from ..models import Project, ToolDelivery
+from ..models import DomainProxyCheck, Project, ToolDelivery
 from ..scheduler import proxy_checker_next_run, upsert_proxy_checker_schedule
+from .project_positions import project_positions
 
 router = APIRouter(tags=["tools"])
 
@@ -198,3 +202,64 @@ async def send_project_now(project_id: int, db: Session = Depends(get_db)):
             409, "The Proxy Checker is not connected: add its address and token in Settings → Tools Connection.")
     sent = await run_in_threadpool(pc.send_recent, project.id, "manual")
     return {"sent": [_delivery(d) for d in sent], **_project_state(db, project)}
+
+
+# --- which domains are in the SERPs, and what each proxy says of them --------
+
+@router.get("/projects/{project_id}/blocks")
+def project_blocks(
+    project_id: int,
+    days: int = Query(blocks.DEFAULT_WINDOW, description="How far back the SERPs are read"),
+    demo: bool = Query(False, description="Made-up proxy statuses over the real rows, to preview the table"),
+    db: Session = Depends(get_db),
+):
+    """One row per (country, domain): where it ranks, and the status each
+    proxy last gave it there. See ../blocks.py."""
+    project = _project(db, project_id)
+    if days not in blocks.WINDOWS:
+        raise HTTPException(400, f"days must be one of {list(blocks.WINDOWS)}")
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    since = now - timedelta(days=days)
+    project_geos = pc.project_geos(db, project)
+    rows = blocks.in_serps(project_positions(project_id, since.isoformat(), None, db), project_geos)
+
+    sending = set(pc.send_geos(db, project))
+    domains = sorted({r["domain"] for r in rows})
+    known: dict[tuple[str, str], DomainProxyCheck] = {}
+    for i in range(0, len(domains), 400):
+        for c in db.query(DomainProxyCheck).filter(DomainProxyCheck.domain.in_(domains[i:i + 400])).all():
+            known[(c.geo, c.domain)] = c
+    # The last time each domain went to the Proxy Checker for each country, and
+    # how that went — the reason behind a row no proxy has reported on.
+    last_send: dict[tuple[str, str], dict] = {}
+    recent = (db.query(ToolDelivery)
+              .filter(ToolDelivery.tool == pc.TOOL, ToolDelivery.project_id == project.id)
+              .order_by(ToolDelivery.sent_at.desc(), ToolDelivery.id.desc()).limit(500).all())
+    for d in recent:
+        for domain in d.domains or []:
+            last_send.setdefault((d.geo, domain), {"at": d.sent_at, "ok": d.ok, "status_code": d.status_code})
+
+    for r in rows:
+        c = known.get((r["geo"], r["domain"]))
+        r["proxies"] = dict(c.statuses or {}) if c else None
+        r["checked_at"] = c.checked_at if c else None
+        r["sending"] = r["geo"] in sending
+        r["last_send"] = last_send.get((r["geo"], r["domain"]))
+    has_real = any(r["proxies"] for r in rows)
+    if demo:
+        for r in rows:
+            r["proxies"], r["checked_at"] = blocks.demo_statuses(r["geo"], r["domain"], now)
+    for r in rows:
+        r["kind"] = blocks.kind_of(r["proxies"])
+    return {
+        "window_days": days, "windows": list(blocks.WINDOWS),
+        "demo": demo,
+        # Whether any proxy has reported on any of these rows.
+        "has_real": has_real,
+        "connected": pc.connection_status()["connected"],
+        "geos": project_geos,
+        # The table's columns, per country.
+        "proxies": blocks.proxies_by_geo(rows),
+        "counts": blocks.counts(rows),
+        "rows": blocks.ordered(rows),
+    }

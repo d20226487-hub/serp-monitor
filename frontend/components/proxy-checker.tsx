@@ -310,11 +310,13 @@ export function AmpRotatorPlaceholder() {
 /* A project's page                                                     */
 /* ------------------------------------------------------------------ */
 
-export function ProjectProxyCheckerCard({ projectId, reloadKey = 0 }: {
+export function ProjectProxyCheckerCard({ projectId, reloadKey = 0, onChanged }: {
   projectId: number;
   /** Bumped by the page when the project's GEOs were saved: the choice below
    *  is made among them, so it has to be read again. */
   reloadKey?: number;
+  /** Something was saved or sent here that the blocks table above reads. */
+  onChanged?: () => void;
 }) {
   const { t } = useT();
   const s = t.tools.proxyChecker;
@@ -357,6 +359,7 @@ export function ProjectProxyCheckerCard({ projectId, reloadKey = 0 }: {
         geos: data.project_geos.every(g => chosen.includes(g)) ? null : chosen,
       }));
       setMsg(t.common.saved);
+      onChanged?.();
     } catch (e: any) {
       setErr(e?.message ?? "Save failed");
     } finally { setBusy(false); }
@@ -368,6 +371,7 @@ export function ProjectProxyCheckerCard({ projectId, reloadKey = 0 }: {
       const res = await api.sendProjectProxyChecker(projectId);
       take(res);
       setJustSent(res.sent);
+      onChanged?.();
       setMsg(res.sent.length === 0
         ? p.nothingToSend
         : p.sentResult(res.sent.filter(d => d.ok).length, res.sent.length));
@@ -530,9 +534,10 @@ export function ProjectProxyCheckerCard({ projectId, reloadKey = 0 }: {
           </div>
         )}
 
-        {/* Folded: the card sits at the top of the project page now, above the
-            positions it draws on, and must not push them down the screen. */}
-        <details className="group border-t pt-3 dark:border-slate-800">
+        {/* Open by default: the card has the Blocks tab to itself now, and what
+            would go and what came back are what that tab is opened for. They
+            were folded while the card sat above the positions. */}
+        <details open className="group border-t pt-3 dark:border-slate-800">
           <summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm font-medium">
             <Icon name="chevronRight" className="h-3.5 w-3.5 transition group-open:rotate-90" />
             {p.previewTitle(data.window_hours)}
@@ -558,7 +563,7 @@ export function ProjectProxyCheckerCard({ projectId, reloadKey = 0 }: {
           </div>
         </details>
 
-        <details className="group border-t pt-3 dark:border-slate-800">
+        <details open className="group border-t pt-3 dark:border-slate-800">
           <summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm font-medium">
             <Icon name="chevronRight" className="h-3.5 w-3.5 transition group-open:rotate-90" />
             {s.logTitle}

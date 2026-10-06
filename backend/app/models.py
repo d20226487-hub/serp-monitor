@@ -281,6 +281,28 @@ class ToolDelivery(Base):
     sent_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 
+class DomainProxyCheck(Base):
+    """What the Proxy Checker last said about one domain in one country: a
+    status per proxy, in its own names and words —
+    {"KG - Provider A": "PASS", "KG - Provider B": "PASS", …}.
+
+    One row per (country, domain), overwritten by each newer answer: the
+    question is "how is it now", and the answers themselves stay in
+    tool_deliveries for anyone who needs the history. A fact about the domain,
+    not about a project — two projects sharing a domain share its statuses."""
+    __tablename__ = "domain_proxy_checks"
+    __table_args__ = (UniqueConstraint("geo", "domain", name="uq_domain_proxy_checks_geo_domain"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    geo: Mapped[str] = mapped_column(String(8), index=True)
+    domain: Mapped[str] = mapped_column(String(255), index=True)
+    #: Proxy → status, as received. Several proxies per country.
+    statuses: Mapped[dict] = mapped_column(JSON, default=dict)
+    checked_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    delivery_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tool_deliveries.id", ondelete="SET NULL"), nullable=True)
+
+
 class RunUrlMetric(Base):
     """Ahrefs metrics for one unique URL within one run (analyzer mode).
 
