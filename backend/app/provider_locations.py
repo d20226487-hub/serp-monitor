@@ -53,6 +53,7 @@ from typing import NamedTuple
 
 import httpx
 from sqlalchemy import Index, Integer, String, Text, UniqueConstraint, create_engine, event, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 from ._redact import redact
@@ -151,17 +152,40 @@ if IS_SQLITE:
         dbapi_connection.execute("PRAGMA journal_mode=WAL")
 else:
     mirror_engine = main_engine          # a server database has no file lock to share
-MirrorBase.metadata.create_all(bind=mirror_engine)
-if IS_SQLITE:
-    # A mirror file made before the indexes above existed: create_all adds no
-    # index to a table that is already there, so bring it in line here.
-    with mirror_engine.begin() as _conn:
-        for _old in ("provider", "code", "name_lc", "head", "country_code"):
-            _conn.execute(text(f"DROP INDEX IF EXISTS ix_provider_locations_{_old}"))
-        _conn.execute(text("CREATE INDEX IF NOT EXISTS ix_pl_name ON provider_locations (provider, name_lc)"))
-        _conn.execute(text("CREATE INDEX IF NOT EXISTS ix_pl_place ON provider_locations (provider, country_code, head)"))
-        _conn.execute(text("CREATE INDEX IF NOT EXISTS ix_pl_head ON provider_locations (provider, head)"))
-MirrorSession = sessionmaker(bind=mirror_engine, autoflush=False, autocommit=False)
+_Session = sessionmaker(bind=mirror_engine, autoflush=False, autocommit=False)
+_schema_lock = threading.Lock()
+_schema_ready = False
+
+
+def _ensure_schema() -> None:
+    """Create the mirror's tables the first time it is used — not at import.
+    Every provider imports this module, and importing must not need the data
+    directory: where only the tests run (CI) there is none, and the import
+    itself failed with "unable to open database file"."""
+    global _schema_ready
+    if _schema_ready:
+        return
+    with _schema_lock:
+        if _schema_ready:
+            return
+        MirrorBase.metadata.create_all(bind=mirror_engine)
+        if IS_SQLITE:
+            # A mirror file made before the indexes above existed: create_all
+            # adds no index to a table that is already there, so bring it in
+            # line here.
+            with mirror_engine.begin() as conn:
+                for old in ("provider", "code", "name_lc", "head", "country_code"):
+                    conn.execute(text(f"DROP INDEX IF EXISTS ix_provider_locations_{old}"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_pl_name ON provider_locations (provider, name_lc)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_pl_place ON provider_locations (provider, country_code, head)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_pl_head ON provider_locations (provider, head)"))
+        _schema_ready = True
+
+
+def MirrorSession() -> Session:
+    """A session on the mirror, with its tables in place."""
+    _ensure_schema()
+    return _Session()
 
 
 class Loc(NamedTuple):
@@ -532,15 +556,25 @@ def warm_up() -> None:
 def location_for(provider: str, ref: dict) -> tuple[Loc | None, bool]:
     """For a run: (the entry for this location in the list `provider`'s
     locations come from, whether there was a list to look in). Own sessions —
-    providers have none."""
+    providers have none.
+
+    A mirror that cannot be opened or read is "no list", like one that was
+    never downloaded: the query then goes out with the stored name, as it did
+    before there was a mirror, instead of failing on its own lookup table."""
     list_name = LIST_OF.get(provider)
-    if not list_name or not ensure_synced(list_name):
+    if not list_name:
         return None, False
-    db = SessionLocal()
     try:
-        return resolve(db, list_name, ref), True
-    finally:
-        db.close()
+        if not ensure_synced(list_name):
+            return None, False
+        db = SessionLocal()
+        try:
+            return resolve(db, list_name, ref), True
+        finally:
+            db.close()
+    except SQLAlchemyError as e:
+        log.warning("%s location list unavailable, not checking the location: %s", list_name, redact(str(e))[:200])
+        return None, False
 
 
 def dataforseo_location(ref: dict) -> tuple[Loc | None, bool]:
