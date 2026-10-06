@@ -25,6 +25,9 @@ def _delivery(d: ToolDelivery, names: dict[int, str] | None = None) -> dict:
         "project_name": (names or {}).get(d.project_id) if d.project_id else None,
         "run_id": d.run_id, "trigger": d.trigger, "geo": d.geo, "domains": d.domains or [],
         "ok": d.ok, "status_code": d.status_code, "response": d.response, "sent_at": d.sent_at,
+        # The request as a curl command and the answer as received; null on
+        # sends made before they were kept.
+        "curl": pc.curl_command(d.request), "response_raw": d.response_raw,
     }
 
 

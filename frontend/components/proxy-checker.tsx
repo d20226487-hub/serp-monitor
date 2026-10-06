@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   api, ProjectProxyChecker, ProxyCheckerConnection, ProxyCheckerMode, ToolDelivery,
@@ -45,9 +45,76 @@ function serverTime(iso: string | null | undefined): Date | null {
   return new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso}Z`);
 }
 
+function CopyButton({ text }: { text: string }) {
+  const { t } = useT();
+  const [done, setDone] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setDone(true);
+      setTimeout(() => setDone(false), 1500);
+    } catch {
+      // No clipboard on a plain-http address: the text below can be selected.
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      className="inline-flex items-center gap-1 text-xs text-slate-600 underline-offset-2 hover:underline dark:text-slate-400"
+    >
+      <Icon name={done ? "check" : "copy"} className="h-3 w-3" />
+      {done ? t.tools.proxyChecker.exchange.copied : t.common.copy}
+    </button>
+  );
+}
+
+/**
+ * One send, in full: the request as a curl command and the answer as it came
+ * back (user, 2026-10-06). "Refused, HTTP 403" cannot be acted on; the curl
+ * can be run or handed to whoever runs the Proxy Checker, and the answer's
+ * headers usually say who refused.
+ */
+function Exchange({ d }: { d: ToolDelivery }) {
+  const { t } = useT();
+  const x = t.tools.proxyChecker.exchange;
+  const PRE =
+    "max-h-72 overflow-auto whitespace-pre-wrap break-all rounded-lg border border-slate-200 bg-slate-50 p-2.5 font-mono text-xs leading-relaxed text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200";
+  const LABEL = "text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400";
+  const HINT = "text-xs text-slate-500 dark:text-slate-400";
+  if (!d.curl) {
+    return (
+      <div className="space-y-1.5">
+        <p className={HINT}>{x.notKept}</p>
+        {d.response && <pre className={PRE}>{d.response}</pre>}
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      <div className="space-y-1">
+        <div className="flex items-center justify-between gap-2">
+          <span className={LABEL}>{x.request}</span>
+          <CopyButton text={d.curl} />
+        </div>
+        <pre className={PRE}>{d.curl}</pre>
+        <p className={HINT}>{x.tokenHidden}</p>
+      </div>
+      <div className="space-y-1">
+        <div className="flex items-center justify-between gap-2">
+          <span className={LABEL}>{d.status_code === null ? x.noResponse : x.response}</span>
+          {d.response_raw && <CopyButton text={d.response_raw} />}
+        </div>
+        <pre className={PRE}>{d.response_raw || "—"}</pre>
+      </div>
+    </div>
+  );
+}
+
 function DeliveriesTable({ rows, showProject }: { rows: ToolDelivery[]; showProject: boolean }) {
   const { t } = useT();
   const s = t.tools.proxyChecker;
+  const [open, setOpen] = useState<number[]>([]);
   if (rows.length === 0) return <Empty>{s.logEmpty}</Empty>;
   const TH = "px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400";
   const TD = "px-3 py-2 align-top";
@@ -66,7 +133,8 @@ function DeliveriesTable({ rows, showProject }: { rows: ToolDelivery[]; showProj
         </thead>
         <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
           {rows.map(r => (
-            <tr key={r.id}>
+            <Fragment key={r.id}>
+            <tr>
               <td className={`${TD} whitespace-nowrap tabular-nums`}>{serverTime(r.sent_at)?.toLocaleString()}</td>
               {showProject && <td className={TD}>{r.project_name ?? "—"}</td>}
               <td className={`${TD} font-mono`}>{r.geo}</td>
@@ -85,8 +153,25 @@ function DeliveriesTable({ rows, showProject }: { rows: ToolDelivery[]; showProj
                     {r.response}
                   </div>
                 )}
+                <button
+                  type="button"
+                  aria-expanded={open.includes(r.id)}
+                  onClick={() => setOpen(o => (o.includes(r.id) ? o.filter(i => i !== r.id) : [...o, r.id]))}
+                  className="mt-1 flex items-center gap-1 whitespace-nowrap text-xs text-slate-600 underline-offset-2 hover:underline dark:text-slate-400"
+                >
+                  <Icon name="chevronRight" className={`h-3 w-3 transition ${open.includes(r.id) ? "rotate-90" : ""}`} />
+                  {open.includes(r.id) ? s.exchange.hide : s.exchange.show}
+                </button>
               </td>
             </tr>
+            {open.includes(r.id) && (
+              <tr className="bg-slate-50/60 dark:bg-slate-900/30">
+                <td colSpan={showProject ? 6 : 5} className="px-3 py-3">
+                  <Exchange d={r} />
+                </td>
+              </tr>
+            )}
+            </Fragment>
           ))}
         </tbody>
       </table>
@@ -243,6 +328,10 @@ export function ProjectProxyCheckerCard({ projectId, reloadKey = 0 }: {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // What "Send now" has just sent, shown in full under the button until the
+  // next send or the next visit: the request and the answer are the point of
+  // pressing it by hand.
+  const [justSent, setJustSent] = useState<ToolDelivery[]>([]);
 
   const savedChoice = (d: ProjectProxyChecker) =>
     d.geos === null ? d.project_geos : d.project_geos.filter(g => d.geos!.includes(g));
@@ -278,6 +367,7 @@ export function ProjectProxyCheckerCard({ projectId, reloadKey = 0 }: {
     try {
       const res = await api.sendProjectProxyChecker(projectId);
       take(res);
+      setJustSent(res.sent);
       setMsg(res.sent.length === 0
         ? p.nothingToSend
         : p.sentResult(res.sent.filter(d => d.ok).length, res.sent.length));
@@ -414,6 +504,31 @@ export function ProjectProxyCheckerCard({ projectId, reloadKey = 0 }: {
           {msg && <span className="text-sm text-slate-700 dark:text-slate-300">{msg}</span>}
         </div>
         {err && <Callout tone="bad" icon="alert">{err}</Callout>}
+
+        {justSent.length > 0 && (
+          <div className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+            <div className="text-sm font-medium">{s.exchange.justSent}</div>
+            {justSent.map(d => (
+              <details key={d.id} open className="group/sent">
+                <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 text-sm">
+                  <Icon name="chevronRight" className="h-3.5 w-3.5 transition group-open/sent:rotate-90" />
+                  <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                    {d.geo}
+                  </span>
+                  {d.ok
+                    ? <Pill tone="good" icon="check">{s.accepted}</Pill>
+                    : <Pill tone="bad" icon="cross">{s.refused(d.status_code)}</Pill>}
+                  <span className="min-w-0 break-all font-mono text-xs text-slate-600 dark:text-slate-400">
+                    {d.domains.join(", ")}
+                  </span>
+                </summary>
+                <div className="mt-2">
+                  <Exchange d={d} />
+                </div>
+              </details>
+            ))}
+          </div>
+        )}
 
         {/* Folded: the card sits at the top of the project page now, above the
             positions it draws on, and must not push them down the screen. */}

@@ -269,7 +269,15 @@ class ToolDelivery(Base):
     domains: Mapped[list] = mapped_column(JSON, default=list)
     ok: Mapped[bool] = mapped_column(default=False)
     status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: The start of the answer — the log's one line.
     response: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: The request as it went out: {"method", "url", "headers": [[name, value],
+    #: …], "body"}, the token replaced by a mark. The log's curl is built from it.
+    request: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    #: The answer as received — status line, headers, body — or, when there was
+    #: no HTTP answer, the transport's error. Both NULL on rows from before
+    #: they were kept.
+    response_raw: Mapped[str | None] = mapped_column(Text, nullable=True)
     sent_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 

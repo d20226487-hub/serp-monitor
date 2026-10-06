@@ -110,6 +110,10 @@ def _migrate_sqlite_columns() -> None:
         ("projects", "proxy_checker_time", "VARCHAR(5)"),
         ("projects", "geos", "JSON"),
         ("projects", "proxy_checker_geos", "JSON"),
+        # The request as sent and the answer as received. NULL on sends made
+        # before they were kept; the log says so for those rows.
+        ("tool_deliveries", "request", "JSON"),
+        ("tool_deliveries", "response_raw", "TEXT"),
         ("jobs", "provider", "VARCHAR(20) NOT NULL DEFAULT 'serpapi'"),
         # Per-run spend. NULL on runs that predate cost tracking — the UI shows
         # "—" for those rather than pretending they were free.

@@ -26,7 +26,11 @@ One request per country:
   proxy_checker_time (UTC, HH:MM), everything found in the last 24 hours. A
   "Send now" on the project page sends the last 24 hours at any time.
 * Every request made is kept in tool_deliveries: what went, where, and what
-  came back — an integration that fails silently is worse than none.
+  came back — an integration that fails silently is worse than none. Kept in
+  full: the request as it went out (shown as a curl command, the token
+  replaced by a mark) and the answer as it was received — status line,
+  headers, body. "Refused, HTTP 403" alone cannot be acted on; the headers
+  usually say who refused.
 
 Assumed, not known (the API's behaviour could only be probed without a token:
 403 on GET and POST): each request stands alone, so two projects sending for
@@ -39,8 +43,10 @@ entered there, and until both are nothing is sent.
 """
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timedelta, timezone
+from typing import NamedTuple
 
 import httpx
 from sqlalchemy import or_
@@ -62,6 +68,12 @@ MODES = ("off", "after_run", "daily")
 WINDOW_HOURS = 24
 #: SQLite's oldest builds allow 999 bound values in one statement.
 _HOSTS_PER_QUERY = 400
+#: Stands where the token was, in everything that is stored or shown.
+TOKEN_MARK = "<token>"
+_MASKABLE = 8
+#: How much of an answer's body is kept. A JSON reply or a firewall's error
+#: page fits many times over; one that does not is cut, and says so.
+RAW_BODY_LIMIT = 20_000
 
 
 # --------------------------------------------------------------------------
@@ -151,6 +163,65 @@ def build_payload(geo: str, domains: list[str]) -> dict:
     return {"DailyCheck": {"geo": geo, "domains": list(domains)}}
 
 
+def request_body(geo: str, domains: list[str]) -> str:
+    """The body exactly as it goes on the wire. One string for the request and
+    for the curl shown afterwards, so the two cannot differ."""
+    return json.dumps(build_payload(geo, domains), ensure_ascii=False, separators=(",", ":"))
+
+
+def request_headers(token: str) -> list[tuple[str, str]]:
+    """Every header we choose. The User-Agent is the HTTP library's own,
+    spelled out so that the curl sends the same one: a server that treats
+    clients differently must see the same client both times."""
+    return [
+        ("Authorization", f"Bearer {token}"),
+        ("Accept", "application/json"),
+        ("Content-Type", "application/json"),
+        ("User-Agent", f"python-httpx/{httpx.__version__}"),
+    ]
+
+
+def _mask(text: str, token: str) -> str:
+    """`text` with the token taken out, wherever a server put it. A token too
+    short to be told from ordinary text is left alone: replacing every "t"
+    would destroy the answer and protect nothing."""
+    return text.replace(token, TOKEN_MARK) if len(token) >= _MASKABLE else text
+
+
+def _quoted(arg: str) -> str:
+    """One double-quoted argument that both bash/zsh and Windows cmd pass to
+    curl as written (single quotes, the usual bash form, mean nothing to cmd).
+    `$` and the backtick are escaped for bash only — cmd would pass that
+    backslash on — but neither occurs in a hostname or in this API's address."""
+    for ch in ("\\", '"', "$", "`"):
+        arg = arg.replace(ch, "\\" + ch)
+    return f'"{arg}"'
+
+
+def curl_command(request: dict | None) -> str | None:
+    """A stored request as a curl command, on one line (a continuation is
+    spelled differently in each shell). `-i` prints the answer's status line
+    and headers too — the form the stored answer is shown in."""
+    if not request or not request.get("url"):
+        return None
+    parts = ["curl", "-i", "-X", request.get("method") or "POST", _quoted(request["url"])]
+    for name, value in request.get("headers") or []:
+        parts += ["-H", _quoted(f"{name}: {value}")]
+    if request.get("body") is not None:
+        parts += ["-d", _quoted(request["body"])]
+    return " ".join(parts)
+
+
+def raw_response(r: httpx.Response, token: str) -> str:
+    """The answer as received: status line, headers, blank line, body."""
+    head = [f"{r.http_version} {r.status_code} {r.reason_phrase}".rstrip()]
+    head += [f"{name}: {value}" for name, value in r.headers.multi_items()]
+    body = r.text or ""
+    if len(body) > RAW_BODY_LIMIT:
+        body = body[:RAW_BODY_LIMIT] + f"\n[… {len(body) - RAW_BODY_LIMIT} more characters not kept]"
+    return _mask("\n".join(head) + "\n\n" + body, token)
+
+
 def valid_time(value: str | None) -> bool:
     """HH:MM, 24-hour."""
     try:
@@ -214,18 +285,35 @@ def recent_window() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=WINDOW_HOURS)
 
 
+class Sent(NamedTuple):
+    ok: bool
+    status_code: int | None      # None = no HTTP answer at all
+    excerpt: str                 # the start of the answer, for the log's one line
+    request: dict                # as it went out, the token replaced by TOKEN_MARK
+    raw: str                     # the answer as received, or the transport's error
+
+
 def send_one(url: str, token: str, geo: str, domains: list[str],
-             client: httpx.Client | None = None) -> tuple[bool, int | None, str]:
-    """(accepted, HTTP status, what came back). Never raises: a failed request
-    is an outcome to record, not a reason to fail the run that triggered it."""
+             client: httpx.Client | None = None) -> Sent:
+    """One request, and everything about it worth keeping. Never raises: a
+    failed request is an outcome to record, not a reason to fail the run that
+    triggered it. The token is in the request that goes out and nowhere in
+    what comes back from here — not even if the server echoes it."""
+    body = request_body(geo, domains)
+    headers = request_headers(token)
+    # Kept with the mark where the token goes, by construction rather than by
+    # searching the header values for it.
+    request = {"method": "POST", "url": url, "body": body,
+               "headers": [list(h) for h in request_headers(TOKEN_MARK)]}
     own = client is None
     client = client or httpx.Client(timeout=30)
     try:
-        r = client.post(url, json=build_payload(geo, domains),
-                        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"})
-        return 200 <= r.status_code < 300, r.status_code, redact(r.text or "")[:300]
-    except httpx.HTTPError as e:
-        return False, None, redact(f"{type(e).__name__}: {e}")[:300]
+        r = client.post(url, content=body.encode("utf-8"), headers=dict(headers))
+        return Sent(200 <= r.status_code < 300, r.status_code,
+                    _mask(redact(r.text or ""), token)[:300], request, raw_response(r, token))
+    except (httpx.HTTPError, httpx.InvalidURL) as e:
+        error = _mask(redact(f"{type(e).__name__}: {e}"), token)
+        return Sent(False, None, error[:300], request, error[:RAW_BODY_LIMIT])
     finally:
         if own:
             client.close()
@@ -241,13 +329,15 @@ def deliver(db: Session, project: Project, by_geo: dict[str, list[str]], *, trig
         return []
     out = []
     for geo, domains in by_geo.items():
-        ok, status, body = send_one(conn["url"], conn["token"], geo, domains, client)
+        sent = send_one(conn["url"], conn["token"], geo, domains, client)
         row = ToolDelivery(tool=TOOL, project_id=project.id, run_id=run_id, trigger=trigger, geo=geo,
-                           domains=domains, ok=ok, status_code=status, response=body)
+                           domains=domains, ok=sent.ok, status_code=sent.status_code, response=sent.excerpt,
+                           request=sent.request, response_raw=sent.raw)
         db.add(row)
         out.append(row)
-        if not ok:
-            log.warning("proxy checker refused %s for project %s: %s %s", geo, project.id, status, body[:120])
+        if not sent.ok:
+            log.warning("proxy checker refused %s for project %s: %s %s",
+                        geo, project.id, sent.status_code, sent.excerpt[:120])
     db.commit()
     return out
 

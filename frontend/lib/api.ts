@@ -35,7 +35,13 @@ export type ToolDelivery = {
   domains: string[];
   ok: boolean;
   status_code: number | null;
+  /** The start of the answer. */
   response: string | null;
+  /** The request as one curl line (the token replaced by `<token>`) and the
+   *  answer as received: status line, headers, body. Both null on sends made
+   *  before they were kept. */
+  curl: string | null;
+  response_raw: string | null;
   sent_at: string;
 };
 
