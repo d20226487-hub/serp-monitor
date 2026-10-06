@@ -50,16 +50,20 @@ from __future__ import annotations
 from collections.abc import Iterable
 from datetime import datetime, timezone
 from statistics import fmean
-from typing import NamedTuple
+from typing import Literal, NamedTuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from ..app_settings import get_visibility_weights
 from ..db import get_db
+from ..engine_domains import yandex_domain_for
 from ..models import Job, JobRun, Project, Result
+from ..positions_csv import Page, PageResult, counted_host, grid_rows, list_rows, project_domain, to_csv
 from ..visibility import share, visibility
+from .export import _slugify
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -458,6 +462,85 @@ def project_positions(
         "runs": _run_list(win),
         "serps": _ordered(serps),
     }
+
+
+@router.get("/{project_id}/positions/export.csv")
+def export_positions_csv(
+    project_id: int,
+    start: str | None = Query(None, description="ISO-8601, inclusive"),
+    end: str | None = Query(None, description="ISO-8601, exclusive"),
+    layout: Literal["grid", "list"] = Query("grid", description="grid: a row per query; list: a row per position"),
+    sites: Literal["all", "ours"] = Query("all", description="all: the whole page, ours marked; ours: only ours"),
+    lang: Literal["ru", "en"] = Query("ru"),
+    tz: int = Query(0, ge=-840, le=840, description="The reader's offset from UTC, minutes east"),
+    db: Session = Depends(get_db),
+):
+    """The latest-view tables as a CSV, with the whole page behind each row.
+
+    Built on ``project_positions`` itself, so every row is the run the table on
+    screen shows, with the same monopolisation figure: the file and the page
+    can never disagree about which reading is "now".
+    """
+    data = project_positions(project_id, start, end, db)
+    domains = data["project"]["domains"]
+    table_rows = [(serp, row) for serp in data["serps"] for row in serp["rows"]]
+    run_ids = {row["run_id"] for _serp, row in table_rows}
+    job_ids = {row["job_id"] for _serp, row in table_rows}
+    prefers_shown = dict(
+        db.query(Job.id, Job.prefer_shown_host).filter(Job.id.in_(job_ids or [-1])).all()
+    )
+
+    # Every result those runs stored, grouped into the page it came from.
+    on_page: dict[tuple, list[tuple]] = {}
+    if run_ids:
+        found = (
+            db.query(
+                Result.run_id, Result.keyword, *[getattr(Result, c) for c in SERP_COLUMNS],
+                Result.position, Result.domain, Result.shown_host, Result.url, Result.title,
+            )
+            .filter(Result.run_id.in_(list(run_ids)))
+            .order_by(Result.position)
+            .all()
+        )
+        n = len(SERP_COLUMNS)
+        for r in found:
+            on_page.setdefault((r[0], r[1], tuple(r[2:2 + n])), []).append(tuple(r[2 + n:]))
+
+    # Yandex rows from the API providers store no domain, but they were asked
+    # on exactly the domain engine_domains names for their country. Our own
+    # phone's rows store the domain their page reported; one of those without
+    # it stays empty rather than being given a domain the phone did not use.
+    run_provider = {r["id"]: r["provider"] for r in data["runs"]}
+
+    def engine_domain(serp: dict, run_id: int) -> str | None:
+        if serp["google_domain"] or serp["engine"] != "yandex" or run_provider.get(run_id) == "own_android":
+            return serp["google_domain"]
+        return yandex_domain_for(serp["country_code"])
+
+    pages = []
+    for serp, row in table_rows:
+        serp_key = tuple(serp[c] for c in SERP_COLUMNS)
+        prefer = bool(prefers_shown.get(row["job_id"]))
+        results = []
+        for position, linked, displayed, url, title in on_page.get((row["run_id"], row["keyword"], serp_key), []):
+            host = counted_host(linked, displayed, prefer)
+            ours = project_domain(host, domains)
+            results.append(PageResult(position, ours or host, ours is not None, url, title))
+        pages.append(Page(
+            **{c: serp[c] for c in SERP_COLUMNS if c != "google_domain"},
+            google_domain=engine_domain(serp, row["run_id"]), keyword=row["keyword"], checked_at=row["checked_at"],
+            share=row["share"], slots=row["slots"], slots_total=row["slots_total"], results=results,
+        ))
+
+    build = grid_rows if layout == "grid" else list_rows
+    body = to_csv(build(pages, sites, lang, tz), lang)
+    stamp = datetime.now(timezone.utc).strftime("%d-%m-%Y")
+    filename = f"{_slugify(data['project']['name'])}_positions_{layout}_{sites}_{stamp}.csv"
+    return Response(
+        content=body.encode("utf-8"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/{project_id}/positions/average")

@@ -16,6 +16,8 @@ from ._redact import redact
 from .app_settings import get_provider_rate
 from .config import settings
 from .db import SessionLocal
+from .engine_domains import yandex_domain_for
+from .proxy_checker import after_run as proxy_checker_after_run
 from .models import (
     AhrefsMetricCache,
     DomainWhois,
@@ -196,6 +198,11 @@ def _provider_spend(name: str, provider, queries_ok: int) -> dict:
     if getattr(provider, "reports_cost", False):
         return {"cost": round(provider.reported_cost, 6), "source": "actual",
                 "queries": queries_ok}
+    if getattr(provider, "counts_requests", False):
+        # One query can be several billed requests (Bright Data: one per
+        # Google page); price what was actually sent.
+        return {"cost": round(provider.billed_requests * get_provider_rate(name), 6),
+                "source": "estimate", "queries": queries_ok}
     return {"cost": round(queries_ok * get_provider_rate(name), 6),
             "source": "estimate", "queries": queries_ok}
 
@@ -351,16 +358,11 @@ async def _execute_variant(provider, v: dict, top_n: int) -> list[dict]:
             top_n=top_n,
         )
     elif v["engine"] == "yandex":
-        cc = (v["country_code"] or "").lower()
-        domain = {
-            "ru": "yandex.ru", "by": "yandex.by", "kz": "yandex.kz",
-            "uz": "yandex.uz", "tr": "yandex.com.tr",
-        }.get(cc, "yandex.com")
         return await provider.search_yandex(
             keyword=v["keyword"],
             device=v["device"],
             language=v["language"],
-            yandex_domain=domain,
+            yandex_domain=yandex_domain_for(v["country_code"]),
             yandex_lr=v.get("yandex_lr"),
             country_code=v["country_code"],
             top_n=top_n,
@@ -1055,7 +1057,19 @@ def _finish_run(db: Session, run: JobRun) -> None:
 
 
 async def run_job_async(run_id: int) -> None:
-    """Top-level entrypoint scheduled by the API/scheduler. Owns its own DB session."""
+    """Top-level entrypoint scheduled by the API/scheduler.
+
+    Whatever the run did, the connected tools hear about it afterwards (today:
+    the Proxy Checker, for projects set to send after every run). Off the
+    event loop, and unable to change the run's outcome."""
+    try:
+        await _run_job_async(run_id)
+    finally:
+        await asyncio.to_thread(proxy_checker_after_run, run_id)
+
+
+async def _run_job_async(run_id: int) -> None:
+    """The run itself. Owns its own DB session."""
     db = SessionLocal()
     try:
         run = db.get(JobRun, run_id)
@@ -1230,6 +1244,9 @@ async def run_job_async(run_id: int) -> None:
         if getattr(provider, "reports_cost", False):
             run.cost = round(provider.reported_cost, 6)
             run.cost_source = "actual"
+        elif getattr(provider, "counts_requests", False):
+            run.cost = round(provider.billed_requests * get_provider_rate(provider_name), 6)
+            run.cost_source = "estimate"
         else:
             run.cost = round(run.queries_done * get_provider_rate(provider_name), 6)
             run.cost_source = "estimate"
@@ -1336,13 +1353,17 @@ async def _retry_compare(db: Session, run: JobRun, job: Job) -> None:
     # what the retry cost. Rebuilt figures are rate-based estimates even for a
     # provider that reports real spend: its reported total died with the process.
     answered_before: dict[str, int] = {}
-    for (p,) in db.query(RunQuery.provider).filter(
+    requests_before: dict[str, int] = {}
+    for p, engine in db.query(RunQuery.provider, RunQuery.engine).filter(
         RunQuery.run_id == run.id, RunQuery.status == "ok",
     ):
         answered_before[p] = answered_before.get(p, 0) + 1
+        cls = PROVIDERS.get(p)
+        per = cls.requests_per_query(engine, job.top_n or 10) if cls else 1
+        requests_before[p] = requests_before.get(p, 0) + per
     for p, n in answered_before.items():
         if p not in costs:
-            costs[p] = {"cost": round(n * get_provider_rate(p), 6),
+            costs[p] = {"cost": round(requests_before[p] * get_provider_rate(p), 6),
                         "source": "estimate", "queries": n}
 
     async def one_provider(name: str, vs: list[dict]) -> None:

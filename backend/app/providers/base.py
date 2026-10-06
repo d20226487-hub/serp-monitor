@@ -154,6 +154,17 @@ class SerpProvider(ABC):
     #: Only DataForSEO does today; SerpAPI/Bright Data/Oxylabs return no price.
     reports_cost: bool = False
 
+    #: True when the provider counts its own billed requests in
+    #: `billed_requests` because one query can take several (Bright Data
+    #: pages through Google, one billed request per page). The runner then
+    #: estimates spend as requests x rate instead of queries x rate.
+    counts_requests: bool = False
+
+    @staticmethod
+    def requests_per_query(engine: str, top_n: int) -> int:
+        """Billed requests one query takes, for rebuilding a cost after a restart."""
+        return 1
+
     #: Engines this provider can query at all. A class attribute so the runner
     #: and the estimator can ask without instantiating anything; compare mode
     #: uses it to mark a provider's cells "not supported" instead of sending
@@ -167,6 +178,8 @@ class SerpProvider(ABC):
         #: One provider instance serves one job run, so this ends up being the
         #: run's true cost. Incremented only by providers with reports_cost=True.
         self.reported_cost: float = 0.0
+        #: Billed requests made so far (providers with counts_requests=True).
+        self.billed_requests: int = 0
 
     async def __aenter__(self) -> "SerpProvider":
         return self

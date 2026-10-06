@@ -12,7 +12,7 @@ export type IconName =
   | "globe" | "pages" | "activity" | "shield" | "search" | "play" | "refresh"
   | "desktop" | "phone" | "flag" | "layers" | "pointer" | "link" | "image" | "code" | "text"
   | "external" | "chevronRight" | "chevronDown" | "clock" | "robot" | "coin" | "list"
-  | "plus" | "pencil" | "trash" | "copy" | "key" | "user" | "sliders" | "traffic";
+  | "plus" | "download" | "pencil" | "trash" | "copy" | "key" | "user" | "sliders" | "traffic";
 
 const PATHS: Record<IconName, ReactNode> = {
   summary: <path d="M12 3.5l1.9 5 5 1.9-5 1.9-1.9 5-1.9-5-5-1.9 5-1.9zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" />,
@@ -162,6 +162,7 @@ const PATHS: Record<IconName, ReactNode> = {
   ),
   list: <path d="M9 6.5h11M9 12h11M9 17.5h11M4.5 6.5v.1M4.5 12v.1M4.5 17.5v.1" />,
   plus: <path d="M12 5v14M5 12h14" />,
+  download: <path d="M12 4.5v10.5M7.5 10.5L12 15l4.5-4.5M4.5 19.5h15" />,
   pencil: (
     <>
       <path d="M4.5 19.5h4L19 9l-4-4L4.5 15.5z" />

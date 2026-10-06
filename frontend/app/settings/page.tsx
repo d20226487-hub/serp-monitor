@@ -19,15 +19,43 @@ import { GlobalFormulaSection } from "@/components/opportunity-formula";
 import {
   Button, Callout, Card, Empty, ErrorNote, Field, Pill, SectionTitle, inputClass,
 } from "@/components/ui";
-import { Icon } from "@/components/icons";
+import { Icon, IconName } from "@/components/icons";
 import { VisibilitySection } from "@/components/visibility-weights";
+import { AmpRotatorPlaceholder, ProxyCheckerSettings } from "@/components/proxy-checker";
 import { OpportunityFormula } from "@/lib/opportunity";
+
+/** Settings are grouped by the part of the app they configure (user,
+ *  2026-10-05: "now it is a mess"). Tools Connection holds the other tools
+ *  SERP Monitor talks to: the Proxy Checker now, AMP Rotator later. */
+type SettingsTab = "monitor" | "analyzer" | "tools";
+const SETTINGS_TABS: { id: SettingsTab; icon: IconName }[] = [
+  { id: "monitor", icon: "search" },
+  { id: "analyzer", icon: "summary" },
+  { id: "tools", icon: "link" },
+];
 
 export default function SettingsPage() {
   const { t } = useT();
   const [items, setItems] = useState<SavedLocation[]>([]);
   const [filter, setFilter] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  // Which tab is open. Kept in the address (#analyzer) so a reload or a link
+  // lands on the same tab; an unknown or missing hash is the Monitor tab.
+  const [tab, setTab] = useState<SettingsTab>("monitor");
+  useEffect(() => {
+    const fromHash = () => {
+      const wanted = window.location.hash.slice(1);
+      if (SETTINGS_TABS.some(x => x.id === wanted)) setTab(wanted as SettingsTab);
+    };
+    fromHash();
+    window.addEventListener("hashchange", fromHash);
+    return () => window.removeEventListener("hashchange", fromHash);
+  }, []);
+  function pickTab(next: SettingsTab) {
+    setTab(next);
+    setErr(null);          // an error belongs to the section that raised it
+    window.history.replaceState(null, "", `#${next}`);
+  }
 
   // single-add form
   const [add, setAdd] = useState<SavedLocationInput>({
@@ -145,250 +173,309 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* One tab per part of the app the settings belong to. Every panel
+          stays mounted and is only hidden: a half-typed key or an edited
+          prompt must survive a look at another tab. */}
+      <div
+        role="tablist"
+        aria-label={t.settings.title}
+        className="flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800"
+      >
+        {SETTINGS_TABS.map(({ id, icon }) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            id={`settings-tab-${id}`}
+            aria-selected={tab === id}
+            aria-controls={`settings-panel-${id}`}
+            onClick={() => pickTab(id)}
+            className={`-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition ${
+              tab === id
+                ? "border-sky-600 text-slate-900 dark:border-sky-400 dark:text-slate-100"
+                : "border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+            }`}
+          >
+            <Icon name={icon} className="h-3.5 w-3.5" />
+            {t.settings.tabs[id].label}
+          </button>
+        ))}
+      </div>
+      <p className="text-sm text-slate-600 dark:text-slate-400">{t.settings.tabs[tab].intro}</p>
       {err && <ErrorNote>{err}</ErrorNote>}
 
-      {/* Providers */}
-      <ProvidersSection onError={setErr} />
-
-      {/* Ahrefs (analyzer mode) */}
-      <AhrefsSection onError={setErr} />
-
-      {/* AI providers */}
-      <AIProvidersSection onError={setErr} />
-
-      {/* AI SERP-difficulty prompt */}
-      <AIAnalysisSection onError={setErr} />
-
-      {/* Cost rates */}
-      <RatesSection onError={setErr} />
-
-      {/* What a SERP slot is worth */}
-      <VisibilitySection onError={setErr} />
-
-      {/* Add one */}
-      <Card title={<SectionTitle icon="flag">{t.settings.addLocation.title}</SectionTitle>}>
-        <div className="space-y-4">
-          <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
-            {t.settings.addLocation.help}
-          </p>
-          {/* Labels rather than placeholders: a placeholder disappears the
-              moment anything is typed, and these five fields are not
-              guessable from their contents. */}
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <Field label={t.settings.addLocation.phCanonical}>
-              <input
-                value={add.canonical_name}
-                onChange={e => setAdd({ ...add, canonical_name: e.target.value })}
-                className={`${inputClass} font-mono`}
-              />
-            </Field>
-            <Field label={t.settings.addLocation.phName}>
-              <input
-                value={add.name ?? ""}
-                onChange={e => setAdd({ ...add, name: e.target.value })}
-                className={inputClass}
-              />
-            </Field>
-            <Field label={t.settings.addLocation.phCc}>
-              <input
-                value={add.country_code ?? ""}
-                onChange={e => setAdd({ ...add, country_code: e.target.value })}
-                className={inputClass}
-              />
-            </Field>
-            <Field label={t.settings.addLocation.phType}>
-              <select
-                value={add.target_type ?? ""}
-                onChange={e => setAdd({ ...add, target_type: e.target.value })}
-                className={inputClass}
-              >
-                <option value="">{t.settings.addLocation.phType}</option>
-                <option value="Country">{t.settings.addLocation.typeOptions.Country}</option>
-                <option value="Region">{t.settings.addLocation.typeOptions.Region}</option>
-                <option value="City">{t.settings.addLocation.typeOptions.City}</option>
-                <option value="Other">{t.settings.addLocation.typeOptions.Other}</option>
-              </select>
-            </Field>
-            <Field label={t.settings.addLocation.phYandexLr}>
-              <input
-                type="number"
-                value={add.yandex_lr ?? ""}
-                onChange={e => setAdd({ ...add, yandex_lr: e.target.value ? Number(e.target.value) : null })}
-                className={`${inputClass} font-mono`}
-              />
-            </Field>
-          </div>
-          <Button variant="primary" disabled={busy} onClick={addOne}>
-            <Icon name="plus" className="h-3.5 w-3.5" />
-            {t.common.add}
-          </Button>
-        </div>
-      </Card>
-
-      {/* Opportunity formula — the global defaults every run inherits. */}
-      <Card title={<SectionTitle icon="summary">{t.formula.title}</SectionTitle>}>
-        <div className="space-y-4">
-        <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">{t.formula.subtitle}</p>
-        {formula && formulaDefaults ? (
-          <GlobalFormulaSection
-            initial={formula}
-            defaults={formulaDefaults}
-            onSave={async f => {
-              const r = await api.saveOpportunityFormula(f);
-              setFormula(r.formula);
-            }}
-            onReset={async () => {
-              const r = await api.resetOpportunityFormula();
-              setFormula(r.formula);
-            }}
-          />
-        ) : (
-          <div className="text-sm text-slate-600 dark:text-slate-400">{t.common.loading}</div>
-        )}
-        </div>
-      </Card>
-
-      {/* Bulk import */}
-      <Card title={<SectionTitle icon="code">{t.settings.bulk.title}</SectionTitle>}>
-        <div className="space-y-4">
-          <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
-            {t.settings.bulk.help}
-          </p>
-          <textarea
-            value={bulk}
-            onChange={e => setBulk(e.target.value)}
-            rows={8}
-            placeholder={"Almaty,Almaty Province,Kazakhstan | Almaty | kz | City | 162\nTashkent,Tashkent Region,Uzbekistan | Tashkent | uz | City | 11353"}
-            className={`${inputClass} font-mono`}
-          />
-          <div className="flex items-center gap-3">
-            <Button disabled={busy} onClick={importBulk}>{t.common.import}</Button>
-            {bulkResult && (
-              <span className="inline-flex items-center gap-1.5 text-sm text-emerald-700 dark:text-emerald-300">
-                <Icon name="check" className="h-3.5 w-3.5" />
-                {bulkResult}
-              </span>
-            )}
-          </div>
-        </div>
-      </Card>
-
-      {/* Saved list */}
-      <Card
-        title={
-          <SectionTitle icon="list" count={items.length}>
-            {t.settings.list.title}
-          </SectionTitle>
-        }
-        actions={
-          <input
-            value={filter}
-            onChange={e => setFilter(e.target.value)}
-            placeholder={t.common.filter}
-            className={`${inputClass} !w-48`}
-          />
-        }
-        className="overflow-hidden"
+      {/* ---------------- SERP Analyzer: Ahrefs, AI, the formula ---------------- */}
+      <div
+        role="tabpanel"
+        id="settings-panel-analyzer"
+        aria-labelledby="settings-tab-analyzer"
+        hidden={tab !== "analyzer"}
+        className="space-y-6"
       >
-        <div className="space-y-3">
-        <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
-          {t.settings.list.perProviderHelp}
-        </p>
+        {/* Ahrefs (analyzer mode) */}
+        <AhrefsSection onError={setErr} />
 
-        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
-                <th className="px-3 py-2 font-medium">{t.settings.list.cols.canonical}</th>
-                <th className="px-3 py-2 font-medium">{t.settings.list.cols.name}</th>
-                <th className="px-3 py-2 font-medium">{t.settings.list.cols.cc}</th>
-                <th className="px-3 py-2 font-medium">{t.settings.list.cols.type}</th>
-                <th className="px-3 py-2 font-medium">{t.settings.list.cols.yandexLr}</th>
-                <th className="px-3 py-2 font-medium">{t.settings.list.cols.uule}</th>
-                <th className="w-28 px-3 py-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(it => (
-                <tr
-                  key={it.id}
-                  className="border-b border-slate-100 align-top last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40"
+        {/* AI providers */}
+        <AIProvidersSection onError={setErr} />
+
+        {/* AI SERP-difficulty prompt */}
+        <AIAnalysisSection onError={setErr} />
+
+        {/* Opportunity formula — the global defaults every run inherits. */}
+        <Card title={<SectionTitle icon="summary">{t.formula.title}</SectionTitle>}>
+          <div className="space-y-4">
+          <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">{t.formula.subtitle}</p>
+          {formula && formulaDefaults ? (
+            <GlobalFormulaSection
+              initial={formula}
+              defaults={formulaDefaults}
+              onSave={async f => {
+                const r = await api.saveOpportunityFormula(f);
+                setFormula(r.formula);
+              }}
+              onReset={async () => {
+                const r = await api.resetOpportunityFormula();
+                setFormula(r.formula);
+              }}
+            />
+          ) : (
+            <div className="text-sm text-slate-600 dark:text-slate-400">{t.common.loading}</div>
+          )}
+          </div>
+        </Card>
+      </div>
+
+      {/* ---------------- Tools Connection: nothing yet ---------------- */}
+      <div
+        role="tabpanel"
+        id="settings-panel-tools"
+        aria-labelledby="settings-tab-tools"
+        hidden={tab !== "tools"}
+        className="space-y-6"
+      >
+        <ProxyCheckerSettings onError={setErr} />
+        <AmpRotatorPlaceholder />
+      </div>
+
+      {/* ---------------- SERP Monitor: SERP APIs, prices, locations ---------------- */}
+      <div
+        role="tabpanel"
+        id="settings-panel-monitor"
+        aria-labelledby="settings-tab-monitor"
+        hidden={tab !== "monitor"}
+        className="space-y-6"
+      >
+        {/* Providers */}
+        <ProvidersSection onError={setErr} />
+
+        {/* Cost rates */}
+        <RatesSection onError={setErr} />
+
+        {/* What a SERP slot is worth */}
+        <VisibilitySection onError={setErr} />
+
+        {/* Add one */}
+        <Card title={<SectionTitle icon="flag">{t.settings.addLocation.title}</SectionTitle>}>
+          <div className="space-y-4">
+            <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+              {t.settings.addLocation.help}
+            </p>
+            {/* Labels rather than placeholders: a placeholder disappears the
+                moment anything is typed, and these five fields are not
+                guessable from their contents. */}
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <Field label={t.settings.addLocation.phCanonical}>
+                <input
+                  value={add.canonical_name}
+                  onChange={e => setAdd({ ...add, canonical_name: e.target.value })}
+                  className={`${inputClass} font-mono`}
+                />
+              </Field>
+              <Field label={t.settings.addLocation.phName}>
+                <input
+                  value={add.name ?? ""}
+                  onChange={e => setAdd({ ...add, name: e.target.value })}
+                  className={inputClass}
+                />
+              </Field>
+              <Field label={t.settings.addLocation.phCc}>
+                <input
+                  value={add.country_code ?? ""}
+                  onChange={e => setAdd({ ...add, country_code: e.target.value })}
+                  className={inputClass}
+                />
+              </Field>
+              <Field label={t.settings.addLocation.phType}>
+                <select
+                  value={add.target_type ?? ""}
+                  onChange={e => setAdd({ ...add, target_type: e.target.value })}
+                  className={inputClass}
                 >
-                  {editId === it.id ? (
-                    <>
-                      <td className="px-3 py-2"><input value={editDraft.canonical_name}
-                        onChange={e => setEditDraft({ ...editDraft, canonical_name: e.target.value })}
-                        className={inputClass} /></td>
-                      <td className="px-3 py-2"><input value={editDraft.name ?? ""}
-                        onChange={e => setEditDraft({ ...editDraft, name: e.target.value })}
-                        className={inputClass} /></td>
-                      <td className="px-3 py-2"><input value={editDraft.country_code ?? ""}
-                        onChange={e => setEditDraft({ ...editDraft, country_code: e.target.value })}
-                        className={`${inputClass} !w-16`} /></td>
-                      <td className="px-3 py-2"><input value={editDraft.target_type ?? ""}
-                        onChange={e => setEditDraft({ ...editDraft, target_type: e.target.value })}
-                        className={`${inputClass} !w-24`} /></td>
-                      <td className="px-3 py-2"><input type="number" value={editDraft.yandex_lr ?? ""}
-                        onChange={e => setEditDraft({ ...editDraft, yandex_lr: e.target.value ? Number(e.target.value) : null })}
-                        className={`${inputClass} !w-24`} /></td>
-                      <td className="px-3 py-2"><UuleCell canonicalName={editDraft.canonical_name} /></td>
-                      <td className="px-3 py-2 flex gap-2">
-                        <button
-                          onClick={saveEdit}
-                          title={t.common.save}
-                          className="grid h-7 w-7 place-items-center rounded-lg transition hover:bg-slate-100 dark:hover:bg-slate-800 text-emerald-700 dark:text-emerald-400"
-                        >
-                          <Icon name="check" className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => setEditId(null)}
-                          title={t.common.cancel}
-                          className="grid h-7 w-7 place-items-center rounded-lg transition hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400"
-                        >
-                          <Icon name="cross" className="h-4 w-4" />
-                        </button>
-                      </td>
-                    </>
-                  ) : (
-                    <>
-                      <td className="px-3 py-2 font-mono text-xs break-all">{it.canonical_name}</td>
-                      <td className="px-3 py-2">{it.name ?? "—"}</td>
-                      <td className="px-3 py-2 uppercase">{it.country_code ?? "—"}</td>
-                      <td className="px-3 py-2">{it.target_type ?? "—"}</td>
-                      <td className="px-3 py-2 font-mono">{it.yandex_lr ?? "—"}</td>
-                      <td className="px-3 py-2"><UuleCell canonicalName={it.canonical_name} /></td>
-                      <td className="px-3 py-2 flex gap-2">
-                        <button
-                          onClick={() => { setEditId(it.id); setEditDraft(it); }}
-                          title={t.common.edit}
-                          className="grid h-7 w-7 place-items-center rounded-lg transition hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
-                        >
-                          <Icon name="pencil" className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => del(it.id)}
-                          title={t.common.delete}
-                          className="grid h-7 w-7 place-items-center rounded-lg transition hover:bg-slate-100 dark:hover:bg-slate-800 text-red-600 dark:text-red-400"
-                        >
-                          <Icon name="trash" className="h-4 w-4" />
-                        </button>
-                      </td>
-                    </>
-                  )}
-                </tr>
-              ))}
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-3 py-6">
-                    <Empty>{t.settings.list.empty}</Empty>
-                  </td>
-                </tr>
+                  <option value="">{t.settings.addLocation.phType}</option>
+                  <option value="Country">{t.settings.addLocation.typeOptions.Country}</option>
+                  <option value="Region">{t.settings.addLocation.typeOptions.Region}</option>
+                  <option value="City">{t.settings.addLocation.typeOptions.City}</option>
+                  <option value="Other">{t.settings.addLocation.typeOptions.Other}</option>
+                </select>
+              </Field>
+              <Field label={t.settings.addLocation.phYandexLr}>
+                <input
+                  type="number"
+                  value={add.yandex_lr ?? ""}
+                  onChange={e => setAdd({ ...add, yandex_lr: e.target.value ? Number(e.target.value) : null })}
+                  className={`${inputClass} font-mono`}
+                />
+              </Field>
+            </div>
+            <Button variant="primary" disabled={busy} onClick={addOne}>
+              <Icon name="plus" className="h-3.5 w-3.5" />
+              {t.common.add}
+            </Button>
+          </div>
+        </Card>
+
+        {/* Bulk import */}
+        <Card title={<SectionTitle icon="code">{t.settings.bulk.title}</SectionTitle>}>
+          <div className="space-y-4">
+            <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+              {t.settings.bulk.help}
+            </p>
+            <textarea
+              value={bulk}
+              onChange={e => setBulk(e.target.value)}
+              rows={8}
+              placeholder={"Almaty,Almaty Province,Kazakhstan | Almaty | kz | City | 162\nTashkent,Tashkent Region,Uzbekistan | Tashkent | uz | City | 11353"}
+              className={`${inputClass} font-mono`}
+            />
+            <div className="flex items-center gap-3">
+              <Button disabled={busy} onClick={importBulk}>{t.common.import}</Button>
+              {bulkResult && (
+                <span className="inline-flex items-center gap-1.5 text-sm text-emerald-700 dark:text-emerald-300">
+                  <Icon name="check" className="h-3.5 w-3.5" />
+                  {bulkResult}
+                </span>
               )}
-            </tbody>
-          </table>
-        </div>
-        </div>
-      </Card>
+            </div>
+          </div>
+        </Card>
+
+        {/* Saved list */}
+        <Card
+          title={
+            <SectionTitle icon="list" count={items.length}>
+              {t.settings.list.title}
+            </SectionTitle>
+          }
+          actions={
+            <input
+              value={filter}
+              onChange={e => setFilter(e.target.value)}
+              placeholder={t.common.filter}
+              className={`${inputClass} !w-48`}
+            />
+          }
+          className="overflow-hidden"
+        >
+          <div className="space-y-3">
+          <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+            {t.settings.list.perProviderHelp}
+          </p>
+
+          <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
+                  <th className="px-3 py-2 font-medium">{t.settings.list.cols.canonical}</th>
+                  <th className="px-3 py-2 font-medium">{t.settings.list.cols.name}</th>
+                  <th className="px-3 py-2 font-medium">{t.settings.list.cols.cc}</th>
+                  <th className="px-3 py-2 font-medium">{t.settings.list.cols.type}</th>
+                  <th className="px-3 py-2 font-medium">{t.settings.list.cols.yandexLr}</th>
+                  <th className="px-3 py-2 font-medium">{t.settings.list.cols.uule}</th>
+                  <th className="w-28 px-3 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(it => (
+                  <tr
+                    key={it.id}
+                    className="border-b border-slate-100 align-top last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40"
+                  >
+                    {editId === it.id ? (
+                      <>
+                        <td className="px-3 py-2"><input value={editDraft.canonical_name}
+                          onChange={e => setEditDraft({ ...editDraft, canonical_name: e.target.value })}
+                          className={inputClass} /></td>
+                        <td className="px-3 py-2"><input value={editDraft.name ?? ""}
+                          onChange={e => setEditDraft({ ...editDraft, name: e.target.value })}
+                          className={inputClass} /></td>
+                        <td className="px-3 py-2"><input value={editDraft.country_code ?? ""}
+                          onChange={e => setEditDraft({ ...editDraft, country_code: e.target.value })}
+                          className={`${inputClass} !w-16`} /></td>
+                        <td className="px-3 py-2"><input value={editDraft.target_type ?? ""}
+                          onChange={e => setEditDraft({ ...editDraft, target_type: e.target.value })}
+                          className={`${inputClass} !w-24`} /></td>
+                        <td className="px-3 py-2"><input type="number" value={editDraft.yandex_lr ?? ""}
+                          onChange={e => setEditDraft({ ...editDraft, yandex_lr: e.target.value ? Number(e.target.value) : null })}
+                          className={`${inputClass} !w-24`} /></td>
+                        <td className="px-3 py-2"><UuleCell canonicalName={editDraft.canonical_name} /></td>
+                        <td className="px-3 py-2 flex gap-2">
+                          <button
+                            onClick={saveEdit}
+                            title={t.common.save}
+                            className="grid h-7 w-7 place-items-center rounded-lg transition hover:bg-slate-100 dark:hover:bg-slate-800 text-emerald-700 dark:text-emerald-400"
+                          >
+                            <Icon name="check" className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => setEditId(null)}
+                            title={t.common.cancel}
+                            className="grid h-7 w-7 place-items-center rounded-lg transition hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400"
+                          >
+                            <Icon name="cross" className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-3 py-2 font-mono text-xs break-all">{it.canonical_name}</td>
+                        <td className="px-3 py-2">{it.name ?? "—"}</td>
+                        <td className="px-3 py-2 uppercase">{it.country_code ?? "—"}</td>
+                        <td className="px-3 py-2">{it.target_type ?? "—"}</td>
+                        <td className="px-3 py-2 font-mono">{it.yandex_lr ?? "—"}</td>
+                        <td className="px-3 py-2"><UuleCell canonicalName={it.canonical_name} /></td>
+                        <td className="px-3 py-2 flex gap-2">
+                          <button
+                            onClick={() => { setEditId(it.id); setEditDraft(it); }}
+                            title={t.common.edit}
+                            className="grid h-7 w-7 place-items-center rounded-lg transition hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
+                          >
+                            <Icon name="pencil" className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => del(it.id)}
+                            title={t.common.delete}
+                            className="grid h-7 w-7 place-items-center rounded-lg transition hover:bg-slate-100 dark:hover:bg-slate-800 text-red-600 dark:text-red-400"
+                          >
+                            <Icon name="trash" className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-3 py-6">
+                      <Empty>{t.settings.list.empty}</Empty>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }

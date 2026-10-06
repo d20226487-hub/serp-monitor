@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import { api, Job, Project, ProjectAverages, ProjectPositions } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { AveragePositionTable, PositionTable } from "@/components/position-table";
+import { ProjectProxyCheckerCard } from "@/components/proxy-checker";
+import { ProjectGeosCard } from "@/components/project-geos";
 import { Button, Card, Empty, ErrorNote, SectionTitle, StatTile } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { Tip } from "@/components/tip";
@@ -50,7 +52,7 @@ function ChipList({ items, max = 4 }: { items: string[]; max?: number }) {
 }
 
 export default function ProjectPage() {
-  const { t } = useT();
+  const { t, lang } = useT();
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
 
@@ -63,6 +65,12 @@ export default function ProjectPage() {
   // SERPs and the same keywords, so showing both at once doubles the scrolling
   // to say one thing twice.
   const [view, setView] = useState<PositionView>("latest");
+  // Bumped when the project's GEOs are saved, so the tools that choose among
+  // them (the Proxy Checker card) read the new list.
+  const [geosVersion, setGeosVersion] = useState(0);
+  // What the CSV export lists per query: the whole page (who holds the other
+  // spots too) or only the project's own sites, as the tables do.
+  const [exportSites, setExportSites] = useState<"all" | "ours">("all");
   const [preset, setPreset] = useState<RangePreset>("today");
   const [from, setFrom] = useState(() => toInputValue(new Date()));
   const [to, setTo] = useState(() => toInputValue(new Date()));
@@ -217,6 +225,14 @@ export default function ProjectPage() {
         </StatTile>
       </div>
 
+      {/* Where this project's own domains, found in the SERPs below, are
+          handed on, and WHEN — a project setting, so it lives here (the user:
+          "it should be on the project page"), near the top where a setting is
+          looked for, folded so the positions stay in view. */}
+      <section id="proxy-checker" className="scroll-mt-4">
+        <ProjectProxyCheckerCard projectId={id} reloadKey={geosVersion} />
+      </section>
+
       <section className="space-y-6">
         <div className="flex flex-wrap items-center gap-2">
           <SectionTitle icon="activity">{t.positions.title}</SectionTitle>
@@ -300,6 +316,46 @@ export default function ProjectPage() {
           </div>
         )}
         {err && <ErrorNote>{err}</ErrorNote>}
+        {/* The tables below as a file for SEO. Latest view only: the file is
+            "which site holds which position", and an average has no page. */}
+        {view === "latest" && range && positions && positions.serps.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-slate-500 dark:text-slate-400">{t.positions.exportSites}</span>
+            <div
+              role="group"
+              aria-label={t.positions.exportSites}
+              className="inline-flex overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700"
+            >
+              {(["all", "ours"] as const).map(s => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setExportSites(s)}
+                  aria-pressed={exportSites === s}
+                  title={s === "all" ? t.positions.exportAllHint : t.positions.exportOursHint}
+                  className={`border-l px-2.5 py-1 transition first:border-l-0 dark:border-slate-700 ${
+                    exportSites === s
+                      ? "bg-slate-900 font-medium text-white dark:bg-slate-100 dark:text-slate-900"
+                      : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  {s === "all" ? t.positions.exportAll : t.positions.exportOurs}
+                </button>
+              ))}
+            </div>
+            {(["grid", "list"] as const).map(layout => (
+              <a
+                key={layout}
+                href={api.projectPositionsCsvUrl(id, { range: toQuery(range), layout, sites: exportSites, lang })}
+                title={layout === "grid" ? t.positions.exportGridHint : t.positions.exportListHint}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-2.5 py-1 font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <Icon name="download" className="h-3.5 w-3.5" />
+                {layout === "grid" ? t.positions.exportGrid : t.positions.exportList}
+              </a>
+            ))}
+          </div>
+        )}
         {view === "latest"
           ? positions && <PositionTable data={positions} />
           : averages && <AveragePositionTable data={averages} />}
@@ -358,6 +414,13 @@ export default function ProjectPage() {
             ))}
           </div>
         )}
+      </section>
+
+      {/* The project's GEOs: set once and rarely touched, so at the bottom
+          (the user moved it here from the top, 2026-10-05). The Proxy Checker
+          card at the top chooses among them and re-reads them on save. */}
+      <section id="project-geos" className="scroll-mt-4">
+        <ProjectGeosCard projectId={id} onSaved={() => setGeosVersion(v => v + 1)} />
       </section>
     </div>
   );

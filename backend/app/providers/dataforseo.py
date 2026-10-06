@@ -18,9 +18,13 @@ IMPORTANT — Yandex is NOT supported by DataForSEO.
   (Some third-party blog posts claim Yandex support — they are wrong.)
 
 Location handling:
-  DataForSEO's `location_name` uses the Google Ads geo-target canonical format,
-  which is the SAME format as SerpAPI's `canonical_name`. So our saved locations
-  ("Almaty,Almaty Province,Kazakhstan") pass straight through with no mapping.
+  DataForSEO has its OWN location list. It follows Google's geo-targets, as
+  SerpAPI's does, but not the same vintage: SerpAPI's "Almaty,Almaty Province,
+  Kazakhstan" is "Almaty,Almaty Region,Kazakhstan" here, and DataForSEO refuses
+  a name it does not have (this file used to say the names pass straight
+  through; a user's Almaty job failed on it, 2026-10-05). What both lists share
+  is Google's geo-target ID, so a search is sent `location_code`, looked up in
+  the mirror of DataForSEO's list — see ../provider_locations.py.
 
 Request/response shape:
   The request body is always a LIST of task objects, even for a single search.
@@ -38,6 +42,7 @@ import httpx
 
 from .._redact import redact
 from ..app_settings import get_provider_creds
+from ..provider_locations import dataforseo_location
 from .base import (
     ProviderConfigError, ProviderError, ResultRow, SerpProvider, domain_of,
     shown_host,
@@ -67,19 +72,35 @@ _CC_TO_LOCATION_NAME: dict[str, str] = {
 }
 
 
-def _location_name(location: dict | None, country_code: str | None) -> str:
-    """Resolve what to send as `location_name`.
+async def _location_params(location: dict | None, country_code: str | None) -> dict:
+    """What to send for the location: `location_code` whenever the place is in
+    DataForSEO's own list, which is the only form that cannot be refused over a
+    spelling.
 
-    Prefers the canonical_name (city-level, same format DataForSEO expects),
-    falls back to a country name. Raises rather than guessing — sending a bad
-    location silently returns results for the wrong place, which is exactly the
-    failure mode we've been bitten by before.
+    A location that is NOT in the list is refused here, before any request is
+    billed, with what to do about it. Only when there is no list to check
+    against (no credentials at the time of the last sync) does the job's name
+    go out as `location_name`, as it always used to. No location at all falls
+    back to a country name. Never a guess — a wrong location quietly returns
+    results for the wrong place, the failure we have been bitten by before.
     """
-    if location and location.get("canonical_name"):
-        return location["canonical_name"]
+    if location and (location.get("canonical_name") or location.get("google_id")):
+        found, have_list = await asyncio.to_thread(dataforseo_location, location)
+        if found is not None:
+            return {"location_code": found.code}
+        if have_list:
+            raise ProviderConfigError(
+                f"{location.get('canonical_name')!r} is not in DataForSEO's location list "
+                "(it has no locations in Russia or Belarus at all, and no city entry for "
+                "some smaller cities). Open the job and pick another place — with DataForSEO "
+                "selected, the picker lists only what DataForSEO supports — or run this "
+                "location through another provider."
+            )
+        if location.get("canonical_name"):
+            return {"location_name": location["canonical_name"]}
     cc = (country_code or "").lower()
     if cc and cc in _CC_TO_LOCATION_NAME:
-        return _CC_TO_LOCATION_NAME[cc]
+        return {"location_name": _CC_TO_LOCATION_NAME[cc]}
     raise ProviderConfigError(
         "DataForSEO requires a location for every search. Add a location to this "
         "job (Settings → Saved locations, then pick it in the job form), or pick "
@@ -250,7 +271,7 @@ class DataForSEOProvider(SerpProvider):
             )
         task: dict[str, Any] = {
             "keyword": keyword,
-            "location_name": _location_name(location, country_code),
+            **(await _location_params(location, country_code)),
             # depth = how many results to fetch; DataForSEO accepts 10..700 and
             # bills per 10 results, so don't ask for more than we'll store.
             "depth": min(max(top_n, 10), 100),

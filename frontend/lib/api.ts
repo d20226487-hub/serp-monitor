@@ -19,6 +19,71 @@ export type LocationRef = {
   name?: string | null;
   country_code?: string | null;
   target_type?: string | null;
+  /** Google's geo-target ID: the identity providers' location lists share when
+   *  their names for a place differ. Absent on locations picked before 2026-10-05. */
+  google_id?: number | null;
+};
+
+/** One request SERP Monitor made to a connected tool, and what came back. */
+export type ToolDelivery = {
+  id: number;
+  project_id: number | null;
+  project_name: string | null;
+  run_id: number | null;
+  trigger: string;            // "after_run" | "daily" | "manual"
+  geo: string;
+  domains: string[];
+  ok: boolean;
+  status_code: number | null;
+  response: string | null;
+  sent_at: string;
+};
+
+export type ProxyCheckerMode = "off" | "after_run" | "daily";
+
+/** Settings → Tools Connection. The token itself never comes back. */
+export type ProxyCheckerConnection = {
+  /** "" until one is entered: no address is built in. */
+  url: string;
+  /** An address AND a token are saved, so something can be sent. */
+  connected: boolean;
+  token: { configured: boolean; last4?: string; length?: number };
+  projects: { id: number; name: string; mode: ProxyCheckerMode; time: string | null }[];
+  deliveries: ToolDelivery[];
+};
+
+/** One project's Proxy Checker schedule. `time` is HH:MM in UTC. */
+export type ProjectProxyChecker = {
+  mode: ProxyCheckerMode;
+  time: string | null;
+  next_run: string | null;
+  connected: boolean;
+  window_hours: number;
+  /** The project's GEOs (set in the card above this one). */
+  project_geos: string[];
+  /** Which of them are sent. null = all, also ones added to the project later. */
+  geos: string[] | null;
+  /** Country → the project's domains found in the SERPs in the last 24 h, for
+   *  every project GEO (the page narrows it to the chosen ones). */
+  preview: Record<string, string[]>;
+  deliveries: ToolDelivery[];
+};
+
+/** The project's GEOs: ISO country codes. */
+export type ProjectGeos = {
+  /** null = never saved; `effective` (the jobs' countries) then stands in. */
+  geos: string[] | null;
+  effective: string[];
+  from_jobs: string[];
+};
+
+/** What the job's providers make of a location already on the job. */
+export type LocationCheck = {
+  canonical_name: string;
+  /** Providers that cannot search this location at all. */
+  unsupported_by: string[];
+  /** For a provider with its own location list: the entry it will be sent. */
+  resolved: Record<string, { code: number; name: string }>;
 };
 
 /** A client or site being watched, and the domains that belong to it.
@@ -518,6 +583,25 @@ export const api = {
     const tail = qs.toString();
     return req<ProjectPositions>(`/projects/${id}/positions${tail ? `?${tail}` : ""}`);
   },
+  /** The latest-view tables as a CSV download (a plain link, like a run's export).
+   *  `tz` is the reader's offset from UTC in minutes east, so "checked" reads in
+   *  their own clock as it does on the page. */
+  projectPositionsCsvUrl: (
+    id: number,
+    opts: {
+      range?: { start: string; end: string };
+      layout: "grid" | "list";
+      sites: "all" | "ours";
+      lang: "ru" | "en";
+    },
+  ) => {
+    const qs = new URLSearchParams({
+      layout: opts.layout, sites: opts.sites, lang: opts.lang,
+      tz: String(-new Date().getTimezoneOffset()),
+    });
+    if (opts.range) { qs.set("start", opts.range.start); qs.set("end", opts.range.end); }
+    return `${BASE}/projects/${id}/positions/export.csv?${qs}`;
+  },
   /** The same window averaged per (keyword, domain) rather than reduced to the
    *  latest run. Fetched separately because it reads every run in the range,
    *  and most visits only want where things stand. */
@@ -614,15 +698,43 @@ export const api = {
     ),
   exportUrl: (id: number, top: number) =>
     `${BASE}/runs/${id}/export.csv?top=${top}`,
-  searchLocations: (q: string) =>
-    req<LocationRef[]>(`/lookup/locations?q=${encodeURIComponent(q)}`),
+  /** `providers`: only places every one of them can search (see the backend's
+   *  provider_locations.py — DataForSEO has a location list of its own). */
+  searchLocations: (q: string, providers: string[] = []) => {
+    const qs = new URLSearchParams({ q });
+    if (providers.length) qs.set("providers", providers.join(","));
+    return req<LocationRef[]>(`/lookup/locations?${qs}`);
+  },
+  getProxyChecker: () => req<ProxyCheckerConnection>("/settings/tools/proxy-checker"),
+  saveProxyChecker: (body: { url?: string; token?: string }) =>
+    req<ProxyCheckerConnection>("/settings/tools/proxy-checker", { method: "PUT", body: JSON.stringify(body) }),
+  clearProxyChecker: () =>
+    req<ProxyCheckerConnection>("/settings/tools/proxy-checker", { method: "DELETE" }),
+  getProjectProxyChecker: (id: number) => req<ProjectProxyChecker>(`/projects/${id}/proxy-checker`),
+  getCountries: () => req<{ code: string; name: string }[]>("/lookup/countries"),
+  getProjectGeos: (id: number) => req<ProjectGeos>(`/projects/${id}/geos`),
+  saveProjectGeos: (id: number, geos: string[] | null) =>
+    req<ProjectGeos>(`/projects/${id}/geos`, { method: "PUT", body: JSON.stringify({ geos }) }),
+  saveProjectProxyChecker: (
+    id: number, body: { mode: ProxyCheckerMode; time: string | null; geos?: string[] | null },
+  ) =>
+    req<ProjectProxyChecker>(`/projects/${id}/proxy-checker`, { method: "PUT", body: JSON.stringify(body) }),
+  sendProjectProxyChecker: (id: number) =>
+    req<ProjectProxyChecker & { sent: ToolDelivery[] }>(`/projects/${id}/proxy-checker/send`, { method: "POST" }),
+  checkLocations: (providers: string[], locations: LocationRef[]) =>
+    req<LocationCheck[]>("/lookup/locations/check", {
+      method: "POST", body: JSON.stringify({ providers, locations }),
+    }),
   listLanguages: () => req<{ code: string; name: string }[]>("/lookup/languages"),
   listGoogleDomains: () => req<{ domain: string; country: string }[]>("/lookup/google-domains"),
 
   // Saved (manual) locations
-  listSavedLocations: (q?: string) => {
-    const qs = q ? `?q=${encodeURIComponent(q)}` : "";
-    return req<SavedLocation[]>(`/lookup/saved-locations${qs}`);
+  listSavedLocations: (q?: string, providers: string[] = []) => {
+    const qs = new URLSearchParams();
+    if (q) qs.set("q", q);
+    if (providers.length) qs.set("providers", providers.join(","));
+    const tail = qs.toString();
+    return req<SavedLocation[]>(`/lookup/saved-locations${tail ? `?${tail}` : ""}`);
   },
   createSavedLocation: (body: SavedLocationInput) =>
     req<SavedLocation>("/lookup/saved-locations", { method: "POST", body: JSON.stringify(body) }),
@@ -769,4 +881,4 @@ export type SavedLocationInput = {
   notes?: string | null;
 };
 
-export type SavedLocation = SavedLocationInput & { id: number };
+export type SavedLocation = SavedLocationInput & { id: number; google_id?: number | null };

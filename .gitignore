@@ -5,6 +5,10 @@
 # /seed-location JSON the app needs at runtime and MUST be committed.
 /data/
 
+# Local-only tooling and what it saves. Not part of the app: never committed.
+/browser/
+/screenshots/
+
 # Backend
 backend/__pycache__/
 backend/**/__pycache__/

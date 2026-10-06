@@ -11,7 +11,8 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .db import SessionLocal
-from .models import Job, JobRun
+from .models import Job, JobRun, Project
+from .proxy_checker import daily_send, valid_time
 from .tasks import create_run, run_job_sync
 
 log = logging.getLogger(__name__)
@@ -97,6 +98,48 @@ def remove_schedule(job_id: int) -> None:
 def reload_all_schedules(db: Session) -> None:
     for job in db.query(Job).filter(Job.schedule_enabled.is_(True)).all():
         upsert_schedule(job)
+
+
+# --- Connected tools: the Proxy Checker's once-a-day send, per project -------
+
+def _tool_ap_id(project_id: int) -> str:
+    return f"proxy-checker-{project_id}"
+
+
+def upsert_proxy_checker_schedule(project: Project) -> None:
+    """A project on "daily" gets one tick a day at its time (UTC, like every
+    cron here); any other mode has none."""
+    sched = get_scheduler()
+    ap_id = _tool_ap_id(project.id)
+    if project.proxy_checker_mode != "daily" or not valid_time(project.proxy_checker_time):
+        try:
+            sched.remove_job(ap_id)
+        except Exception:
+            pass
+        return
+    hour, minute = (int(x) for x in project.proxy_checker_time.split(":"))
+    sched.add_job(
+        daily_send,
+        trigger=CronTrigger(hour=hour, minute=minute, timezone="UTC"),
+        id=ap_id,
+        name=f"proxy-checker-{project.id}-{project.name}",
+        args=[project.id],
+        replace_existing=True,
+        # A send missed while the host slept still goes out when it wakes, once.
+        misfire_grace_time=None,
+        coalesce=True,
+        max_instances=1,
+    )
+
+
+def proxy_checker_next_run(project_id: int) -> str | None:
+    ap = get_scheduler().get_job(_tool_ap_id(project_id))
+    return ap.next_run_time.isoformat() if ap and ap.next_run_time else None
+
+
+def reload_tool_schedules(db: Session) -> None:
+    for project in db.query(Project).all():
+        upsert_proxy_checker_schedule(project)
 
 
 def schedule_info(job_id: int) -> dict:

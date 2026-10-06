@@ -7,6 +7,15 @@ class LocationRef(BaseModel):
     country_code: str | None = None
     name: str | None = None
     target_type: str | None = None
+    # Google's geo-target ID — the one identity providers' location lists
+    # share when their NAMES for a place differ (see provider_locations.py).
+    # Absent on locations saved before 2026-10-05; those are matched by name.
+    google_id: int | None = None
+
+
+class LocationCheckIn(BaseModel):
+    providers: list[str] = Field(default_factory=list)
+    locations: list[LocationRef] = Field(default_factory=list)
 
 
 class ProjectBase(BaseModel):
@@ -221,6 +230,9 @@ class SavedLocationCreate(BaseModel):
 class SavedLocationOut(SavedLocationCreate):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    # Filled only when the list was asked for a provider that has its own
+    # location database: the ID of that provider's entry for this location.
+    google_id: int | None = None
 
 
 class BulkLocationsImport(BaseModel):

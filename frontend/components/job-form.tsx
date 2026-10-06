@@ -1,12 +1,18 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AhrefsSettings, api, Job, JobMode, LocationRef, Project, ProviderRates, SavedLocation } from "@/lib/api";
+import {
+  AhrefsSettings, api, Job, JobMode, LocationCheck, LocationRef, Project, ProviderRates, SavedLocation,
+} from "@/lib/api";
 import { MultiCombobox, Option } from "./multi-combobox";
 import { useT } from "@/lib/i18n";
 import { Button, FilterChip, inputClass } from "@/components/ui";
 import { PROVIDER_IDS, providerLabel, providerSupports } from "@/lib/providers";
 import { formatUsd, billingUnits } from "@/lib/cost";
+
+/** Providers whose locations come from a list of their own, mirrored on the
+ *  server: the picker searches that list, complete, instead of SerpAPI's. */
+const OWN_LIST_PROVIDERS = ["dataforseo", "brightdata", "oxylabs"];
 
 /** How many keywords one job may carry.
  *
@@ -77,6 +83,16 @@ export function JobForm({ initial, onSaved }: Props) {
   const [compareProviders, setCompareProviders] = useState<string[]>(
     initial?.providers?.length ? initial.providers : [initial?.provider ?? "serpapi"],
   );
+  // The providers this job will actually run through: one, or compare mode's
+  // set. The location picker offers only what ALL of them can search.
+  const activeProviders = useMemo(
+    () => (mode === "compare" ? compareProviders : [provider]),
+    [mode, compareProviders, provider],
+  );
+  // What those providers make of the locations already on the job, asked again
+  // whenever either changes: a location picked for SerpAPI must be flagged the
+  // moment the provider becomes DataForSEO, not when the run fails on it.
+  const [locChecks, setLocChecks] = useState<Map<string, LocationCheck>>(new Map());
   const [ahrefsMetrics, setAhrefsMetrics] = useState<string[]>(
     initial?.ahrefs_metrics ?? []
   );
@@ -133,6 +149,16 @@ export function JobForm({ initial, onSaved }: Props) {
       setSavedByCanonical(new Map(rows.map(r => [r.canonical_name, r])));
     }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (locations.length === 0) { setLocChecks(new Map()); return; }
+    let stale = false;
+    api.checkLocations(activeProviders, locations)
+      .then(rows => { if (!stale) setLocChecks(new Map(rows.map(r => [r.canonical_name, r]))); })
+      // No answer is "nothing to warn about", never "everything is unsupported".
+      .catch(() => { if (!stale) setLocChecks(new Map()); });
+    return () => { stale = true; };
+  }, [locations, activeProviders]);
 
   // Anything past the cap is DROPPED, and a paste is exactly where that goes
   // unnoticed — so the overflow is counted and shown rather than silently
@@ -571,10 +597,11 @@ export function JobForm({ initial, onSaved }: Props) {
         fetchOptions={async (q) => {
           // Saved locations first (always shown, with a marker), then live SerpAPI
           // results below. Manage saved entries on the Settings page.
+          // Both narrowed to what every provider on the job can search.
           const [saved, live] = await Promise.all([
-            api.listSavedLocations(q || undefined).catch(() => []),
+            api.listSavedLocations(q || undefined, activeProviders).catch(() => []),
             q.trim().length >= 2
-              ? api.searchLocations(q).catch(() => [])
+              ? api.searchLocations(q, activeProviders).catch(() => [])
               : Promise.resolve([]),
           ]);
           const seen = new Set(saved.map(s => s.canonical_name));
@@ -584,6 +611,7 @@ export function JobForm({ initial, onSaved }: Props) {
               country_code: s.country_code ?? null,
               name: s.name ?? null,
               target_type: s.target_type ?? null,
+              google_id: s.google_id ?? null,
             } as LocationRef,
             label: `★ ${s.canonical_name}`,
             sub: [s.target_type, s.country_code?.toUpperCase()].filter(Boolean).join(" · "),
@@ -598,8 +626,39 @@ export function JobForm({ initial, onSaved }: Props) {
           return [...savedOpts, ...liveOpts];
         }}
         renderChip={(v) => v.canonical_name}
-        isEqual={(a, b) => a.canonical_name === b.canonical_name}
+        // The same place under two names (SerpAPI keeps a renamed region's old
+        // name too) is one location, not two.
+        isEqual={(a, b) =>
+          a.canonical_name === b.canonical_name
+          || (a.google_id != null && a.google_id === b.google_id)}
       />
+      {activeProviders.some(p => OWN_LIST_PROVIDERS.includes(p)) && (
+        <div className="-mt-2 text-xs text-slate-500 dark:text-slate-400">
+          {t.jobForm.locationsOnly(activeProviders.map(providerLabel).join(" + "))}
+        </div>
+      )}
+      {locations.map(l => {
+        const missing = locChecks.get(l.canonical_name)?.unsupported_by ?? [];
+        // DataForSEO refuses a place it does not list: the run would fail.
+        // Bright Data and Oxylabs do not refuse — Google ignores the name and
+        // answers for the whole country, which is worse for being silent.
+        const fails = missing.filter(p => p === "dataforseo");
+        const countryWide = missing.filter(p => p !== "dataforseo");
+        return (
+          <div key={l.canonical_name} className="space-y-2 empty:hidden">
+            {fails.length > 0 && (
+              <div className="rounded-lg border-l-4 border-red-400 bg-red-50 px-3 py-2 text-sm text-red-900 dark:bg-red-950/40 dark:text-red-200">
+                {t.jobForm.locationUnsupported(l.canonical_name, fails.map(providerLabel).join(", "))}
+              </div>
+            )}
+            {countryWide.length > 0 && (
+              <div className="rounded-lg border-l-4 border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                {t.jobForm.locationCountryOnly(l.canonical_name, countryWide.map(providerLabel).join(", "))}
+              </div>
+            )}
+          </div>
+        );
+      })}
 
       {/* In compare mode, one panel per provider: how each targets geography
           is itself one of the reasons their SERPs differ. */}
@@ -612,6 +671,7 @@ export function JobForm({ initial, onSaved }: Props) {
           engines={mode === "compare" ? engines.filter(e => providerSupports(p, e)) : engines}
           locations={locations}
           savedByCanonical={savedByCanonical}
+          checks={locChecks}
         />
       ))}
 
@@ -719,7 +779,9 @@ export function JobForm({ initial, onSaved }: Props) {
             <div className="text-sm font-medium mb-1">{t.jobForm.estimateCostTitle}</div>
             <div className="text-2xl font-semibold">
               {formatUsd(
-                (estimate?.total ?? 0) * billingUnits(provider, topN) * (rates?.rates[provider] ?? 0)
+                ((estimate?.breakdown.google ?? 0) * billingUnits(provider, topN, "google")
+                  + (estimate?.breakdown.yandex ?? 0) * billingUnits(provider, topN, "yandex"))
+                  * (rates?.rates[provider] ?? 0)
               )}
             </div>
             <div className="text-xs text-slate-600 dark:text-slate-400 mt-1">
@@ -727,11 +789,12 @@ export function JobForm({ initial, onSaved }: Props) {
               {" · "}
               <a href="/settings" className="underline">{t.jobForm.estimateEditRate}</a>
             </div>
-            {/* DataForSEO bills per 10 results, so a deep top_n multiplies the
-                bill. Spell it out — otherwise the number looks wrong. */}
+            {/* DataForSEO bills per 10 results and Bright Data per Google page,
+                so a deep top_n multiplies the bill. Spell it out — otherwise
+                the number looks wrong. */}
             {billingUnits(provider, topN) > 1 && (
               <div className="text-xs text-amber-700 dark:text-amber-300 mt-1">
-                {t.jobForm.estimateDepthNote(billingUnits(provider, topN), topN)}
+                {t.jobForm.estimateDepthNote(provider, billingUnits(provider, topN), topN)}
               </div>
             )}
           </div>
@@ -778,7 +841,9 @@ function CompareEstimate({
   const lines = providers.map(p => {
     const queries = google + (providerSupports(p, "yandex") ? yandex : 0);
     const rate = rates?.rates[p] ?? 0;
-    return { p, queries, cost: queries * billingUnits(p, topN) * rate, deep: billingUnits(p, topN) > 1 };
+    const yq = providerSupports(p, "yandex") ? yandex : 0;
+    const cost = (google * billingUnits(p, topN, "google") + yq * billingUnits(p, topN, "yandex")) * rate;
+    return { p, queries, cost, deep: billingUnits(p, topN) > 1 };
   });
   const total = lines.reduce((n, l) => n + l.queries, 0);
   const cost = lines.reduce((n, l) => n + l.cost, 0);
@@ -812,7 +877,7 @@ function CompareEstimate({
       </div>
       {deep && (
         <div className="text-xs text-amber-700 dark:text-amber-300 mt-2">
-          {t.jobForm.estimateDepthNote(billingUnits(deep.p, topN), topN)}
+          {t.jobForm.estimateDepthNote(deep.p, billingUnits(deep.p, topN), topN)}
         </div>
       )}
       <div className="text-xs text-slate-600 dark:text-slate-400 mt-3">
@@ -836,9 +901,34 @@ type GeoOutcome = {
   detail?: string;        // value preview, e.g. "uule=...QWxtY..."
 };
 
-function googleOutcome(provider: string, loc: LocationRef, _saved?: SavedLocation): GeoOutcome {
+function googleOutcome(
+  provider: string, loc: LocationRef, _saved?: SavedLocation, check?: LocationCheck,
+): GeoOutcome {
   const cn = loc.canonical_name;
   const cc = loc.country_code?.toUpperCase();
+  // DataForSEO has its own location list and is asked by ID, never by name:
+  // show the entry it will actually get, or that it has none.
+  if (provider === "dataforseo" && check) {
+    if (check.unsupported_by.includes("dataforseo")) {
+      return { granularity: "none", via: "unsupported" };
+    }
+    const sent = check.resolved.dataforseo;
+    if (sent) return { granularity: "city", via: "location_code=", detail: `${sent.code} (${sent.name})` };
+  }
+  // Bright Data and Oxylabs go by Google's geo-targets list. The name sent is
+  // the list's CURRENT one for the place; a place in no list gets the country.
+  if ((provider === "brightdata" || provider === "oxylabs") && check) {
+    const viaCountry = provider === "brightdata" ? "gl=" : "geo_location=";
+    if (check.unsupported_by.includes(provider)) {
+      return cc ? { granularity: "country", via: viaCountry, detail: cc } : { granularity: "none", via: "—" };
+    }
+    const sent = check.resolved[provider];
+    if (sent) {
+      return provider === "brightdata"
+        ? { granularity: "city", via: "uule=", detail: `gl=${cc ?? "—"} + uule(${sent.name})` }
+        : { granularity: "city", via: "geo_location=", detail: sent.name };
+    }
+  }
   if (provider === "serpapi" && cn) {
     return { granularity: "city", via: "location=", detail: cn };
   }
@@ -849,8 +939,8 @@ function googleOutcome(provider: string, loc: LocationRef, _saved?: SavedLocatio
     return { granularity: "city", via: "geo_location=", detail: `${cn} (best-effort match)` };
   }
   if (provider === "dataforseo" && cn) {
-    // DataForSEO's location_name uses the same Google Ads canonical format as
-    // SerpAPI, so our saved canonical_name passes straight through.
+    // Only before the check has answered (or with no DataForSEO list to check
+    // against): the name goes out as it is.
     return { granularity: "city", via: "location_name=", detail: cn };
   }
   if (cc) return { granularity: "country", via: "gl=", detail: cc };
@@ -905,12 +995,13 @@ function EngineRow({
 }
 
 function EffectiveTargetingPanel({
-  provider, engines, locations, savedByCanonical,
+  provider, engines, locations, savedByCanonical, checks,
 }: {
   provider: string;
   engines: string[];
   locations: LocationRef[];
   savedByCanonical: Map<string, SavedLocation>;
+  checks: Map<string, LocationCheck>;
 }) {
   const { t } = useT();
   if (locations.length === 0) {
@@ -935,7 +1026,12 @@ function EffectiveTargetingPanel({
             <div key={loc.canonical_name} className="border-t pt-2 first:border-t-0 first:pt-0 dark:border-slate-800">
               <div className="text-sm font-medium break-all">{loc.canonical_name}</div>
               <div className="space-y-1 mt-1">
-                {showGoogle && <EngineRow engine="google" outcome={googleOutcome(provider, loc, saved)} />}
+                {showGoogle && (
+                  <EngineRow
+                    engine="google"
+                    outcome={googleOutcome(provider, loc, saved, checks.get(loc.canonical_name))}
+                  />
+                )}
                 {showYandex && <EngineRow engine="yandex" outcome={yandexOutcome(provider, loc, saved)} />}
                 {!showGoogle && !showYandex && (
                   <div className="text-xs text-slate-600 dark:text-slate-400 italic">{t.jobForm.targeting.noEngines}</div>

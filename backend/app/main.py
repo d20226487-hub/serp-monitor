@@ -9,11 +9,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .db import Base, SessionLocal, engine
 from .models import SavedLocation
+from .provider_locations import warm_up as warm_up_locations
 from .routers import (
     export, jobs, keyword_volumes, locations, project_positions, projects,
-    runs, settings as settings_router,
+    runs, settings as settings_router, tools,
 )
-from .scheduler import get_scheduler, reload_all_schedules
+from .scheduler import get_scheduler, reload_all_schedules, reload_tool_schedules
 from .tasks import mark_orphaned_runs_failed
 
 
@@ -104,6 +105,11 @@ def _migrate_sqlite_columns() -> None:
     additions = [
         # (table, column_name, ddl)
         ("saved_locations", "yandex_lr", "INTEGER"),
+        ("saved_locations", "google_id", "INTEGER"),
+        ("projects", "proxy_checker_mode", "VARCHAR(16) NOT NULL DEFAULT 'off'"),
+        ("projects", "proxy_checker_time", "VARCHAR(5)"),
+        ("projects", "geos", "JSON"),
+        ("projects", "proxy_checker_geos", "JSON"),
         ("jobs", "provider", "VARCHAR(20) NOT NULL DEFAULT 'serpapi'"),
         # Per-run spend. NULL on runs that predate cost tracking — the UI shows
         # "—" for those rather than pretending they were free.
@@ -180,8 +186,27 @@ def _migrate_sqlite_columns() -> None:
                 )
 
 
+def _drop_location_mirror_from_main_db() -> None:
+    """The first build of the location mirror (2026-10-05) put its 270k rows in
+    the MAIN database, where writing them locked every other request out. The
+    mirror now has its own file (provider_locations.py); what was left here is
+    removed, and the space given back, once."""
+    from sqlalchemy import text
+    if engine.url.get_backend_name() != "sqlite":
+        return
+    with engine.begin() as conn:
+        had = bool(list(conn.execute(text("PRAGMA table_info(provider_locations)"))))
+        if had:
+            conn.execute(text("DROP TABLE provider_locations"))
+            conn.execute(text("DELETE FROM app_settings WHERE key = 'provider_locations_synced__dataforseo'"))
+    if had:
+        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            conn.execute(text("VACUUM"))
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    _drop_location_mirror_from_main_db()
     Base.metadata.create_all(bind=engine)
     _migrate_sqlite_columns()
     db = SessionLocal()
@@ -190,10 +215,14 @@ async def lifespan(_: FastAPI):
         _seed_saved_locations(db)
         _backfill_yandex_lr_from_seed(db)
         reload_all_schedules(db)
+        reload_tool_schedules(db)
     finally:
         db.close()
     sched = get_scheduler()
     sched.start()
+    # DataForSEO's location list and the saved locations' Google IDs, fetched
+    # in the background so the job form never waits for them.
+    warm_up_locations()
     try:
         yield
     finally:
@@ -213,6 +242,7 @@ app.add_middleware(
 app.include_router(jobs.router)
 app.include_router(projects.router)
 app.include_router(project_positions.router)
+app.include_router(tools.router)
 app.include_router(runs.router)
 app.include_router(export.router)
 app.include_router(locations.router)

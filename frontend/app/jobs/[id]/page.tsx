@@ -78,7 +78,7 @@ export default function JobPage() {
         {job.mode === "compare" && job.providers?.length ? (
           <Field label={t.jobs.fields.providers} value={job.providers.map(providerLabel).join(" · ")} />
         ) : (
-          <Field label={t.jobs.fields.provider} value={job.provider || "serpapi"} />
+          <Field label={t.jobs.fields.provider} value={providerLabel(job.provider || "serpapi")} />
         )}
         <Field label={t.jobs.fields.keywords} value={t.jobs.keywordsCount(job.keywords.length)} />
         <Field label={t.jobs.fields.engines} value={job.engines.join(", ") || "—"} />

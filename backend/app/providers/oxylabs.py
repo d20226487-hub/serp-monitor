@@ -31,6 +31,7 @@ import httpx
 
 from .._redact import redact
 from ..app_settings import get_provider_creds
+from ..provider_locations import location_for
 from .base import (
     ProviderConfigError, ProviderError, ProviderTransientError, ResultRow,
     SerpProvider, domain_of, shown_host,
@@ -279,8 +280,16 @@ class OxylabsProvider(SerpProvider):
         # geo_location on google_search controls BOTH the proxy country and
         # the search context. Prefer canonical_name (city-level), fall back
         # to country code so we never go in IP-blind.
-        if location and location.get("canonical_name"):
-            body["geo_location"] = location["canonical_name"]
+        # The name goes out as Google's geo-targets list has it TODAY (Oxylabs
+        # documents that file as the list of geo_location values): an older
+        # spelling may not match, and a place in no list falls back to the
+        # country here rather than be sent as a name nothing recognises.
+        city = None
+        if location and (location.get("canonical_name") or location.get("google_id")):
+            found, have_list = await asyncio.to_thread(location_for, "oxylabs", location)
+            city = found.name if found is not None else (None if have_list else location.get("canonical_name"))
+        if city:
+            body["geo_location"] = city
         elif country_code:
             body["geo_location"] = country_code.upper()
         if google_domain:

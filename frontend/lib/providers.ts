@@ -12,6 +12,9 @@ const LABELS: Record<string, string> = {
   brightdata: "Bright Data",
   oxylabs: "Oxylabs",
   dataforseo: "DataForSEO",
+  // Not in PROVIDER_IDS: its runs are imported, the job form cannot start it
+  // yet. Listed so imported runs show a real name.
+  own_android: "Own browser (Android)",
 };
 
 // DataForSEO's SERP API has no Yandex endpoint at all.
@@ -20,6 +23,7 @@ const ENGINES: Record<string, readonly string[]> = {
   brightdata: ["google", "yandex"],
   oxylabs: ["google", "yandex"],
   dataforseo: ["google"],
+  own_android: ["google", "yandex"],
 };
 
 export function providerLabel(id: string | null | undefined): string {

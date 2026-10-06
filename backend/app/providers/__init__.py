@@ -5,6 +5,7 @@ from .serpapi import SerpAPIProvider
 from .brightdata import BrightDataProvider
 from .oxylabs import OxylabsProvider
 from .dataforseo import DataForSEOProvider
+from .own_android import OwnAndroidProvider
 
 PROVIDERS: dict[str, type[SerpProvider]] = {
     "serpapi": SerpAPIProvider,
@@ -12,6 +13,8 @@ PROVIDERS: dict[str, type[SerpProvider]] = {
     "oxylabs": OxylabsProvider,
     # Google-only: DataForSEO's SERP API has no Yandex endpoint.
     "dataforseo": DataForSEOProvider,
+    # Our own browser. Its runs are imported; not runnable from here yet.
+    "own_android": OwnAndroidProvider,
 }
 
 

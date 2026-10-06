@@ -21,16 +21,20 @@ export function formatUsd(value: number | null | undefined): string {
  * How many billable units one search costs at a given result depth.
  *
  * DataForSEO bills "per each SERP containing up to 10 results", so asking for
- * top_n=30 is charged as 3 SERPs, and top_n=100 as 10. The other providers bill
+ * top_n=30 is charged as 3 SERPs, and top_n=100 as 10. Bright Data gets one
+ * Google page per request (Google ignores `num`), so a top-20 Google search is
+ * two billed requests; its Yandex search stays one. SerpAPI and Oxylabs bill
  * per request regardless of how many results come back.
  *
  * The clamp mirrors the backend (`min(max(top_n, 10), 100)`) so the estimate
- * matches what we actually request.
+ * matches what we actually request. For Bright Data it is an upper bound: a
+ * page Google doesn't have is never requested.
  */
-export function billingUnits(provider: string, topN: number): number {
-  if (provider !== "dataforseo") return 1;
-  const depth = Math.min(Math.max(topN || 10, 10), 100);
-  return Math.ceil(depth / 10);
+export function billingUnits(provider: string, topN: number, engine: string = "google"): number {
+  const pages = Math.ceil(Math.min(Math.max(topN || 10, 10), 100) / 10);
+  if (provider === "dataforseo") return pages;
+  if (provider === "brightdata" && engine === "google") return pages;
+  return 1;
 }
 
 /** Sum the cost of many runs, ignoring runs with no recorded cost. */

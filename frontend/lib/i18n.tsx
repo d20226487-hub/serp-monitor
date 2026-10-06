@@ -504,7 +504,7 @@ melbet	kz	34	20,000	0.45`,
     shareWhat:
       "How much of this results page the project's domains occupy between them. 100% would be the whole page.\n\n" +
       "Every slot they hold counts, and each counts for its own weight — so this is not simply the proportion of rows taken, and the list of positions beside it cannot be added up by eye.\n\n" +
-      "What a position is worth is set in Settings → Visibility weights. If a run captured fewer results than the curve has slots, the same 100% is divided between the slots that were there.",
+      "What a position is worth is set in Settings → SERP Monitor → Visibility weights. If a run captured fewer results than the curve has slots, the same 100% is divided between the slots that were there.",
     shareSlots: (held: number, total: number) => `${held} of ${total} slot(s)`,
     shareHint: (held: number, total: number) =>
       `The project holds ${held} of the ${total} result(s) this run captured. Each of those slots counts for its own weight rather than for one row, which is why this is a percentage and not ${held}/${total}.`,
@@ -540,7 +540,7 @@ melbet	kz	34	20,000	0.45`,
     visibilityWhat:
       "The share of the page this domain held, averaged over every run in the range — including the runs where it did not appear at all, which count as zero.\n\n" +
       "Position and presence in one number: a domain that ranks rarely but high and one that is always there but lower are put on the same scale. Which of them comes out ahead depends on the weights.\n\n" +
-      "What a position is worth is set in Settings → Visibility weights.",
+      "What a position is worth is set in Settings → SERP Monitor → Visibility weights.",
     visibilityHint: (share: number, ranked: number, runs: number) =>
       `${share}% of this page, averaged over all ${runs} run(s) — the ones it was absent from count as zero. Present on ${ranked} of them. Each slot is worth a share of the page you set in Settings, and a page with fewer results divides the same total between the slots it has.`,
     projectShare: (share: string) => `${share} of this page`,
@@ -583,6 +583,19 @@ melbet	kz	34	20,000	0.45`,
     manualJobs: (n: number) => `${n} more job(s) in this project run only when started by hand.`,
     keywords: "Keywords tracked",
     noKeywords: "No keywords yet — they come from the jobs in this project.",
+    exportSites: "Sites in the file",
+    exportAll: "Whole page",
+    exportAllHint: "Every site at every position, ours marked ★: who holds the other spots too.",
+    exportOurs: "Only ours",
+    exportOursHint: "Only the project's own sites, as in the tables.",
+    exportGrid: "CSV · grid",
+    exportGridHint:
+      "One row per query; columns 1, 2, 3… hold the site at that position. The easiest to read. " +
+      "Same rows as on screen: the latest run of each query in the period.",
+    exportList: "CSV · list",
+    exportListHint:
+      "One row per position: query, position, site, ours or not, URL, title. For filters and pivot tables. " +
+      "Same rows as on screen: the latest run of each query in the period.",
   },
   jobForm: {
     mode: "Mode",
@@ -610,7 +623,7 @@ melbet	kz	34	20,000	0.45`,
     whoisCost:
       "Uses DataForSEO WHOIS. Billed per request (~$0.12), not per domain, and only when a domain isn't already cached — registration dates don't change, so a recurring job pays once and then reads the cache.",
     whoisNoCreds:
-      "⚠ DataForSEO credentials are not set — domain age will fail for this job. Add them in Settings → DataForSEO.",
+      "⚠ DataForSEO credentials are not set — domain age will fail for this job. Add them in Settings → SERP Monitor → DataForSEO.",
     ahrefsCacheTitle: "Metric cache",
     ahrefsCacheHelp:
       "How long a fetched Ahrefs metric is reused across runs instead of being bought again. Unlike a domain's registration date, DR and backlink counts move — too long a TTL means a monitoring run reports figures it never re-measured. 0 turns the cache off.",
@@ -620,7 +633,7 @@ melbet	kz	34	20,000	0.45`,
     ahrefsCacheClear: "Clear cache",
     ahrefsCacheCleared: (n: number) => `Cleared ${n} cached metric(s).`,
     ahrefsNoKey:
-      "⚠ No Ahrefs API key configured — analyzer runs will fail. Add one in Settings → Ahrefs.",
+      "⚠ No Ahrefs API key configured — analyzer runs will fail. Add one in Settings → SERP Analyzer → Ahrefs.",
     ahrefsUnitsEstimate: (urls: number, perUrl: number, units: number) =>
       `≈ ${urls.toLocaleString()} URLs × ${perUrl} units each ≈ ${units.toLocaleString()} Ahrefs units per run. Upper bound — duplicate URLs are fetched once and cached lookups bill less.`,
     ahrefsDomainMetrics: "Domain-level metrics",
@@ -652,7 +665,7 @@ melbet	kz	34	20,000	0.45`,
     providerHelpPrefix: "Configure provider credentials in ",
     providerHelpLink: "Settings",
     providerHelpSuffix:
-      " first. Each provider differs slightly: SerpAPI and DataForSEO accept canonical_name locations; Bright Data & Oxylabs only honor country / yandex_lr.",
+      " first. Each provider differs slightly: each has its own location list, and with a provider selected the job form's picker searches that provider's complete list — SerpAPI: its own; DataForSEO: its own (asked by the location's ID); Bright Data & Oxylabs: Google's geo-targets list. The same city can be named differently in each, so a location is matched across them by Google's ID, not by name. For Yandex, Bright Data & Oxylabs only honor country / yandex_lr.",
     dataforseoNeedsLanguage:
       "⚠ DataForSEO needs a language for every query — unlike Google, it has no default and refuses the request without one. Pick a language (for Kazakhstan, usually ru), or its queries will fail.",
     dataforseoNoYandex:
@@ -662,7 +675,13 @@ melbet	kz	34	20,000	0.45`,
     devices: "Devices",
     devicesPlaceholder: "Pick devices…",
     locations: "Locations (countries / regions / cities)",
-    locationsPlaceholder: "Pick from saved or search SerpAPI…",
+    locationsPlaceholder: "Pick from saved or search…",
+    locationsOnly: (providers: string) =>
+      `Only locations ${providers} can search are listed. Each provider keeps its own location list, and the same city can be named differently in each.`,
+    locationUnsupported: (loc: string, providers: string) =>
+      `${providers} cannot search “${loc}”: it is not in that provider's location list. Remove it and pick the place again from the list.`,
+    locationCountryOnly: (loc: string, providers: string) =>
+      `“${loc}” is not in Google's location list, which is the list ${providers} goes by: Google will ignore it and the search will cover the whole country. Pick the place again from the list for city-level results.`,
     languages: "Languages",
     languagesPlaceholder: "Pick languages…",
     googleDomains: "Google domains (optional)",
@@ -695,8 +714,10 @@ melbet	kz	34	20,000	0.45`,
     estimateCostTitle: "Estimated cost per run",
     estimateRate: (rate: string) => `at ${rate}/search`,
     estimateEditRate: "edit rate",
-    estimateDepthNote: (units: number, topN: number) =>
-      `⚠ DataForSEO bills per 10 results — Top N ${topN} counts as ${units} SERPs per search (${units}× the price). Lower Top N to 10 to pay the base rate.`,
+    estimateDepthNote: (provider: string, units: number, topN: number) =>
+      provider === "brightdata"
+        ? `⚠ Bright Data returns one Google page (~10 results) per request — Top N ${topN} takes up to ${units} requests per Google search (${units}× the price). Lower Top N to 10 to pay the base rate.`
+        : `⚠ DataForSEO bills per 10 results — Top N ${topN} counts as ${units} SERPs per search (${units}× the price). Lower Top N to 10 to pay the base rate.`,
     saveCreate: "Create job",
     saveChanges: "Save changes",
     saveAndRunCreate: "Create & run now",
@@ -811,9 +832,98 @@ melbet	kz	34	20,000	0.45`,
     country: "country",
     noGeo: "no geo",
   },
+  tools: {
+    proxyChecker: {
+      title: "Proxy Checker",
+      help:
+        "Gets your projects' own domains that the SERP checks found, one request per country, so it can check them from that country. Only the connection is set here: WHEN a project sends, what it would send and what it has sent are on that project's own page, in its Proxy Checker card.",
+      url: "API address",
+      urlPlaceholder: "https://\u2026/api/daily-check",
+      token: "Token",
+      tokenPlaceholder: "Bearer token",
+      connected: "connected",
+      notConnected: "not connected",
+      noTest:
+        "There is no separate \u201ctest\u201d: the API has only the one request, so the token is proved by the first real send \u2014 open a project, press \u201cSend now\u201d in its Proxy Checker card and look at the answer there.",
+      projectsTitle: "When each project sends",
+      projectsHelp: "Set on the project's own page.",
+      projectsEmpty: "No projects yet.",
+      mode: {
+        off: "Off",
+        after_run: "After every run",
+        daily: (time: string) => `Daily at ${time}`,
+      },
+      logTitle: "Recent sends",
+      logEmpty: "Nothing has been sent yet.",
+      col: { when: "Sent", project: "Project", geo: "Country", domains: "Domains", trigger: "Why", result: "Answer" },
+      trigger: { after_run: "after a run", daily: "daily", manual: "by hand" } as Record<string, string>,
+      accepted: "accepted",
+      refused: (code: number | null) => (code ? `refused \u00b7 HTTP ${code}` : "no answer"),
+    },
+    geos: {
+      title: "Project GEOs",
+      notSaved: "not saved yet",
+      help:
+        "Every country this project works in. Set it here once: the connected tools choose among these GEOs \u2014 the Proxy Checker card at the top of this page picks whose SERP findings it is sent.",
+      label: "Countries",
+      placeholder: "Add a country\u2026",
+      fromJobs: "Nothing is saved yet: these are the countries the project's jobs check today. Adjust the list and save it.",
+      noJob: (codes: string) =>
+        `No job of this project checks ${codes} yet, so there are no SERP findings for it to send. Add a job with a location there, or remove it from the list.`,
+    },
+    ampRotator: {
+      title: "AMP Rotator",
+      soon: "later",
+      later: "Will be connected here later.",
+    },
+    project: {
+      title: "Proxy Checker",
+      help:
+        "Sends this project's own domains that the checks found in the SERPs to the Proxy Checker \u2014 one request per country, only the domains actually found there.",
+      notConnected: "The Proxy Checker is not connected yet, so nothing will be sent.",
+      connectLink: "Connect it in Settings \u2192 Tools Connection",
+      when: "When to send",
+      modeDaily: "Once a day",
+      modeOffHint: "Nothing is sent automatically. \u201cSend now\u201d below still works.",
+      modeAfterRunHint: "Right after each of this project's checks finishes: the domains that check found.",
+      modeDailyHint: (hours: number) => `Once a day at the time you set: every domain found in the last ${hours} hours.`,
+      time: "at (your clock)",
+      nextRun: (when: string) => `Next send: ${when}.`,
+      previewTitle: (hours: number) => `Would be sent now \u2014 found in the last ${hours} hours`,
+      previewEmpty: (hours: number) =>
+        `None of this project's domains were found in the SERPs in the last ${hours} hours, so there is nothing to send.`,
+      sendNow: "Send now",
+      sending: "Sending\u2026",
+      sendNowHint: (hours: number) => `Sends what the checks found in the last ${hours} hours, whatever the schedule.`,
+      sentResult: (ok: number, total: number) => `Sent: ${ok} of ${total} accepted.`,
+      nothingToSend: "Nothing to send.",
+      countries: (n: number) => `${n} ${n === 1 ? "country" : "countries"}`,
+      geos: "GEOs to send",
+      geosHint:
+        "Click a country to switch it off or on. Only the switched-on GEOs' SERP findings are sent; the number is how many of this project's domains were found there in the last 24 hours. While all are on, a GEO added to the project later is sent too.",
+      geosEmpty: "No GEO is switched on, so nothing will be sent.",
+      geosNone: "The project has no GEOs yet: add them in the \u201cProject GEOs\u201d card at the bottom of this page.",
+      geoFound: (n: number, hours: number) => `${n} of this project's domains found in the last ${hours} hours`,
+      saveFirst: "Save the changes first.",
+    },
+  },
   settings: {
     title: "Settings",
-    intro: "Configure provider credentials and curate your saved locations.",
+    intro: "Grouped by the part of the app they configure.",
+    tabs: {
+      monitor: {
+        label: "SERP Monitor",
+        intro: "SERP API credentials, the price of a query, what a position is worth, and saved locations.",
+      },
+      analyzer: {
+        label: "SERP Analyzer",
+        intro: "Ahrefs, AI providers, the SERP-difficulty prompt and the opportunity formula.",
+      },
+      tools: {
+        label: "Tools Connection",
+        intro: "Other tools SERP Monitor hands its findings to.",
+      },
+    },
     addLocation: {
       title: "Add a location",
       help: (
@@ -1622,7 +1732,7 @@ melbet	kz	34	20 000	0,45`,
     shareWhat:
       "Какую часть этой страницы выдачи занимают домены проекта вместе. 100% — это вся страница.\n\n" +
       "Учитываются все занятые ими позиции, и каждая — со своим весом. Поэтому это не просто доля занятых строк, и список позиций слева нельзя сложить на глаз.\n\n" +
-      "Сколько стоит позиция, задаётся в «Настройки → Веса видимости». Если прогон снял меньше результатов, чем позиций в кривой, те же 100% делятся между теми, что есть.",
+      "Сколько стоит позиция, задаётся в «Настройки → Мониторинг выдачи → Веса видимости». Если прогон снял меньше результатов, чем позиций в кривой, те же 100% делятся между теми, что есть.",
     shareSlots: (held: number, total: number) =>
       `${held} из ${total} ${pluralRu(total, ["позиции", "позиций", "позиций"])}`,
     shareHint: (held: number, total: number) =>
@@ -1659,7 +1769,7 @@ melbet	kz	34	20 000	0,45`,
     visibilityWhat:
       "Доля страницы, которую занимал этот домен, усреднённая по всем прогонам за период — включая те, где его вообще не было: они считаются нулём.\n\n" +
       "Позиция и присутствие в одном числе: домен, который ранжируется редко, но высоко, и домен, который есть всегда, но ниже, попадают на одну шкалу. Кто из них окажется выше, зависит от весов.\n\n" +
-      "Сколько стоит позиция, задаётся в «Настройки → Веса видимости».",
+      "Сколько стоит позиция, задаётся в «Настройки → Мониторинг выдачи → Веса видимости».",
     visibilityHint: (share: number, ranked: number, runs: number) =>
       `${share}% этой страницы — среднее по всем прогонам (${runs}); те, где домена не было, считаются нулём. Присутствует в ${ranked} из них. Каждая позиция стоит долю страницы, которая задаётся в настройках, а если результатов меньше, та же сумма делится между теми позициями, что есть.`,
     projectShare: (share: string) => `${share} этой страницы`,
@@ -1703,6 +1813,19 @@ melbet	kz	34	20 000	0,45`,
     manualJobs: (n: number) => `Ещё задач в проекте, запускаемых вручную: ${n}.`,
     keywords: "Отслеживаемые запросы",
     noKeywords: "Запросов пока нет — они берутся из задач проекта.",
+    exportSites: "Сайты в файле",
+    exportAll: "Вся страница",
+    exportAllHint: "Все сайты на каждой позиции, наши отмечены ★: видно, кто занимает остальные места.",
+    exportOurs: "Только наши",
+    exportOursHint: "Только сайты проекта — как в таблицах.",
+    exportGrid: "CSV · таблица",
+    exportGridHint:
+      "Строка на запрос; в колонках 1, 2, 3… — сайт на этой позиции. Удобнее всего читать. " +
+      "Те же строки, что на экране: последний прогон каждого запроса за период.",
+    exportList: "CSV · список",
+    exportListHint:
+      "Строка на позицию: запрос, позиция, сайт, наш или нет, URL, заголовок. Для фильтров и сводных таблиц. " +
+      "Те же строки, что на экране: последний прогон каждого запроса за период.",
   },
   jobForm: {
     mode: "Режим",
@@ -1730,7 +1853,7 @@ melbet	kz	34	20 000	0,45`,
     whoisCost:
       "Используется DataForSEO WHOIS. Тарифицируется за запрос (~$0,12), а не за домен, и только если домена ещё нет в кэше — даты регистрации не меняются, поэтому регулярная задача платит один раз и дальше читает кэш.",
     whoisNoCreds:
-      "⚠ Доступы DataForSEO не заданы — получение возраста домена для этой задачи завершится ошибкой. Добавьте их в «Настройки → DataForSEO».",
+      "⚠ Доступы DataForSEO не заданы — получение возраста домена для этой задачи завершится ошибкой. Добавьте их в «Настройки → Мониторинг выдачи → DataForSEO».",
     ahrefsCacheTitle: "Кэш метрик",
     ahrefsCacheHelp:
       "Сколько времени метрика Ahrefs переиспользуется между запусками вместо повторной покупки. В отличие от даты регистрации домена, DR и число ссылок меняются — слишком большой TTL означает, что запуск покажет значения, которые он не измерял. 0 отключает кэш.",
@@ -1740,7 +1863,7 @@ melbet	kz	34	20 000	0,45`,
     ahrefsCacheClear: "Очистить кэш",
     ahrefsCacheCleared: (n: number) => `Очищено записей: ${n}.`,
     ahrefsNoKey:
-      "⚠ API-ключ Ahrefs не задан — запуски в режиме анализатора завершатся ошибкой. Добавьте ключ в «Настройки → Ahrefs».",
+      "⚠ API-ключ Ahrefs не задан — запуски в режиме анализатора завершатся ошибкой. Добавьте ключ в «Настройки → Анализатор выдачи → Ahrefs».",
     ahrefsUnitsEstimate: (urls: number, perUrl: number, units: number) =>
       `≈ ${urls.toLocaleString()} URL × ${perUrl} юнитов каждый ≈ ${units.toLocaleString()} юнитов Ahrefs за прогон. Это верхняя оценка — дубликаты URL запрашиваются один раз, а кэшированные ответы стоят дешевле.`,
     ahrefsDomainMetrics: "Метрики уровня домена",
@@ -1773,7 +1896,7 @@ melbet	kz	34	20 000	0,45`,
     providerHelpPrefix: "Сначала укажите учётные данные провайдеров в разделе ",
     providerHelpLink: "Настройки",
     providerHelpSuffix:
-      ". Провайдеры немного отличаются: SerpAPI и DataForSEO принимают локации в формате canonical_name; Bright Data и Oxylabs учитывают только страну / yandex_lr.",
+      ". Провайдеры немного отличаются: у каждого своя база локаций, и при выбранном провайдере поиск в форме задачи идёт по его полной базе — SerpAPI: собственная; DataForSEO: собственная (запрос по ID локации); Bright Data и Oxylabs: список гео-таргетов Google. Один и тот же город может называться в них по-разному, поэтому локации сопоставляются по ID Google, а не по названию. Для Яндекса Bright Data и Oxylabs учитывают только страну / yandex_lr.",
     dataforseoNeedsLanguage:
       "⚠ DataForSEO требует язык для каждого запроса — в отличие от Google, у него нет значения по умолчанию, и без языка запрос отклоняется. Выберите язык (для Казахстана обычно ru), иначе его запросы завершатся ошибкой.",
     dataforseoNoYandex:
@@ -1783,7 +1906,13 @@ melbet	kz	34	20 000	0,45`,
     devices: "Устройства",
     devicesPlaceholder: "Выберите устройства…",
     locations: "Геолокации (страны / регионы / города)",
-    locationsPlaceholder: "Выберите из сохранённых или найдите через SerpAPI…",
+    locationsPlaceholder: "Выберите из сохранённых или найдите…",
+    locationsOnly: (providers: string) =>
+      `В списке только локации, которые поддерживает ${providers}. У каждого провайдера своя база локаций, и один и тот же город может называться в них по-разному.`,
+    locationUnsupported: (loc: string, providers: string) =>
+      `${providers} не поддерживает локацию «${loc}»: её нет в базе локаций этого провайдера. Удалите её и выберите место заново из списка.`,
+    locationCountryOnly: (loc: string, providers: string) =>
+      `Локации «${loc}» нет в списке гео-таргетов Google, по которому работает ${providers}: Google её проигнорирует, и поиск пойдёт по всей стране. Чтобы получить выдачу по городу, выберите место заново из списка.`,
     languages: "Языки",
     languagesPlaceholder: "Выберите языки…",
     googleDomains: "Домены Google (необязательно)",
@@ -1818,8 +1947,10 @@ melbet	kz	34	20 000	0,45`,
     estimateCostTitle: "Расчётная стоимость прогона",
     estimateRate: (rate: string) => `по ${rate} за запрос`,
     estimateEditRate: "изменить ставку",
-    estimateDepthNote: (units: number, topN: number) =>
-      `⚠ DataForSEO тарифицирует за каждые 10 результатов — Топ N ${topN} считается как ${units} SERP на запрос (цена ×${units}). Поставьте Топ N = 10, чтобы платить базовую ставку.`,
+    estimateDepthNote: (provider: string, units: number, topN: number) =>
+      provider === "brightdata"
+        ? `⚠ Bright Data отдаёт одну страницу Google (~10 результатов) за запрос — Топ N ${topN} занимает до ${units} запросов на поиск в Google (цена ×${units}). Поставьте Топ N = 10, чтобы платить базовую ставку.`
+        : `⚠ DataForSEO тарифицирует за каждые 10 результатов — Топ N ${topN} считается как ${units} SERP на запрос (цена ×${units}). Поставьте Топ N = 10, чтобы платить базовую ставку.`,
     saveCreate: "Создать задачу",
     saveChanges: "Сохранить изменения",
     saveAndRunCreate: "Создать и запустить",
@@ -1940,10 +2071,98 @@ melbet	kz	34	20 000	0,45`,
     country: "страна",
     noGeo: "без гео",
   },
+  tools: {
+    proxyChecker: {
+      title: "Proxy Checker",
+      help:
+        "Получает домены ваших проектов, найденные в выдаче при проверках, — по одному запросу на страну, чтобы проверить их из этой страны. Здесь задаётся только подключение: КОГДА проект отправляет, что будет отправлено и что уже отправлено — на странице самого проекта, в карточке Proxy Checker.",
+      url: "Адрес API",
+      urlPlaceholder: "https://…/api/daily-check",
+      token: "Токен",
+      tokenPlaceholder: "Bearer-токен",
+      connected: "подключён",
+      notConnected: "не подключён",
+      noTest:
+        "Отдельной «проверки» нет: у API только один запрос, поэтому токен проверяется первой настоящей отправкой — откройте проект, нажмите «Отправить сейчас» в его карточке Proxy Checker и посмотрите ответ там же.",
+      projectsTitle: "Когда отправляет каждый проект",
+      projectsHelp: "Задаётся на странице самого проекта.",
+      projectsEmpty: "Проектов пока нет.",
+      mode: {
+        off: "Выключено",
+        after_run: "После каждого прогона",
+        daily: (time: string) => `Ежедневно в ${time}`,
+      },
+      logTitle: "Последние отправки",
+      logEmpty: "Пока ничего не отправлялось.",
+      col: { when: "Отправлено", project: "Проект", geo: "Страна", domains: "Домены", trigger: "Причина", result: "Ответ" },
+      trigger: { after_run: "после прогона", daily: "ежедневно", manual: "вручную" } as Record<string, string>,
+      accepted: "принято",
+      refused: (code: number | null) => (code ? `отклонено · HTTP ${code}` : "нет ответа"),
+    },
+    geos: {
+      title: "GEO проекта",
+      notSaved: "ещё не сохранено",
+      help:
+        "Все страны, в которых работает проект. Задаются здесь один раз: подключённые инструменты выбирают из этого списка — карточка Proxy Checker вверху страницы определяет, находки по каким GEO отправлять.",
+      label: "Страны",
+      placeholder: "Добавить страну…",
+      fromJobs: "Список ещё не сохранён: это страны, которые сейчас проверяют задачи проекта. Поправьте список и сохраните.",
+      noJob: (codes: string) =>
+        `Ни одна задача проекта пока не проверяет ${codes}, поэтому находок по выдаче для отправки там нет. Добавьте задачу с локацией в этой стране или уберите её из списка.`,
+    },
+    ampRotator: {
+      title: "AMP Rotator",
+      soon: "позже",
+      later: "Будет подключён здесь позже.",
+    },
+    project: {
+      title: "Proxy Checker",
+      help:
+        "Отправляет в Proxy Checker домены этого проекта, найденные в выдаче при проверках, — по одному запросу на страну, только те домены, которые там действительно нашлись.",
+      notConnected: "Proxy Checker ещё не подключён, поэтому ничего отправляться не будет.",
+      connectLink: "Подключить в «Настройки → Подключение инструментов»",
+      when: "Когда отправлять",
+      modeDaily: "Раз в день",
+      modeOffHint: "Автоматически ничего не отправляется. Кнопка «Отправить сейчас» ниже работает всегда.",
+      modeAfterRunHint: "Сразу после завершения каждой проверки проекта: домены, найденные этой проверкой.",
+      modeDailyHint: (hours: number) => `Раз в день в указанное время: все домены, найденные за последние ${hours} ч.`,
+      time: "в (по вашим часам)",
+      nextRun: (when: string) => `Следующая отправка: ${when}.`,
+      previewTitle: (hours: number) => `Будет отправлено сейчас — найдено за последние ${hours} ч`,
+      previewEmpty: (hours: number) =>
+        `За последние ${hours} ч ни один домен проекта не найден в выдаче — отправлять нечего.`,
+      sendNow: "Отправить сейчас",
+      sending: "Отправка…",
+      sendNowHint: (hours: number) => `Отправляет найденное за последние ${hours} ч независимо от расписания.`,
+      sentResult: (ok: number, total: number) => `Отправлено: принято ${ok} из ${total}.`,
+      nothingToSend: "Отправлять нечего.",
+      countries: (n: number) => `${n} ${pluralRu(n, ["страна", "страны", "стран"])}`,
+      geos: "GEO для отправки",
+      geosHint:
+        "Нажмите на страну, чтобы выключить или включить её. Отправляются находки только по включённым GEO; число — сколько доменов проекта найдено там за последние 24 ч. Пока включены все, GEO, добавленный в проект позже, тоже будет отправляться.",
+      geosEmpty: "Не включён ни один GEO — ничего отправляться не будет.",
+      geosNone: "У проекта пока нет GEO: добавьте их в карточке «GEO проекта» внизу страницы.",
+      geoFound: (n: number, hours: number) => `Доменов проекта найдено за последние ${hours} ч: ${n}`,
+      saveFirst: "Сначала сохраните изменения.",
+    },
+  },
   settings: {
     title: "Настройки",
-    intro:
-      "Настройте учётные данные провайдеров и сохранённые локации.",
+    intro: "Сгруппированы по части приложения, которую они настраивают.",
+    tabs: {
+      monitor: {
+        label: "Мониторинг выдачи",
+        intro: "Доступы к SERP API, стоимость запроса, веса позиций и сохранённые локации.",
+      },
+      analyzer: {
+        label: "Анализатор выдачи",
+        intro: "Ahrefs, AI-провайдеры, промпт оценки сложности выдачи и формула возможности.",
+      },
+      tools: {
+        label: "Подключение инструментов",
+        intro: "Другие инструменты, которым SERP Monitor передаёт найденное.",
+      },
+    },
     addLocation: {
       title: "Добавить локацию",
       help: (

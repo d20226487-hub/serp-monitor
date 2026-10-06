@@ -5,11 +5,18 @@ you POST a Google/Yandex search URL with `brd_json=1` appended, authenticated
 with a Bearer token, and they return parsed JSON. You also pass a "zone" name
 (set up in the Bright Data dashboard, e.g. `serp_api1`).
 
+One request is ONE Google results page. Google ignores `num` (measured
+2026-10-01: num=20 returned 7-10 organic rows, every query, desktop and
+mobile), so a top-20 job asks for page 2 (`start=10`) as well — and each page
+is a billed request, which the run's cost counts.
+
 Docs: https://docs.brightdata.com/scraping-automation/serp-api
 """
 from __future__ import annotations
 
 import asyncio
+import logging
+import math
 from typing import Any
 from urllib.parse import urlencode
 
@@ -24,25 +31,62 @@ from .base import (
     display_url,
     is_search_redirect,
 )
+from ..provider_locations import location_for
 from .uule import google_uule
 from .yandex_html import parse_yandex_html
+
+log = logging.getLogger(__name__)
 
 REQUEST_URL = "https://api.brightdata.com/request"
 # Zone state lookup, used to explain an empty 200 accurately.
 ZONE_STATUS_URL = "https://api.brightdata.com/zone/status"
 
 
+def google_pages(top_n: int) -> int:
+    """Google result pages (= billed requests) a Google query of this depth takes."""
+    return math.ceil(min(max(top_n or 10, 10), 100) / 10)
+
+
+def requests_per_query(engine: str, top_n: int) -> int:
+    """Billed requests per query: Google pages through; Yandex is one page."""
+    return google_pages(top_n) if engine == "google" else 1
+
+
+async def _current_location(location: dict | None) -> dict | None:
+    """The job's location under the name Google's geo-targets list has for it
+    TODAY — the list Bright Data documents as "all available uule values".
+
+    A uule carries a NAME, and Google silently ignores one it does not know:
+    the search then answers for the whole country and nothing says so. A job
+    saved as "Almaty,Almaty Province,Kazakhstan" therefore goes out as
+    "Almaty,Almaty Region,Kazakhstan" (same Google ID). A location that is in
+    no list at all (Bukhara, Samarkand: measured 2026-10-05) gets NO uule —
+    country-level by `gl`, which is what it was getting anyway, now without
+    pretending; the job form says so before the run. With no list to check
+    against, the stored name goes out as it always did.
+    """
+    if not location or not (location.get("canonical_name") or location.get("google_id")):
+        return location
+    found, have_list = await asyncio.to_thread(location_for, "brightdata", location)
+    if found is not None:
+        return {**location, "canonical_name": found.name}
+    return None if have_list else location
+
+
 def _build_google_url(
     *, keyword, device, language, google_domain, country_code, top_n,
-    location: dict | None = None,
+    location: dict | None = None, start: int = 0,
 ) -> str:
     domain = google_domain or "google.com"
+    _ = top_n  # depth is reached by paging (`start`), not by `num` — see module docstring
     params: dict[str, Any] = {
         "q": keyword,
-        "num": min(max(top_n, 10), 100),
+        "num": 10,
         "brd_json": 1,  # Bright Data parses Google for us (zone has Full JSON)
         "brd_mobile": 1 if device == "mobile" else 0,
     }
+    if start:
+        params["start"] = start
     if language:
         params["hl"] = language
     if country_code:
@@ -125,8 +169,26 @@ def _parse_results(payload: dict, top_n: int) -> list[ResultRow]:
     return rows
 
 
+def _has_next_page(payload: dict) -> bool:
+    """Does Google offer another page? Bright Data copies Google's pager into
+    `pagination`. Measured over 64 pages (2026-10-01): 59 carry `next_page`,
+    4 only `next_page_link` (and do have a page 2); the one page with NO pager
+    block had no "next" link in its HTML either, and "kaspi вход" (5 results,
+    no pager) returned an empty, still billed, page 2. So: no next-page field
+    = the SERP ends here, as on our own browser."""
+    pager = payload.get("pagination")
+    if not isinstance(pager, dict):
+        return False
+    return bool(pager.get("next_page") or pager.get("next_page_start") or pager.get("next_page_link"))
+
+
 class BrightDataProvider(SerpProvider):
     name = "brightdata"
+    counts_requests = True
+
+    @staticmethod
+    def requests_per_query(engine: str, top_n: int) -> int:
+        return requests_per_query(engine, top_n)
 
     def __init__(self, **kw):
         super().__init__(**kw)
@@ -188,6 +250,8 @@ class BrightDataProvider(SerpProvider):
                     # A disabled zone fails the same way every time; an active
                     # (or unknown) one is Bright Data failing this one request.
                     raise (ProviderTransientError if transient else ProviderError)(msg)
+                # Bright Data bills successful requests only — this one is billed.
+                self.billed_requests += 1
                 return self._coerce_json(r) if expect_json else r.text
             except (httpx.HTTPError, httpx.TimeoutException) as e:
                 last = e
@@ -304,13 +368,32 @@ class BrightDataProvider(SerpProvider):
         self, *, keyword, device, location, language,
         google_domain, country_code, top_n,
     ) -> list[ResultRow]:
-        url = _build_google_url(
-            keyword=keyword, device=device, language=language,
-            google_domain=google_domain, country_code=country_code, top_n=top_n,
-            location=location,
-        )
-        data = await self._request(url)
-        return _parse_results(data, top_n)
+        location = await _current_location(location)
+        rows: list[ResultRow] = []
+        seen: set[str] = set()
+        for page in range(google_pages(top_n)):
+            url = _build_google_url(
+                keyword=keyword, device=device, language=language,
+                google_domain=google_domain, country_code=country_code, top_n=top_n,
+                location=location, start=page * 10,
+            )
+            data = await self._request(url)
+            page_rows = _parse_results(data, 100)
+            # Bright Data numbers every page from 1 again (measured: start=10
+            # -> rank 1..10); positions continue from the previous page here.
+            offset = rows[-1]["position"] if rows else 0
+            for r in page_rows:
+                # Each page is a separate fetch, and two fetches of one query
+                # can come back as different SERPs; a result already shown on
+                # an earlier page is that artefact, not a second ranking.
+                if r["url"] in seen:
+                    log.info("brightdata: %r page %s repeats %s — dropped", keyword, page + 1, r["url"])
+                    continue
+                seen.add(r["url"])
+                rows.append({**r, "position": offset + (r["position"] or len(rows) + 1)})
+            if not page_rows or not _has_next_page(data):
+                break
+        return rows[:top_n]
 
     async def search_yandex(
         self, *, keyword, device, language,

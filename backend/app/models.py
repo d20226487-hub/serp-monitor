@@ -42,6 +42,20 @@ class Project(Base):
     # from example.com, and position tracking has to tell them apart.
     domains: Mapped[list] = mapped_column(JSON, default=list)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The project's GEOs: every country this project works in, as ISO codes
+    # ("KG"), set on the project page (user, 2026-10-05: "first the user should
+    # specify all GEOs on the project page"). The connected tools choose among
+    # them. NULL = never set: the countries the project's jobs check stand in.
+    geos: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Which of those GEOs' SERP findings go to the Proxy Checker. NULL = all
+    # of the project's GEOs, including ones added to it later.
+    proxy_checker_geos: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # When this project's domains found in the SERPs go to the Proxy Checker
+    # (see proxy_checker.py): "off" | "after_run" | "daily". The user asked
+    # for this to be chosen per project, on the project page.
+    proxy_checker_mode: Mapped[str] = mapped_column(String(16), default="off")
+    #: For "daily": HH:MM in UTC (the scheduler's clock).
+    proxy_checker_time: Mapped[str | None] = mapped_column(String(5), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
@@ -230,8 +244,33 @@ class SavedLocation(Base):
     country_code: Mapped[str | None] = mapped_column(String(8), nullable=True)
     target_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
     yandex_lr: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Google's geo-target ID for this place, asked of SerpAPI once (see
+    # provider_locations.backfill_saved_ids). NULL until then, or when SerpAPI
+    # knows no place by this name.
+    google_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class ToolDelivery(Base):
+    """One request SERP Monitor made to a connected tool (today: the Proxy
+    Checker), with what it carried and what came back. Kept so that "did it
+    go, and what did they say" has an answer without reading server logs."""
+    __tablename__ = "tool_deliveries"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tool: Mapped[str] = mapped_column(String(40), index=True)
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)
+    run_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: "after_run" | "daily" | "manual"
+    trigger: Mapped[str] = mapped_column(String(16))
+    geo: Mapped[str] = mapped_column(String(8))
+    domains: Mapped[list] = mapped_column(JSON, default=list)
+    ok: Mapped[bool] = mapped_column(default=False)
+    status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    response: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sent_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 
 class RunUrlMetric(Base):
