@@ -49,6 +49,16 @@ this to blocked / not blocked — "we do not show blocked or not blocked we
 display the status by each proxy". "PASS" is the only status seen so far; what
 else a proxy can say is the Proxy Checker's vocabulary, kept verbatim.
 
+AMP domains (user, 2026-10-13: "if the project has specified AMP endpoints, if
+applicable, the AMP domains will be sent to the Proxy Checker"). A project with
+an AMP Rotator has, for some of its domains, an AMP domain of the day — the
+host a visitor coming from the SERP actually lands on. So for each country,
+every domain found there is followed by ITS AMP domain (amp_of / add_amp): the
+rule for what goes stays "what the SERPs of that country showed", and the AMP
+domain rides with the domain that was shown. An AMP domain whose main domain
+was not found in a country is not sent for it. Nothing has to be switched on:
+a project without a rotator simply has no AMP domains to add.
+
 The connection (URL, token) is global: Settings → Tools Connection. The token
 is stored like the SERP providers' and never returned to the browser. No
 address is built in: the Proxy Checker is somebody's own service, so both are
@@ -68,7 +78,9 @@ from sqlalchemy.orm import Session
 from ._redact import redact
 from .app_settings import _get, _set
 from .db import SessionLocal
-from .models import DomainProxyCheck, Job, JobRun, Project, Result, ToolDelivery
+from .models import (
+    AmpDomain, DomainProxyCheck, DomainProxyCheckLog, Job, JobRun, Project, Result, ToolDelivery,
+)
 from .positions_csv import counted_host
 
 log = logging.getLogger(__name__)
@@ -84,6 +96,12 @@ _HOSTS_PER_QUERY = 400
 #: Stands where the token was, in everything that is stored or shown.
 TOKEN_MARK = "<token>"
 _MASKABLE = 8
+#: How long an answer is waited for. The Proxy Checker runs its check through
+#: the country's proxies BEFORE it answers: the first two real requests that
+#: got through (2026-10-13, 3 domains each) had no answer after 30 seconds
+#: (ReadTimeout). Five minutes, with a short limit on merely connecting so an
+#: unreachable server is still reported quickly.
+TIMEOUT = httpx.Timeout(300.0, connect=15.0)
 #: How much of an answer's body is kept. A JSON reply or a firewall's error
 #: page fits many times over; one that does not is cut, and says so.
 RAW_BODY_LIMIT = 20_000
@@ -170,6 +188,24 @@ def geos_to_send(project_geos: list[str], chosen: list[str] | None) -> list[str]
 
 def keep_geos(by_geo: dict[str, list[str]], allowed: list[str]) -> dict[str, list[str]]:
     return {geo: domains for geo, domains in by_geo.items() if geo in set(allowed)}
+
+
+def add_amp(by_geo: dict[str, list[str]], amp: dict[str, list[str]]) -> dict[str, list[str]]:
+    """Each country's domains, followed by the AMP domains of those domains.
+
+    `amp` maps a domain to its AMP domain(s) of the day. Only the domains
+    found in a country bring their AMP domains along, once each, after the
+    found ones — so a request reads "what was shown, then where it leads".
+    """
+    out: dict[str, list[str]] = {}
+    for geo, domains in by_geo.items():
+        extra: list[str] = []
+        for domain in domains:
+            for host in amp.get(domain, []):
+                if host not in domains and host not in extra:
+                    extra.append(host)
+        out[geo] = list(domains) + extra
+    return out
 
 
 def build_payload(geo: str, domains: list[str]) -> dict:
@@ -294,6 +330,29 @@ def found_by_geo(db: Session, project: Project, *, run_id: int | None = None,
     return group_found(rows, domains)
 
 
+def amp_of(db: Session, project_id: int) -> dict[str, list[str]]:
+    """Domain → its AMP domain(s) today, as the project's AMP Rotators last
+    answered. Usually one; two rotators naming the same site give two."""
+    out: dict[str, list[str]] = {}
+    rows = (db.query(AmpDomain.domain, AmpDomain.amp_domain)
+            .filter(AmpDomain.project_id == project_id)
+            .order_by(AmpDomain.domain, AmpDomain.id).all())
+    for domain, host in rows:
+        if host not in out.setdefault(domain, []):
+            out[domain].append(host)
+    return out
+
+
+def to_send(db: Session, project: Project, *, run_id: int | None = None,
+            since: datetime | None = None, geos: list[str] | None = None) -> dict[str, list[str]]:
+    """What a send carries, by country: the project's domains found in the
+    SERPs, in the countries given (default: the ones chosen for sending), each
+    followed by its AMP domain of the day."""
+    found = found_by_geo(db, project, run_id=run_id, since=since)
+    allowed = send_geos(db, project) if geos is None else geos
+    return add_amp(keep_geos(found, allowed), amp_of(db, project.id))
+
+
 def recent_window() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=WINDOW_HOURS)
 
@@ -333,11 +392,17 @@ def read_answer(data: object, sent: list[str]) -> dict[str, dict[str, str]]:
     return found
 
 
-def record_statuses(db: Session, geo: str, sent: list[str], data: object, delivery_id: int | None) -> int:
-    """Keep what an answer said about the domains it was asked about: one row
-    per (country, domain), the newest answer replacing the one before — its
-    whole set of proxies, so a proxy the Proxy Checker has stopped reporting
-    does not linger with a stale status. Not committed here."""
+def record_statuses(db: Session, geo: str, sent: list[str], data: object, delivery_id: int | None, *,
+                    project_id: int | None = None, amp_parents: dict[str, str] | None = None) -> int:
+    """Keep what an answer said about the domains it was asked about.
+
+    Twice: the newest answer per (country, domain), replacing the one before
+    with its whole set of proxies, so a proxy the Proxy Checker has stopped
+    reporting does not linger with a stale status; and a line in the log, so
+    "what did not pass on the 10th" still has an answer on the 13th.
+    `amp_parents` maps each AMP domain in this request to the project domain
+    it was the AMP domain of — recorded with the line, because tomorrow that
+    AMP domain belongs to nothing. Not committed here."""
     answered = read_answer(data, sent)
     if not answered:
         return 0
@@ -350,6 +415,9 @@ def record_statuses(db: Session, geo: str, sent: list[str], data: object, delive
             row = DomainProxyCheck(geo=geo, domain=domain)
             db.add(row)
         row.statuses, row.checked_at, row.delivery_id = statuses, now, delivery_id
+        db.add(DomainProxyCheckLog(
+            project_id=project_id, geo=geo, domain=domain, main_domain=(amp_parents or {}).get(domain),
+            statuses=statuses, checked_at=now, delivery_id=delivery_id))
     return len(answered)
 
 
@@ -366,7 +434,7 @@ def send_one(url: str, token: str, geo: str, domains: list[str],
     request = {"method": "POST", "url": url, "body": body,
                "headers": [list(h) for h in request_headers(TOKEN_MARK)]}
     own = client is None
-    client = client or httpx.Client(timeout=30)
+    client = client or httpx.Client(timeout=TIMEOUT)
     try:
         r = client.post(url, content=body.encode("utf-8"), headers=dict(headers))
         try:
@@ -391,6 +459,9 @@ def deliver(db: Session, project: Project, by_geo: dict[str, list[str]], *, trig
     conn = connection()
     if not conn["url"] or not conn["token"] or not by_geo:
         return []
+    # Which of the domains going out are AMP domains, and of what: the same
+    # mapping that put them in the list a moment ago.
+    amp_parents = {host: domain for domain, hosts in amp_of(db, project.id).items() for host in hosts}
     out = []
     for geo, domains in by_geo.items():
         sent = send_one(conn["url"], conn["token"], geo, domains, client)
@@ -401,7 +472,8 @@ def deliver(db: Session, project: Project, by_geo: dict[str, list[str]], *, trig
         out.append(row)
         if sent.ok and sent.data is not None:
             db.flush()               # the row's id, for the statuses to point back at
-            record_statuses(db, geo, domains, sent.data, row.id)
+            record_statuses(db, geo, domains, sent.data, row.id, project_id=project.id,
+                            amp_parents={d: amp_parents[d] for d in domains if d in amp_parents})
         if not sent.ok:
             log.warning("proxy checker refused %s for project %s: %s %s",
                         geo, project.id, sent.status_code, sent.excerpt[:120])
@@ -420,8 +492,7 @@ def after_run(run_id: int) -> None:
         project = db.get(Project, job.project_id) if job and job.project_id else None
         if project is None or project.proxy_checker_mode != "after_run":
             return
-        found = keep_geos(found_by_geo(db, project, run_id=run_id), send_geos(db, project))
-        deliver(db, project, found, trigger="after_run", run_id=run_id)
+        deliver(db, project, to_send(db, project, run_id=run_id), trigger="after_run", run_id=run_id)
     except Exception:  # noqa: BLE001
         log.exception("proxy checker: sending after run %s failed", run_id)
     finally:
@@ -436,8 +507,7 @@ def send_recent(project_id: int, trigger: str) -> list[ToolDelivery]:
         project = db.get(Project, project_id)
         if project is None:
             return []
-        found = keep_geos(found_by_geo(db, project, since=recent_window()), send_geos(db, project))
-        rows = deliver(db, project, found, trigger=trigger)
+        rows = deliver(db, project, to_send(db, project, since=recent_window()), trigger=trigger)
         for r in rows:
             db.refresh(r)
             db.expunge(r)

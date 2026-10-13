@@ -80,6 +80,70 @@ def in_serps(positions: dict, geos: list[str]) -> list[dict]:
     ]
 
 
+def amp_rows(rows: list[dict], amp: dict[str, list[str]]) -> list[dict]:
+    """The AMP side of the table: one row per (country, AMP domain) for every
+    row whose domain has an AMP domain today.
+
+    An AMP domain is not looked for in the SERPs itself — it changes daily,
+    and the SERP shows the main domain. It is "in the SERPs" of a country
+    because its main domain is, so the row carries the main domain's standing
+    there (keywords, best position, last seen) and names that domain.
+    """
+    out: list[dict] = []
+    for r in rows:
+        for host in amp.get(r["domain"], []):
+            out.append({
+                "geo": r["geo"], "domain": host, "main_domain": r["domain"],
+                "keywords": r["keywords"], "engines": r["engines"],
+                "best_position": r["best_position"], "best_keyword": r["best_keyword"],
+                "best_engine": r["best_engine"], "last_seen": r["last_seen"],
+            })
+    return out
+
+
+#: A check's "where does it rank" is looked up this many days back from the end
+#: of the period: a domain is sent to the Proxy Checker because a SERP showed
+#: it, but that SERP may have been read the evening before the check.
+STANDING_DAYS = 7
+
+
+def not_passing(checks: list[dict], standing: dict[tuple[str, str], dict]) -> tuple[list[dict], list[dict]]:
+    """What did not pass in a period: (main rows, AMP rows).
+
+    `checks` are the newest answers INSIDE the period, one per (country,
+    domain) — {"geo", "domain", "main_domain", "statuses", "checked_at"}, with
+    `main_domain` set on a domain that was sent as an AMP domain. The period
+    is about when the proxies answered: a domain that failed on Monday and
+    passed on Wednesday is not listed for the week, and one checked today is
+    today's whenever its SERP was read.
+
+    `standing` says where a project domain ranks in a country (in_serps rows
+    by (country, domain)); an AMP row takes its main domain's. A check of a
+    domain with no standing on record is still listed — it was sent because a
+    SERP showed it — with that part empty.
+    """
+    main: list[dict] = []
+    amp: list[dict] = []
+    for check in checks:
+        proxies = dict(check["statuses"] or {})
+        if kind_of(proxies) != NOT_PASS:
+            continue
+        site = check.get("main_domain") or check["domain"]
+        where = standing.get((check["geo"], site)) or {}
+        row = {
+            "geo": check["geo"], "domain": check["domain"],
+            "keywords": where.get("keywords"), "engines": where.get("engines") or [],
+            "best_position": where.get("best_position"), "best_keyword": where.get("best_keyword"),
+            "best_engine": where.get("best_engine"), "last_seen": where.get("last_seen"),
+            "proxies": proxies, "checked_at": check["checked_at"], "kind": NOT_PASS,
+        }
+        if check.get("main_domain"):
+            amp.append({**row, "main_domain": check["main_domain"]})
+        else:
+            main.append(row)
+    return ordered(main), ordered(amp)
+
+
 def passed(status: str) -> bool:
     return status.strip().upper() == PASS_WORD
 

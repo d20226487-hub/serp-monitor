@@ -21,7 +21,8 @@ import {
 } from "@/components/ui";
 import { Icon, IconName } from "@/components/icons";
 import { VisibilitySection } from "@/components/visibility-weights";
-import { AmpRotatorPlaceholder, ProxyCheckerSettings } from "@/components/proxy-checker";
+import { ProxyCheckerSettings } from "@/components/proxy-checker";
+import { AmpRotatorSettings } from "@/components/amp-rotator";
 import { OpportunityFormula } from "@/lib/opportunity";
 
 /** Settings are grouped by the part of the app they configure (user,
@@ -254,7 +255,7 @@ export default function SettingsPage() {
         className="space-y-6"
       >
         <ProxyCheckerSettings onError={setErr} />
-        <AmpRotatorPlaceholder />
+        <AmpRotatorSettings onError={setErr} />
       </div>
 
       {/* ---------------- SERP Monitor: SERP APIs, prices, locations ---------------- */}

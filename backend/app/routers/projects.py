@@ -18,9 +18,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from ..amp_rotator import remove_project as remove_amp_endpoints
 from ..db import get_db
 from ..models import Job, Project
 from ..providers.domain_paste import clean_domain_list
+from ..scheduler import remove_amp_rotator_schedule
 from ..schemas import ProjectCreate, ProjectOut, ProjectUpdate
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -180,6 +182,11 @@ def delete_project(project_id: int, db: Session = Depends(get_db)):
         .filter(Job.project_id == project_id)
         .update({Job.project_id: None}, synchronize_session=False)
     )
+    # The project's AMP Rotator endpoints go with it, for the same reason they
+    # are removed by hand: nothing cascades here.
+    amp_endpoint_ids = remove_amp_endpoints(db, project_id)
     db.delete(project)
     db.commit()
+    for endpoint_id in amp_endpoint_ids:
+        remove_amp_rotator_schedule(endpoint_id)
     return {"ok": True, "jobs_ungrouped": freed}

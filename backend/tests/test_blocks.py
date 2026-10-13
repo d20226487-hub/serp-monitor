@@ -5,10 +5,10 @@ by each proxy")."""
 from datetime import datetime
 
 from app.blocks import (
-    DEMO_NOT_PASS, NOT_PASS, PASS, UNCHECKED, counts, demo_statuses, in_serps, kind_of, ordered,
-    proxies_by_geo,
+    DEMO_NOT_PASS, NOT_PASS, PASS, UNCHECKED, amp_rows, counts, demo_statuses, in_serps, kind_of,
+    not_passing, ordered, proxies_by_geo,
 )
-from app.proxy_checker import read_answer
+from app.proxy_checker import add_amp, read_answer
 
 
 def serp(engine, country, rows):
@@ -157,3 +157,92 @@ class TestDemo:
                 failing.add(sum(s != "PASS" for s in proxies.values()))
         # Rows with one proxy down and rows with all of them down both appear.
         assert {1, 3} <= failing
+
+
+AMP = {"zazino.kg": ["amp-one.example"], "lucky-zazino.pro": ["amp-two.example", "amp-three.example"]}
+
+
+class TestAmp:
+    """The AMP domain of the day rides with its main domain (user, 2026-10-13:
+    "the AMP domains will be sent to the Proxy Checker"; the Overview shows
+    "one table for non-AMP and one for AMP")."""
+
+    def test_each_countrys_found_domains_are_followed_by_their_amp_domains(self):
+        found = {"KG": ["lucky-zazino.pro", "zazino.kg"], "KZ": ["zazino.kg"], "UZ": ["zazino.online"]}
+        assert add_amp(found, AMP) == {
+            "KG": ["lucky-zazino.pro", "zazino.kg", "amp-two.example", "amp-three.example", "amp-one.example"],
+            "KZ": ["zazino.kg", "amp-one.example"],
+            "UZ": ["zazino.online"],                 # no AMP domain: sent as before
+        }
+
+    def test_an_amp_domain_is_not_sent_for_a_country_its_main_domain_was_not_found_in(self):
+        assert "amp-two.example" not in add_amp({"KZ": ["zazino.kg"]}, AMP)["KZ"]
+
+    def test_a_project_without_a_rotator_sends_exactly_what_it_did(self):
+        found = {"KG": ["zazino.kg"]}
+        assert add_amp(found, {}) == found
+
+    def test_nothing_is_sent_twice(self):
+        # Two domains sharing one AMP domain, and an AMP domain that is itself a found domain.
+        amp = {"a.example": ["shared.example"], "b.example": ["shared.example"], "c.example": ["a.example"]}
+        assert add_amp({"KG": ["a.example", "b.example", "c.example"]}, amp) == {
+            "KG": ["a.example", "b.example", "c.example", "shared.example"]}
+
+    def test_an_amp_row_carries_its_main_domains_standing(self):
+        rows = in_serps(POSITIONS, ["KG", "KZ"])
+        got = {(r["geo"], r["domain"]): r for r in amp_rows(rows, AMP)}
+        assert set(got) == {("KG", "amp-one.example"), ("KZ", "amp-one.example"),
+                            ("KG", "amp-two.example"), ("KG", "amp-three.example")}
+        kg = got[("KG", "amp-one.example")]
+        assert kg["main_domain"] == "zazino.kg"
+        assert (kg["best_position"], kg["keywords"], kg["last_seen"]) == (1, 2, TUE)
+        assert got[("KZ", "amp-one.example")]["best_position"] == 7
+
+    def test_no_amp_domains_no_amp_rows(self):
+        assert amp_rows(in_serps(POSITIONS, ["KG"]), {}) == []
+
+
+class TestNotPassingInAPeriod:
+    """The Overview's list for a chosen day or period (user, 2026-10-13: "let
+    the user select the date to see the domains that do not pass in Blocks").
+    The period is about when the proxies answered."""
+
+    STANDING = {(r["geo"], r["domain"]): r for r in in_serps(POSITIONS, ["KG", "KZ"])}
+    OK = {"KG - Provider A": "PASS", "KG - Provider B": "PASS"}
+    DOWN = {"KG - Provider A": "PASS", "KG - Provider B": "FAIL"}
+
+    def check(self, domain, statuses, main_domain=None, geo="KG", when=TUE):
+        return {"geo": geo, "domain": domain, "main_domain": main_domain, "statuses": statuses, "checked_at": when}
+
+    def test_only_the_checks_that_did_not_pass_are_listed(self):
+        main, amp = not_passing([self.check("zazino.kg", self.DOWN), self.check("lucky-zazino.pro", self.OK)], self.STANDING)
+        assert [(r["geo"], r["domain"]) for r in main] == [("KG", "zazino.kg")]
+        assert main[0]["proxies"] == self.DOWN and main[0]["checked_at"] == TUE and main[0]["kind"] == NOT_PASS
+        assert (main[0]["best_position"], main[0]["keywords"]) == (1, 2)     # and where it ranks
+        assert amp == []
+
+    def test_nothing_checked_in_the_period_is_nothing_listed(self):
+        assert not_passing([], self.STANDING) == ([], [])
+
+    def test_a_checked_domain_with_no_standing_on_record_is_still_listed(self):
+        # It was sent because a SERP showed it; that the SERP is older than
+        # the lookup window is no reason to hide a failing domain.
+        main, _amp = not_passing([self.check("older.example", self.DOWN)], self.STANDING)
+        assert [r["domain"] for r in main] == ["older.example"]
+        assert main[0]["best_position"] is None and main[0]["engines"] == []
+
+    def test_an_amp_domain_goes_to_the_amp_table_under_the_site_it_was_the_amp_domain_of(self):
+        checks = [
+            self.check("old-amp.example", self.DOWN, main_domain="zazino.kg", when=MON),
+            self.check("fine-amp.example", self.OK, main_domain="lucky-zazino.pro", when=MON),
+        ]
+        main, amp = not_passing(checks, self.STANDING)
+        assert main == []
+        assert [(r["domain"], r["main_domain"]) for r in amp] == [("old-amp.example", "zazino.kg")]
+        assert amp[0]["best_position"] == 1 and amp[0]["keywords"] == 2      # the site's standing
+        assert amp[0]["checked_at"] == MON
+
+    def test_the_worst_come_first(self):
+        both = {"KG - Provider A": "FAIL", "KG - Provider B": "FAIL"}
+        main, _amp = not_passing([self.check("zazino.kg", self.DOWN), self.check("lucky-zazino.pro", both)], self.STANDING)
+        assert [r["domain"] for r in main] == ["lucky-zazino.pro", "zazino.kg"]

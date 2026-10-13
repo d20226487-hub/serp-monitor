@@ -11,8 +11,10 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .db import SessionLocal
-from .models import Job, JobRun, Project
+from .models import AmpEndpoint, Job, JobRun, Project
 from .proxy_checker import daily_send, valid_time
+from .amp_rotator import daily_refresh as amp_daily_refresh
+from .amp_rotator import endpoint_time as amp_endpoint_time
 from .tasks import create_run, run_job_sync
 
 log = logging.getLogger(__name__)
@@ -137,9 +139,62 @@ def proxy_checker_next_run(project_id: int) -> str | None:
     return ap.next_run_time.isoformat() if ap and ap.next_run_time else None
 
 
+def _amp_ap_id(endpoint_id: int) -> str:
+    return f"amp-rotator-{endpoint_id}"
+
+
+def upsert_amp_rotator_schedule(endpoint_id: int, time_utc: str) -> None:
+    """One tick a day per AMP Rotator endpoint, at that endpoint's own time
+    (UTC, like every cron here). See amp_rotator.py."""
+    hour, minute = (int(x) for x in time_utc.split(":"))
+    get_scheduler().add_job(
+        amp_daily_refresh,
+        trigger=CronTrigger(hour=hour, minute=minute, timezone="UTC"),
+        id=_amp_ap_id(endpoint_id),
+        name=_amp_ap_id(endpoint_id),
+        args=[endpoint_id],
+        replace_existing=True,
+        # A fetch missed while the host slept still happens when it wakes, once.
+        misfire_grace_time=None,
+        coalesce=True,
+        max_instances=1,
+    )
+
+
+def remove_amp_rotator_schedule(endpoint_id: int) -> None:
+    try:
+        get_scheduler().remove_job(_amp_ap_id(endpoint_id))
+    except Exception:
+        pass
+
+
+def amp_rotator_next_run(endpoint_id: int) -> str | None:
+    ap = get_scheduler().get_job(_amp_ap_id(endpoint_id))
+    return ap.next_run_time.isoformat() if ap and ap.next_run_time else None
+
+
 def reload_tool_schedules(db: Session) -> None:
     for project in db.query(Project).all():
         upsert_proxy_checker_schedule(project)
+    for endpoint in db.query(AmpEndpoint).all():
+        upsert_amp_rotator_schedule(endpoint.id, amp_endpoint_time(endpoint))
+
+
+def prune_amp_rotator_schedules(db: Session) -> int:
+    """Take off the scheduler every AMP Rotator tick whose endpoint is gone.
+
+    The job store is the database, so a tick outlives a restart; one left
+    behind would fire every day for nothing. Call AFTER the scheduler has
+    started: before that it cannot list what the store holds.
+    """
+    keep = {_amp_ap_id(e.id) for e in db.query(AmpEndpoint.id).all()}
+    gone = [j.id for j in get_scheduler().get_jobs() if j.id.startswith("amp-rotator-") and j.id not in keep]
+    for ap_id in gone:
+        try:
+            get_scheduler().remove_job(ap_id)
+        except Exception:
+            pass
+    return len(gone)
 
 
 def schedule_info(job_id: int) -> dict:

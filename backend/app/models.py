@@ -303,6 +303,72 @@ class DomainProxyCheck(Base):
         ForeignKey("tool_deliveries.id", ondelete="SET NULL"), nullable=True)
 
 
+class DomainProxyCheckLog(Base):
+    """Every answer the Proxy Checker gave about a domain in a country, kept —
+    where DomainProxyCheck holds only the newest. The Overview reads it to
+    say what did not pass on a chosen day or in a chosen period.
+
+    `main_domain` is set when the domain was sent as an AMP domain: the
+    project domain it was the AMP domain OF on that day. AMP domains change
+    daily and only today's mapping is kept elsewhere, so without this a past
+    AMP domain could not be told from a main one, nor tied to its site.
+    """
+    __tablename__ = "domain_proxy_check_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    geo: Mapped[str] = mapped_column(String(8), index=True)
+    domain: Mapped[str] = mapped_column(String(255), index=True)
+    main_domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    #: Proxy → status, as received.
+    statuses: Mapped[dict] = mapped_column(JSON, default=dict)
+    checked_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    delivery_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class AmpEndpoint(Base):
+    """One AMP Rotator a project asks for today's AMP domain of each of its
+    domains (see amp_rotator.py). Set in Settings → Tools Connection, by
+    choosing the project. A project may have more than one: a rotator serves
+    only the sites in its own config. The login and password are NOT here:
+    every rotator takes the same pair, kept once for all of them."""
+    __tablename__ = "amp_endpoints"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    url: Mapped[str] = mapped_column(String(500))
+    #: When this rotator is asked each day, HH:MM in UTC. Each endpoint has its
+    #: own: rotators need not all rotate at the same hour.
+    fetch_time: Mapped[str] = mapped_column(String(5), default="02:00")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    # How the latest fetch went. All NULL until the first one.
+    fetched_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    ok: Mapped[bool | None] = mapped_column(nullable=True)
+    status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: Why it failed, without the credentials.
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: How many of the project's domains were asked about.
+    sent: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class AmpDomain(Base):
+    """The AMP domain a rotator named for one of the project's domains, the
+    last time it was asked. One row per (endpoint, domain): the latest answer,
+    not a history. A domain the rotator stops naming is removed."""
+    __tablename__ = "amp_domains"
+    __table_args__ = (UniqueConstraint("endpoint_id", "domain", name="uq_amp_domains_endpoint_domain"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    endpoint_id: Mapped[int] = mapped_column(ForeignKey("amp_endpoints.id", ondelete="CASCADE"), index=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    domain: Mapped[str] = mapped_column(String(255))
+    amp_domain: Mapped[str] = mapped_column(String(255))
+    #: Since when this AMP domain has been the answer for the domain. Rotation
+    #: is daily, so this is normally the day it became active.
+    since: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class RunUrlMetric(Base):
     """Ahrefs metrics for one unique URL within one run (analyzer mode).
 

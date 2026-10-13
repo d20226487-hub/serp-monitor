@@ -1,9 +1,10 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import { api, BlockKind, BlockRow, ProjectBlocks } from "@/lib/api";
+import { useEffect, useMemo, useState } from "react";
+import { api, BlockKind, BlockRow, ProjectBlocks, ProjectFailing } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { Button, Callout, Card, Empty, Pill, SectionTitle } from "@/components/ui";
 import { Icon } from "@/components/icons";
+import { RANGE_PRESETS, RangePreset, customRange, rangeFor, toInputValue, toQuery } from "@/lib/date-range";
 
 /**
  * Which of the project's domains are in the SERPs, and the status each proxy
@@ -17,9 +18,16 @@ import { Icon } from "@/components/icons";
  * blocked or not blocked we display the status by each proxy". Where a domain
  * ranks comes from the same reading the Positions tab shows.
  *
- * Until a proxy has reported on any of the rows, the table opens on DEMO
- * statuses — the user asked to see it on mock data — under a banner that says
- * so. The rows themselves are always real.
+ * Two kinds of rows, in two tables (user, 2026-10-13: "One table for non-AMP
+ * and one for AMP"): the project's own domains, and the AMP domain of the day
+ * of each of them — the host a visitor from the SERP actually lands on. An
+ * AMP row stands where its main domain stands and names it.
+ *
+ * The table always opens on the REAL data. Demo statuses exist — the user
+ * asked to see the table on mock data before the Proxy Checker had answered —
+ * but only behind a button, never by default: opening on made-up statuses
+ * was "very misleading" (user, 2026-10-13). The rows themselves are always
+ * real.
  */
 
 const KINDS: BlockKind[] = ["not_pass", "unchecked", "pass"];
@@ -38,19 +46,84 @@ function proxyLabel(name: string, geo: string): string {
   const prefix = new RegExp(`^${geo}\\s*[-–—:]\\s*`, "i");
   return name.replace(prefix, "") || name;
 }
+const isPass = (status: string) => status.trim().toUpperCase() === "PASS";
 
 const SEG = "border-l px-2.5 py-1 text-xs transition first:border-l-0 dark:border-slate-700";
 const SEG_ON = "bg-slate-900 font-medium text-white dark:bg-slate-100 dark:text-slate-900";
 const SEG_OFF = "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800";
 const TH = "px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400";
 const TD = "px-3 py-2 align-top";
+const HINT = "text-xs text-slate-500 dark:text-slate-400";
+const GEO_TAG = "rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200";
 
 /** One proxy's word on one domain, as given. PASS is the one status known to
  *  mean the proxy reached the site; anything else is shown as a warning. */
 function StatusCell({ status }: { status: string | undefined }) {
   if (!status) return <span className="text-slate-400 dark:text-slate-600">—</span>;
-  const passed = status.trim().toUpperCase() === "PASS";
-  return <Pill tone={passed ? "good" : "bad"} icon={passed ? "check" : "cross"}>{status}</Pill>;
+  return <Pill tone={isPass(status) ? "good" : "bad"} icon={isPass(status) ? "check" : "cross"}>{status}</Pill>;
+}
+
+/** Where the domain ranks: its best position, on which query and engines. */
+function Standing({ r }: { r: BlockRow }) {
+  const { t } = useT();
+  // No SERP on record around the check shows it: nothing to say here.
+  if (r.best_position === null || r.best_position === undefined) {
+    return <span className="text-slate-400 dark:text-slate-600">—</span>;
+  }
+  return (
+    <>
+      <span className="font-semibold tabular-nums">#{r.best_position}</span>
+      <div className={`mt-0.5 ${HINT}`}>
+        {r.best_keyword}
+        {" · "}
+        {r.engines.map(e => (e === "yandex" ? t.variantLabel.yandex : t.variantLabel.google)).join(", ")}
+      </div>
+    </>
+  );
+}
+
+/** One country's matrix: a row per domain, a column per proxy. */
+function StatusTable({ geo, rows, proxies, amp, note }: {
+  geo: string; rows: BlockRow[]; proxies: string[]; amp: boolean; note: (r: BlockRow) => string;
+}) {
+  const { t } = useT();
+  const x = t.tools.blocks;
+  return (
+    <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+      <table className="w-full text-sm">
+        <thead className="bg-slate-50 dark:bg-slate-900/50">
+          <tr>
+            <th className={TH}>{amp ? x.col.ampDomain : x.col.domain}</th>
+            {/* One column per proxy of this country, named as the Proxy
+                Checker names it, minus the country it shares with the table. */}
+            {proxies.map(p => (
+              <th key={p} className={`${TH} normal-case tracking-normal`} title={p}>{proxyLabel(p, geo)}</th>
+            ))}
+            <th className={`${TH} text-right`} title={x.keywordsHint}>{x.col.keywords}</th>
+            <th className={TH}>{x.col.best}</th>
+            <th className={TH}>{x.col.seen}</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+          {rows.map(r => (
+            <tr key={`${r.domain}|${r.main_domain ?? ""}`}>
+              <td className={TD}>
+                <div className="break-all font-mono text-xs">{r.domain}</div>
+                {r.main_domain && <div className={`mt-0.5 break-all ${HINT}`}>{x.ampOf(r.main_domain)}</div>}
+                <div className={`mt-0.5 ${HINT}`}>{note(r)}</div>
+              </td>
+              {proxies.map(p => (
+                <td key={p} className={`${TD} whitespace-nowrap`}><StatusCell status={r.proxies?.[p]} /></td>
+              ))}
+              <td className={`${TD} text-right tabular-nums`}>{r.keywords}</td>
+              <td className={TD}><Standing r={r} /></td>
+              <td className={`${TD} whitespace-nowrap tabular-nums`}>{shortTime(r.last_seen)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 export function ProjectBlocksCard({ projectId, reloadKey = 0 }: {
@@ -68,23 +141,15 @@ export function ProjectBlocksCard({ projectId, reloadKey = 0 }: {
   const [geo, setGeo] = useState("all");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  // Whether the first answer has been looked at: it decides if the table
-  // opens on demo statuses, and after that the choice is the reader's.
-  const decided = useRef(false);
 
+  // `demo` is false until the reader presses "show an example": the table
+  // never switches to made-up statuses on its own.
   useEffect(() => {
     let stale = false;
     setLoading(true);
     api.getProjectBlocks(projectId, days, demo)
       .then(next => {
         if (stale) return;
-        if (!decided.current) {
-          decided.current = true;
-          if (!next.has_real && next.rows.length > 0) {
-            setDemo(true);            // asked again with the example on
-            return;
-          }
-        }
         setData(next);
         setErr(null);
       })
@@ -95,11 +160,22 @@ export function ProjectBlocksCard({ projectId, reloadKey = 0 }: {
 
   if (!data) return err ? <Callout tone="bad" icon="alert">{err}</Callout> : null;
 
-  const shown = data.rows.filter(r => (kind === "all" || r.kind === kind) && (geo === "all" || r.geo === geo));
-  const geosWithRows = data.geos.filter(g => data.rows.some(r => r.geo === g));
+  const keep = (r: BlockRow) => (kind === "all" || r.kind === kind) && (geo === "all" || r.geo === geo);
+  const all = [...data.rows, ...data.amp_rows];
+  const geosWithRows = data.geos.filter(g => all.some(r => r.geo === g));
   const sections = geosWithRows
-    .map(g => ({ geo: g, rows: shown.filter(r => r.geo === g), proxies: data.proxies[g] ?? [] }))
-    .filter(s => s.rows.length > 0);
+    .map(g => ({
+      geo: g,
+      main: data.rows.filter(r => r.geo === g && keep(r)), proxies: data.proxies[g] ?? [],
+      amp: data.amp_rows.filter(r => r.geo === g && keep(r)), ampProxies: data.amp_proxies[g] ?? [],
+    }))
+    .filter(s => s.main.length + s.amp.length > 0);
+  // No proxy has reported on anything in this period (and the example is off):
+  // there is a notice to show, and no table worth showing.
+  const nothingChecked = !data.demo && !data.has_real && data.rows.length > 0;
+  // The filter counts cover both tables: the buttons filter both.
+  const count = (k: "all" | BlockKind) =>
+    k === "all" ? all.length : data.counts[k] + data.amp_counts[k];
 
   /** Under the domain: when the proxies reported, or why none has. */
   function note(r: BlockRow): string {
@@ -148,7 +224,9 @@ export function ProjectBlocksCard({ projectId, reloadKey = 0 }: {
       }
     >
       <div className="space-y-4">
-        <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">{x.help}</p>
+        <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+          {x.help}{data.has_amp && <> {x.helpAmp}</>}
+        </p>
 
         {data.demo && (
           <Callout tone="warn" icon="alert" title={x.demoTitle}>
@@ -156,7 +234,7 @@ export function ProjectBlocksCard({ projectId, reloadKey = 0 }: {
             <Button size="sm" onClick={() => setDemo(false)}>{x.demoOff}</Button>
           </Callout>
         )}
-        {!data.demo && !data.has_real && data.rows.length > 0 && (
+        {nothingChecked && (
           <Callout tone="info" icon="info">
             <p>{x.noReports}</p>
             <Button size="sm" onClick={() => setDemo(true)}>{x.demoOn}</Button>
@@ -164,7 +242,9 @@ export function ProjectBlocksCard({ projectId, reloadKey = 0 }: {
         )}
         {err && <Callout tone="bad" icon="alert">{err}</Callout>}
 
-        {data.rows.length === 0 ? (
+        {/* With nothing checked the tables would be rows of dashes: the user
+            asked for the notice alone ("It clutters the UX"). */}
+        {nothingChecked ? null : data.rows.length === 0 ? (
           <Empty>{x.empty(data.window_days)}</Empty>
         ) : (
           <>
@@ -174,24 +254,16 @@ export function ProjectBlocksCard({ projectId, reloadKey = 0 }: {
                 aria-label={x.filterLabel}
                 className="inline-flex overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700"
               >
-                <button
-                  type="button"
-                  onClick={() => setKind("all")}
-                  aria-pressed={kind === "all"}
-                  className={`${SEG} ${kind === "all" ? SEG_ON : SEG_OFF}`}
-                >
-                  {x.all} <span className="opacity-70">{data.counts.in_serps}</span>
-                </button>
-                {KINDS.map(k => (
+                {(["all", ...KINDS] as const).map(k => (
                   <button
                     key={k}
                     type="button"
                     onClick={() => setKind(k)}
                     aria-pressed={kind === k}
-                    title={x.filterHint[k]}
+                    title={k === "all" ? undefined : x.filterHint[k]}
                     className={`${SEG} ${kind === k ? SEG_ON : SEG_OFF}`}
                   >
-                    {x.filter[k]} <span className="opacity-70">{data.counts[k]}</span>
+                    {k === "all" ? x.all : x.filter[k]} <span className="opacity-70">{count(k)}</span>
                   </button>
                 ))}
               </div>
@@ -218,65 +290,213 @@ export function ProjectBlocksCard({ projectId, reloadKey = 0 }: {
 
             {sections.length === 0 && <Empty>{x.emptyFilter}</Empty>}
             {sections.map(s => (
-              <div key={s.geo} className="space-y-1.5">
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                    {s.geo}
-                  </span>
-                  <span className="font-medium">{x.domains(s.rows.length)}</span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
-                    {s.proxies.length > 0 ? x.proxies(s.proxies.length) : x.noProxies}
-                  </span>
-                </div>
-                <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
-                  <table className="w-full text-sm">
-                    <thead className="bg-slate-50 dark:bg-slate-900/50">
-                      <tr>
-                        <th className={TH}>{x.col.domain}</th>
-                        {/* One column per proxy of this country, named as the
-                            Proxy Checker names it, minus the country it shares
-                            with the table. */}
-                        {s.proxies.map(p => (
-                          <th key={p} className={`${TH} normal-case tracking-normal`} title={p}>
-                            {proxyLabel(p, s.geo)}
-                          </th>
-                        ))}
-                        <th className={`${TH} text-right`} title={x.keywordsHint}>{x.col.keywords}</th>
-                        <th className={TH}>{x.col.best}</th>
-                        <th className={TH}>{x.col.seen}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                      {s.rows.map(r => (
-                        <tr key={r.domain}>
-                          <td className={TD}>
-                            <div className="break-all font-mono text-xs">{r.domain}</div>
-                            <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{note(r)}</div>
-                          </td>
-                          {s.proxies.map(p => (
-                            <td key={p} className={`${TD} whitespace-nowrap`}>
-                              <StatusCell status={r.proxies?.[p]} />
-                            </td>
-                          ))}
-                          <td className={`${TD} text-right tabular-nums`}>{r.keywords}</td>
-                          <td className={TD}>
-                            <span className="font-semibold tabular-nums">#{r.best_position}</span>
-                            <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                              {r.best_keyword}
-                              {" · "}
-                              {r.engines.map(e => (e === "yandex" ? t.variantLabel.yandex : t.variantLabel.google)).join(", ")}
-                            </div>
-                          </td>
-                          <td className={`${TD} whitespace-nowrap tabular-nums`}>{shortTime(r.last_seen)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+              <div key={s.geo} className="space-y-3">
+                {s.main.length > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <span className={GEO_TAG}>{s.geo}</span>
+                      <span className="font-medium">{x.domains(s.main.length)}</span>
+                      <span className={HINT}>{s.proxies.length > 0 ? x.proxies(s.proxies.length) : x.noProxies}</span>
+                    </div>
+                    <StatusTable geo={s.geo} rows={s.main} proxies={s.proxies} amp={false} note={note} />
+                  </div>
+                )}
+                {s.amp.length > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <span className={GEO_TAG}>{s.geo}</span>
+                      <Pill tone="info">AMP</Pill>
+                      <span className="font-medium">{x.ampDomains(s.amp.length)}</span>
+                      <span className={HINT}>{s.ampProxies.length > 0 ? x.proxies(s.ampProxies.length) : x.noProxies}</span>
+                    </div>
+                    <StatusTable geo={s.geo} rows={s.amp} proxies={s.ampProxies} amp note={note} />
+                  </div>
+                )}
               </div>
             ))}
           </>
         )}
+      </div>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Overview: what does not pass                                         */
+/* ------------------------------------------------------------------ */
+
+/** The proxies that did not say PASS for a row, each with its own word. */
+function Failing({ r }: { r: BlockRow }) {
+  const bad = Object.entries(r.proxies ?? {}).filter(([, status]) => !isPass(status));
+  return (
+    <div className="flex flex-wrap gap-1">
+      {bad.map(([proxy, status]) => (
+        <Pill key={proxy} tone="bad" icon="cross" title={proxy}>{proxyLabel(proxy, r.geo)}: {status}</Pill>
+      ))}
+    </div>
+  );
+}
+
+function FailingTable({ rows, amp }: { rows: BlockRow[]; amp: boolean }) {
+  const { t } = useT();
+  const x = t.tools.blocks;
+  return (
+    <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+      <table className="w-full text-sm">
+        <thead className="bg-slate-50 dark:bg-slate-900/50">
+          <tr>
+            <th className={TH}>{amp ? x.col.ampDomain : x.col.domain}</th>
+            <th className={TH}>GEO</th>
+            <th className={TH}>{x.col.failing}</th>
+            <th className={TH}>{x.col.best}</th>
+            <th className={TH}>{x.col.checked}</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+          {rows.map(r => (
+            <tr key={`${r.geo}|${r.domain}|${r.main_domain ?? ""}`}>
+              <td className={TD}>
+                <div className="break-all font-mono text-xs">{r.domain}</div>
+                {r.main_domain && <div className={`mt-0.5 break-all ${HINT}`}>{x.ampOf(r.main_domain)}</div>}
+              </td>
+              <td className={`${TD} font-mono`}>{r.geo}</td>
+              <td className={TD}><Failing r={r} /></td>
+              <td className={TD}><Standing r={r} /></td>
+              <td className={`${TD} whitespace-nowrap tabular-nums`}>{shortTime(r.checked_at)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/**
+ * On the Overview, before the scheduled jobs (user, 2026-10-13: "show domains
+ * that do not pass in Blocks. One table for non-AMP and one for AMP … show it
+ * before Задачи по расписанию"): the domains in the SERPs that some proxy did
+ * not pass, and nothing else.
+ *
+ * For a day or a period the reader picks — the same choices as the positions
+ * tables ("let the user select the date to see the domains that do not pass").
+ * Each domain is judged by its newest check INSIDE the period, as each query
+ * there is shown by its newest run. Real data only: there is no demo here.
+ */
+export function ProjectNotPassingCard({ projectId, reloadKey = 0, onOpenBlocks }: {
+  projectId: number;
+  reloadKey?: number;
+  /** Opens the Blocks tab, where every domain and every proxy is. */
+  onOpenBlocks: () => void;
+}) {
+  const { t } = useT();
+  const x = t.tools.blocks;
+  const [preset, setPreset] = useState<RangePreset>("today");
+  const [from, setFrom] = useState(() => toInputValue(new Date()));
+  const [to, setTo] = useState(() => toInputValue(new Date()));
+  const [data, setData] = useState<ProjectFailing | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // null while a custom range is half-typed, which is the signal not to query.
+  const range = useMemo(
+    () => (preset === "custom" ? customRange(from, to) : rangeFor(preset)),
+    [preset, from, to],
+  );
+
+  useEffect(() => {
+    if (!range) return;
+    let stale = false;
+    setLoading(true);
+    api.getProjectFailing(projectId, toQuery(range))
+      .then(next => { if (!stale) { setData(next); setErr(null); } })
+      .catch(e => { if (!stale) setErr(e?.message ?? String(e)); })
+      .finally(() => { if (!stale) setLoading(false); });
+    return () => { stale = true; };
+  }, [projectId, range, reloadKey]);
+
+  const main = data?.rows ?? [];
+  const amp = data?.amp_rows ?? [];
+  const total = main.length + amp.length;
+  const anyChecks = !!data && (data.checked > 0 || data.amp_checked > 0);
+  const link = (
+    <button type="button" onClick={onOpenBlocks} className="underline underline-offset-2">{x.failingLink}</button>
+  );
+  const dateInput = "rounded-lg border border-slate-300 bg-white px-2 py-1 text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100";
+
+  return (
+    <Card
+      title={
+        <span className="flex flex-wrap items-center gap-2">
+          <SectionTitle icon="shield" count={data ? total : undefined}>{x.failingTitle}</SectionTitle>
+          {data && (total > 0
+            ? <Pill tone="bad" icon="alert">{x.failingSome(total)}</Pill>
+            : anyChecks
+              ? <Pill tone="good" icon="check">{x.failingNonePill}</Pill>
+              : <Pill tone="neutral" icon="dash">{x.failingNoChecksPill}</Pill>)}
+        </span>
+      }
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          {loading && <Icon name="refresh" className="h-3 w-3 animate-spin text-slate-500" />}
+          <div
+            role="group"
+            aria-label={x.failingPeriod}
+            className="inline-flex overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700"
+          >
+            {RANGE_PRESETS.map(p => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPreset(p)}
+                aria-pressed={preset === p}
+                className={`${SEG} ${preset === p ? SEG_ON : SEG_OFF}`}
+              >
+                {t.positions.presets[p]}
+              </button>
+            ))}
+          </div>
+          {preset === "custom" && (
+            <span className="inline-flex items-center gap-1.5 text-xs">
+              <input type="date" value={from} onChange={e => setFrom(e.target.value)} className={dateInput} />
+              <span className="text-slate-500 dark:text-slate-400">–</span>
+              <input type="date" value={to} onChange={e => setTo(e.target.value)} className={dateInput} />
+            </span>
+          )}
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        {preset === "custom" && !range && (
+          <div className="rounded-lg border-l-4 border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            {t.positions.badRange}
+          </div>
+        )}
+        {err && <Callout tone="bad" icon="alert">{err}</Callout>}
+        {data && (total === 0 ? (
+          <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+            {anyChecks ? x.failingNone : x.failingNoChecks}
+            {anyChecks && data.unchecked > 0 && <> {x.failingUnchecked(data.unchecked)}</>} {link}
+          </p>
+        ) : (
+          <>
+            <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+              {x.failingHelp}
+              {data.unchecked > 0 && <> {x.failingUnchecked(data.unchecked)}</>} {link}
+            </p>
+            <div className="space-y-1.5">
+              <div className="text-sm font-medium">{x.failingMain(main.length)}</div>
+              {main.length > 0 ? <FailingTable rows={main} amp={false} /> : <p className={HINT}>{x.failingNoneOfKind}</p>}
+            </div>
+            {data.has_amp && (
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Pill tone="info">AMP</Pill>{x.failingAmp(amp.length)}
+                </div>
+                {amp.length > 0 ? <FailingTable rows={amp} amp /> : <p className={HINT}>{x.failingNoneOfKind}</p>}
+              </div>
+            )}
+          </>
+        ))}
       </div>
     </Card>
   );

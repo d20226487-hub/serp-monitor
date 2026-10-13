@@ -6,7 +6,8 @@ import { api, Job, Project, ProjectAverages, ProjectPositions } from "@/lib/api"
 import { useT } from "@/lib/i18n";
 import { AveragePositionTable, PositionTable } from "@/components/position-table";
 import { ProjectProxyCheckerCard } from "@/components/proxy-checker";
-import { ProjectBlocksCard } from "@/components/project-blocks";
+import { ProjectBlocksCard, ProjectNotPassingCard } from "@/components/project-blocks";
+import { ProjectAmpCard } from "@/components/amp-rotator";
 import { ProjectGeosCard } from "@/components/project-geos";
 import { Button, Card, Empty, ErrorNote, SectionTitle, StatTile } from "@/components/ui";
 import { Icon, IconName } from "@/components/icons";
@@ -18,8 +19,11 @@ import {
 /**
  * One project, in three tabs (user, 2026-10-06):
  *
- * - Overview: what the project is and watches — the summary tiles, the jobs
- *   on a schedule, the keywords tracked, and the project's GEOs.
+ * - Overview: what the project is and watches — the summary tiles, then the
+ *   domains that do not pass in Blocks (the user: "show it before Задачи по
+ *   расписанию"), the jobs
+ *   on a schedule, the keywords tracked, today's AMP domains (when the project
+ *   has an AMP Rotator), and the project's GEOs.
  * - Positions: where its domains rank, and the export of that.
  * - Blocks: which of the domains in the SERPs are blocked, and handing them
  *   to the Proxy Checker that says so.
@@ -298,6 +302,15 @@ export default function ProjectPage() {
           </StatTile>
         </div>
 
+        {/* The domains in the SERPs that some proxy did not pass — the project's
+            own, and their AMP domains. Right under the summary tiles and
+            before the scheduled jobs, where the user asked for it. */}
+        <ProjectNotPassingCard
+          projectId={id}
+          reloadKey={geosVersion + sendsVersion}
+          onOpenBlocks={() => pickTab("blocks")}
+        />
+
         <section className="space-y-2">
           <SectionTitle icon="clock" count={scheduled.length}>{t.positions.scheduled}</SectionTitle>
           {scheduled.length === 0 ? (
@@ -352,6 +365,10 @@ export default function ProjectPage() {
             </div>
           )}
         </section>
+
+        {/* Today's AMP domain of each of the project's domains, from its AMP
+            Rotator. Renders nothing for a project that has none. */}
+        <ProjectAmpCard projectId={id} />
 
         {/* The project's GEOs: every country it works in. The Proxy Checker
             card on the Blocks tab chooses among them and re-reads them on save. */}

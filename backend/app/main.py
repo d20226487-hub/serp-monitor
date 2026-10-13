@@ -9,12 +9,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .db import Base, SessionLocal, engine
 from .models import SavedLocation
+from .amp_rotator import catch_up as amp_rotator_catch_up
 from .provider_locations import warm_up as warm_up_locations
 from .routers import (
-    export, jobs, keyword_volumes, locations, project_positions, projects,
-    runs, settings as settings_router, tools,
+    amp_rotator as amp_rotator_router, export, jobs, keyword_volumes, locations, project_positions,
+    projects, runs, settings as settings_router, tools,
 )
-from .scheduler import get_scheduler, reload_all_schedules, reload_tool_schedules
+from .scheduler import (
+    get_scheduler, prune_amp_rotator_schedules, reload_all_schedules, reload_tool_schedules,
+)
 from .tasks import mark_orphaned_runs_failed
 
 
@@ -224,9 +227,17 @@ async def lifespan(_: FastAPI):
         db.close()
     sched = get_scheduler()
     sched.start()
+    db = SessionLocal()
+    try:
+        prune_amp_rotator_schedules(db)
+    finally:
+        db.close()
     # DataForSEO's location list and the saved locations' Google IDs, fetched
     # in the background so the job form never waits for them.
     warm_up_locations()
+    # An AMP Rotator endpoint whose daily fetch came due while the app was not
+    # running: the scheduler cannot fire a tick it was not there for.
+    amp_rotator_catch_up()
     try:
         yield
     finally:
@@ -247,6 +258,7 @@ app.include_router(jobs.router)
 app.include_router(projects.router)
 app.include_router(project_positions.router)
 app.include_router(tools.router)
+app.include_router(amp_rotator_router.router)
 app.include_router(runs.router)
 app.include_router(export.router)
 app.include_router(locations.router)

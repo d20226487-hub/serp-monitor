@@ -294,18 +294,6 @@ export function ProxyCheckerSettings({ onError }: { onError: (msg: string | null
   );
 }
 
-export function AmpRotatorPlaceholder() {
-  const { t } = useT();
-  return (
-    <Card
-      title={<SectionTitle icon="refresh">{t.tools.ampRotator.title}</SectionTitle>}
-      actions={<Pill tone="neutral" icon="clock">{t.tools.ampRotator.soon}</Pill>}
-    >
-      <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-400">{t.tools.ampRotator.later}</p>
-    </Card>
-  );
-}
-
 /* ------------------------------------------------------------------ */
 /* A project's page                                                     */
 /* ------------------------------------------------------------------ */
@@ -470,7 +458,9 @@ export function ProjectProxyCheckerCard({ projectId, reloadKey = 0, onChanged }:
             <div className="flex flex-wrap items-center gap-1.5">
               {data.project_geos.map(g => {
                 const on = chosen.includes(g);
-                const found = (data.preview[g] ?? []).length;
+                // The project's own domains found there; their AMP domains
+                // ride along and are not counted as found.
+                const found = (data.preview[g] ?? []).length - (data.preview_amp[g] ?? []).length;
                 return (
                   <button
                     key={g}
@@ -534,9 +524,8 @@ export function ProjectProxyCheckerCard({ projectId, reloadKey = 0, onChanged }:
           </div>
         )}
 
-        {/* Open by default: the card has the Blocks tab to itself now, and what
-            would go and what came back are what that tab is opened for. They
-            were folded while the card sat above the positions. */}
+        {/* Open by default: what would go is what the "Send now" above it is
+            pressed on. */}
         <details open className="group border-t pt-3 dark:border-slate-800">
           <summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm font-medium">
             <Icon name="chevronRight" className="h-3.5 w-3.5 transition group-open:rotate-90" />
@@ -554,16 +543,30 @@ export function ProjectProxyCheckerCard({ projectId, reloadKey = 0, onChanged }:
                       {geo}
                     </span>
                     <span className="min-w-0 break-all font-mono text-xs leading-relaxed text-slate-700 dark:text-slate-300">
-                      {data.preview[geo].join(", ")}
+                      {data.preview[geo].map((d, i) => (
+                        <span key={d}>
+                          {i > 0 && ", "}
+                          {d}
+                          {(data.preview_amp[geo] ?? []).includes(d) && (
+                            <span className="ml-1 rounded bg-sky-100 px-1 py-px font-sans text-[10px] font-semibold text-sky-800 dark:bg-sky-950 dark:text-sky-300">AMP</span>
+                          )}
+                        </span>
+                      ))}
                     </span>
                   </li>
                 ))}
               </ul>
             )}
+            {geos.some(g => (data.preview_amp[g] ?? []).length > 0) && (
+              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{p.previewAmpNote}</p>
+            )}
           </div>
         </details>
 
-        <details open className="group border-t pt-3 dark:border-slate-800">
+        {/* The log is folded: it is looked at when something went wrong, and
+            open it pushed everything below it down the tab (user, 2026-10-13:
+            "should be hidden by default"). */}
+        <details className="group border-t pt-3 dark:border-slate-800">
           <summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm font-medium">
             <Icon name="chevronRight" className="h-3.5 w-3.5 transition group-open:rotate-90" />
             {s.logTitle}

@@ -47,6 +47,50 @@ export type ToolDelivery = {
 
 export type ProxyCheckerMode = "off" | "after_run" | "daily";
 
+/** One AMP Rotator a project asks for today's AMP domain of each of its
+ *  domains. It has no login of its own: every rotator takes the same pair. */
+export type AmpEndpoint = {
+  id: number;
+  project_id: number;
+  project_name: string | null;
+  url: string;
+  /** When this rotator is asked each day (HH:MM, UTC), and when that is next. */
+  time: string;
+  next_run: string | null;
+  /** How the latest fetch went; all null until the first one. */
+  fetched_at: string | null;
+  ok: boolean | null;
+  status_code: number | null;
+  error: string | null;
+  /** Domains asked about, and how many of them the rotator named an AMP host for. */
+  sent: number | null;
+  amp_count: number;
+};
+/** Settings → Tools Connection. One login and password for every rotator —
+ *  the password itself never comes back, only whether one is saved.
+ *  `default_time` (HH:MM, UTC) is what a new endpoint's request time starts as. */
+export type AmpRotatorState = {
+  username: string;
+  has_password: boolean;
+  /** A login and a password are both saved, so the rotators can be asked. */
+  ready: boolean;
+  default_time: string;
+  endpoints: AmpEndpoint[];
+};
+/** A project's page: its endpoints and what they last answered. */
+export type ProjectAmpDomains = {
+  endpoints: AmpEndpoint[];
+  rows: {
+    domain: string;
+    amp_domain: string;
+    /** Since when this AMP domain has been the answer. */
+    since: string;
+    fetched_at: string;
+    endpoint_id: number;
+    rotator: string | null;
+  }[];
+};
+
 /** The Blocks tab: one of the project's domains, in one country.
  *  `kind` only orders and filters the rows — it is never shown as a label:
  *  what is shown is each proxy's own status. */
@@ -54,6 +98,8 @@ export type BlockKind = "not_pass" | "pass" | "unchecked";
 export type BlockRow = {
   geo: string;
   domain: string;
+  /** On an AMP row: the project domain this is the AMP domain of. */
+  main_domain?: string;
   kind: BlockKind;
   /** Proxy → status, as the Proxy Checker gave them ({"KG - Provider B": "PASS"}).
    *  null while no proxy has reported. */
@@ -67,10 +113,27 @@ export type BlockRow = {
   best_keyword: string | null;
   best_engine: string | null;
   last_seen: string | null;
-  /** Its country is switched on for sending to the Proxy Checker. */
-  sending: boolean;
+  /** Its country is switched on for sending to the Proxy Checker. Not on the
+   *  Overview's period list, which is about what was checked, not what will be. */
+  sending?: boolean;
   /** The last time it was sent for this country, and how that went. */
-  last_send: { at: string; ok: boolean; status_code: number | null } | null;
+  last_send?: { at: string; ok: boolean; status_code: number | null } | null;
+};
+/** The Overview: what did not pass in a chosen period — each domain by its
+ *  newest check inside that period. The period is about when the proxies
+ *  answered, not when the SERP was read. */
+export type ProjectFailing = {
+  /** How many of the project's domains, and how many AMP domains, some proxy
+   *  reported on inside the period. */
+  checked: number;
+  amp_checked: number;
+  /** In the SERPs around then, and not reported on inside the period. */
+  unchecked: number;
+  has_amp: boolean;
+  /** A row's standing (best position and so on) is null when no SERP on
+   *  record around the period shows the domain. */
+  rows: BlockRow[];
+  amp_rows: BlockRow[];
 };
 export type ProjectBlocks = {
   window_days: number;
@@ -84,6 +147,12 @@ export type ProjectBlocks = {
   /** Country → the proxies that reported there: that country's columns. */
   proxies: Record<string, string[]>;
   counts: { in_serps: number; not_pass: number; pass: number; unchecked: number };
+  /** The same for the AMP domains of those rows — the second table.
+   *  `has_amp`: the project's AMP Rotators have named at least one. */
+  has_amp: boolean;
+  amp_proxies: Record<string, string[]>;
+  amp_counts: { in_serps: number; not_pass: number; pass: number; unchecked: number };
+  amp_rows: BlockRow[];
   rows: BlockRow[];
 };
 
@@ -109,9 +178,12 @@ export type ProjectProxyChecker = {
   project_geos: string[];
   /** Which of them are sent. null = all, also ones added to the project later. */
   geos: string[] | null;
-  /** Country → the project's domains found in the SERPs in the last 24 h, for
+  /** Country → what a send would carry: the project's domains found in the
+   *  SERPs in the last 24 h, each followed by its AMP domain of the day. For
    *  every project GEO (the page narrows it to the chosen ones). */
   preview: Record<string, string[]>;
+  /** Country → which of those are AMP domains. */
+  preview_amp: Record<string, string[]>;
   deliveries: ToolDelivery[];
 };
 
@@ -756,8 +828,29 @@ export const api = {
     req<ProxyCheckerConnection>("/settings/tools/proxy-checker", { method: "PUT", body: JSON.stringify(body) }),
   clearProxyChecker: () =>
     req<ProxyCheckerConnection>("/settings/tools/proxy-checker", { method: "DELETE" }),
+  getProjectFailing: (id: number, range: { start: string; end: string }) =>
+    req<ProjectFailing>(
+      `/projects/${id}/blocks/failing?start=${encodeURIComponent(range.start)}&end=${encodeURIComponent(range.end)}`,
+    ),
   getProjectBlocks: (id: number, days: number, demo: boolean) =>
     req<ProjectBlocks>(`/projects/${id}/blocks?days=${days}&demo=${demo ? "true" : "false"}`),
+  getAmpRotator: () => req<AmpRotatorState>("/settings/tools/amp-rotator"),
+  saveAmpCredentials: (body: { username?: string; password?: string }) =>
+    req<AmpRotatorState>("/settings/tools/amp-rotator/credentials", { method: "PUT", body: JSON.stringify(body) }),
+  clearAmpCredentials: () =>
+    req<AmpRotatorState>("/settings/tools/amp-rotator/credentials", { method: "DELETE" }),
+  addAmpEndpoint: (body: { project_id: number; url: string; time: string }) =>
+    req<AmpRotatorState>("/settings/tools/amp-rotator/endpoints", { method: "POST", body: JSON.stringify(body) }),
+  editAmpEndpoint: (
+    id: number, body: { project_id?: number; url?: string; time?: string },
+  ) => req<AmpRotatorState>(`/settings/tools/amp-rotator/endpoints/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteAmpEndpoint: (id: number) =>
+    req<AmpRotatorState>(`/settings/tools/amp-rotator/endpoints/${id}`, { method: "DELETE" }),
+  fetchAmpEndpoint: (id: number) =>
+    req<AmpRotatorState>(`/settings/tools/amp-rotator/endpoints/${id}/fetch`, { method: "POST" }),
+  getProjectAmpDomains: (id: number) => req<ProjectAmpDomains>(`/projects/${id}/amp-domains`),
+  refreshProjectAmpDomains: (id: number) =>
+    req<ProjectAmpDomains>(`/projects/${id}/amp-domains/refresh`, { method: "POST" }),
   getProjectProxyChecker: (id: number) => req<ProjectProxyChecker>(`/projects/${id}/proxy-checker`),
   getCountries: () => req<{ code: string; name: string }[]>("/lookup/countries"),
   getProjectGeos: (id: number) => req<ProjectGeos>(`/projects/${id}/geos`),
