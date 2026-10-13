@@ -146,6 +146,12 @@ class JobRun(Base):
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending|running|done|failed|canceled
     started_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # When the run was uploaded, for a run that was (a SERP export, see
+    # serp_csv.py). `started_at` of such a run is the day its SERPs were READ,
+    # which may be days earlier; the Proxy Checker's "last 24 hours" needs the
+    # moment the data ARRIVED, or a file uploaded now would have nothing to
+    # send. NULL on every run SERP Monitor made itself.
+    uploaded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     queries_total: Mapped[int] = mapped_column(Integer, default=0)
     queries_done: Mapped[int] = mapped_column(Integer, default=0)
     queries_failed: Mapped[int] = mapped_column(Integer, default=0)
@@ -281,32 +287,15 @@ class ToolDelivery(Base):
     sent_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 
-class DomainProxyCheck(Base):
-    """What the Proxy Checker last said about one domain in one country: a
+class DomainProxyCheckLog(Base):
+    """Every answer the Proxy Checker gave about a domain in a country: a
     status per proxy, in its own names and words —
     {"KG - Provider A": "PASS", "KG - Provider B": "PASS", …}.
 
-    One row per (country, domain), overwritten by each newer answer: the
-    question is "how is it now", and the answers themselves stay in
-    tool_deliveries for anyone who needs the history. A fact about the domain,
-    not about a project — two projects sharing a domain share its statuses."""
-    __tablename__ = "domain_proxy_checks"
-    __table_args__ = (UniqueConstraint("geo", "domain", name="uq_domain_proxy_checks_geo_domain"),)
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    geo: Mapped[str] = mapped_column(String(8), index=True)
-    domain: Mapped[str] = mapped_column(String(255), index=True)
-    #: Proxy → status, as received. Several proxies per country.
-    statuses: Mapped[dict] = mapped_column(JSON, default=dict)
-    checked_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
-    delivery_id: Mapped[int | None] = mapped_column(
-        ForeignKey("tool_deliveries.id", ondelete="SET NULL"), nullable=True)
-
-
-class DomainProxyCheckLog(Base):
-    """Every answer the Proxy Checker gave about a domain in a country, kept —
-    where DomainProxyCheck holds only the newest. The Overview reads it to
-    say what did not pass on a chosen day or in a chosen period.
+    A log, not a latest state: the Blocks tab and the Overview both read a
+    chosen day or period out of it, taking each domain's newest answer inside
+    that period. (A table that kept only the newest answer overall came
+    first; nothing reads it any more, and an old database may still have it.)
 
     `main_domain` is set when the domain was sent as an AMP domain: the
     project domain it was the AMP domain OF on that day. AMP domains change

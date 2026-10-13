@@ -6,7 +6,7 @@ from datetime import datetime
 
 from app.blocks import (
     DEMO_NOT_PASS, NOT_PASS, PASS, UNCHECKED, amp_rows, counts, demo_statuses, in_serps, kind_of,
-    not_passing, ordered, proxies_by_geo,
+    not_passing, ordered, period_rows, proxies_by_geo,
 )
 from app.proxy_checker import add_amp, read_answer
 
@@ -246,3 +246,67 @@ class TestNotPassingInAPeriod:
         both = {"KG - Provider A": "FAIL", "KG - Provider B": "FAIL"}
         main, _amp = not_passing([self.check("zazino.kg", self.DOWN), self.check("lucky-zazino.pro", both)], self.STANDING)
         assert [r["domain"] for r in main] == ["lucky-zazino.pro", "zazino.kg"]
+
+
+class TestTheBlocksTabForAPeriod:
+    """The Blocks tab takes the same period as the Overview and the positions
+    (user, 2026-10-13: "give the same time selection options for consistency").
+    Every domain in the SERPs is a row; its statuses are the proxies' newest
+    answer inside the period, or nothing."""
+
+    STANDING = in_serps(POSITIONS, ["KG", "KZ"])
+    OK = {"KG - Provider A": "PASS", "KG - Provider B": "PASS"}
+    DOWN = {"KG - Provider A": "PASS", "KG - Provider B": "FAIL"}
+
+    def check(self, domain, statuses, main_domain=None, geo="KG", when=TUE):
+        return {"geo": geo, "domain": domain, "main_domain": main_domain, "statuses": statuses, "checked_at": when}
+
+    def by_key(self, rows):
+        return {(r["geo"], r["domain"]): r for r in rows}
+
+    def test_every_domain_in_the_serps_is_a_row_checked_or_not(self):
+        main, amp = period_rows(self.STANDING, [self.check("zazino.kg", self.DOWN)], {})
+        got = self.by_key(main)
+        assert set(got) == {("KG", "zazino.kg"), ("KG", "lucky-zazino.pro"), ("KZ", "zazino.kg")}
+        assert got[("KG", "zazino.kg")]["proxies"] == self.DOWN and got[("KG", "zazino.kg")]["kind"] == NOT_PASS
+        assert got[("KG", "zazino.kg")]["checked_at"] == TUE
+        # Not answered about in the period: a row all the same, with nothing in it.
+        unchecked = got[("KG", "lucky-zazino.pro")]
+        assert unchecked["proxies"] is None and unchecked["checked_at"] is None and unchecked["kind"] == UNCHECKED
+        # A check in one country says nothing about the same domain in another.
+        assert got[("KZ", "zazino.kg")]["kind"] == UNCHECKED
+        assert amp == []
+
+    def test_trouble_first(self):
+        main, _amp = period_rows(self.STANDING, [self.check("lucky-zazino.pro", self.DOWN)], {})
+        assert (main[0]["geo"], main[0]["domain"]) == ("KG", "lucky-zazino.pro")
+
+    def test_a_checked_domain_no_serp_on_record_shows_is_still_a_row(self):
+        main, _amp = period_rows(self.STANDING, [self.check("older.example", self.OK)], {})
+        row = self.by_key(main)[("KG", "older.example")]
+        assert row["kind"] == PASS and row["best_position"] is None and row["engines"] == []
+
+    def test_amp_domains_checked_in_the_period_are_rows_under_their_site(self):
+        checks = [self.check("amp-then.example", self.DOWN, main_domain="zazino.kg", when=MON)]
+        _main, amp = period_rows(self.STANDING, checks, {})
+        assert [(r["geo"], r["domain"], r["main_domain"], r["kind"]) for r in amp] == [
+            ("KG", "amp-then.example", "zazino.kg", NOT_PASS)]
+        assert amp[0]["best_position"] == 1                 # where its site stands
+
+    def test_a_period_that_reaches_today_adds_todays_amp_domains_still_unchecked(self):
+        amp_now = {"zazino.kg": ["amp-today.example"]}
+        _main, amp = period_rows(self.STANDING, [], amp_now)
+        assert {(r["geo"], r["domain"], r["kind"]) for r in amp} == {
+            ("KG", "amp-today.example", UNCHECKED), ("KZ", "amp-today.example", UNCHECKED)}
+
+    def test_todays_amp_domain_already_checked_is_one_row_not_two(self):
+        amp_now = {"zazino.kg": ["amp-today.example"]}
+        checks = [self.check("amp-today.example", self.OK, main_domain="zazino.kg")]
+        _main, amp = period_rows(self.STANDING, checks, amp_now)
+        kg = [r for r in amp if r["geo"] == "KG"]
+        assert len(kg) == 1 and kg[0]["kind"] == PASS
+
+    def test_a_past_period_has_only_the_amp_domains_that_were_checked_in_it(self):
+        # No mapping is given for a period that does not reach today.
+        _main, amp = period_rows(self.STANDING, [], {})
+        assert amp == []

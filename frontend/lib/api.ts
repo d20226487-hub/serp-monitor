@@ -47,6 +47,35 @@ export type ToolDelivery = {
 
 export type ProxyCheckerMode = "off" | "after_run" | "daily";
 
+/** What was left out of an uploaded SERP export, and why. */
+export type SerpCsvReport = {
+  /** Positions the file listed with nothing on them. */
+  empty: number;
+  /** GEO value → rows left out because the country was not recognised. */
+  unknown_geos: Record<string, number>;
+  bad: { line: number; why: string }[];
+  bad_total: number;
+};
+/** An uploaded SERP export, stored as a run of the project. */
+export type SerpCsvUpload = SerpCsvReport & {
+  run_id: number;
+  job_id: number;
+  checked_at: string;
+  rows: number;
+  queries: number;
+  keywords: number;
+  /** ISO country code → rows stored for it. */
+  geos: Record<string, number>;
+  engine: string;
+  device: string;
+  /** The project sends to the Proxy Checker after a run, so after this too. */
+  proxy_checker_after: boolean;
+};
+/** An upload the server refused, with what it found in the file when it got that far. */
+export class SerpCsvError extends Error {
+  report?: SerpCsvReport;
+}
+
 /** One AMP Rotator a project asks for today's AMP domain of each of its
  *  domains. It has no login of its own: every rotator takes the same pair. */
 export type AmpEndpoint = {
@@ -136,8 +165,6 @@ export type ProjectFailing = {
   amp_rows: BlockRow[];
 };
 export type ProjectBlocks = {
-  window_days: number;
-  windows: number[];
   /** The proxies' statuses are made up (the rows are real): a preview. */
   demo: boolean;
   /** Some proxy has reported on at least one of the rows. */
@@ -832,8 +859,11 @@ export const api = {
     req<ProjectFailing>(
       `/projects/${id}/blocks/failing?start=${encodeURIComponent(range.start)}&end=${encodeURIComponent(range.end)}`,
     ),
-  getProjectBlocks: (id: number, days: number, demo: boolean) =>
-    req<ProjectBlocks>(`/projects/${id}/blocks?days=${days}&demo=${demo ? "true" : "false"}`),
+  getProjectBlocks: (id: number, range: { start: string; end: string }, demo: boolean) =>
+    req<ProjectBlocks>(
+      `/projects/${id}/blocks?start=${encodeURIComponent(range.start)}&end=${encodeURIComponent(range.end)}`
+      + `&demo=${demo ? "true" : "false"}`,
+    ),
   getAmpRotator: () => req<AmpRotatorState>("/settings/tools/amp-rotator"),
   saveAmpCredentials: (body: { username?: string; password?: string }) =>
     req<AmpRotatorState>("/settings/tools/amp-rotator/credentials", { method: "PUT", body: JSON.stringify(body) }),
@@ -851,6 +881,29 @@ export const api = {
   getProjectAmpDomains: (id: number) => req<ProjectAmpDomains>(`/projects/${id}/amp-domains`),
   refreshProjectAmpDomains: (id: number) =>
     req<ProjectAmpDomains>(`/projects/${id}/amp-domains/refresh`, { method: "POST" }),
+  /** A file, so multipart and not the JSON helper above. The uploader's
+   *  offset from UTC goes along: the day of the check is a day on their clock. */
+  uploadProjectSerpCsv: async (
+    id: number, file: File, opts: { engine: string; device: string; checkedOn: string },
+  ): Promise<SerpCsvUpload> => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("engine", opts.engine);
+    form.append("device", opts.device);
+    form.append("checked_on", opts.checkedOn);
+    form.append("tz", String(-new Date().getTimezoneOffset()));
+    const res = await fetch(`${BASE}/projects/${id}/serp-csv`, { method: "POST", body: form, cache: "no-store" });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      const detail = body?.detail;
+      const err = new SerpCsvError(
+        typeof detail === "string" ? detail : detail?.message ?? `HTTP ${res.status}`,
+      );
+      if (detail && typeof detail === "object" && "empty" in detail) err.report = detail as SerpCsvReport;
+      throw err;
+    }
+    return body as SerpCsvUpload;
+  },
   getProjectProxyChecker: (id: number) => req<ProjectProxyChecker>(`/projects/${id}/proxy-checker`),
   getCountries: () => req<{ code: string; name: string }[]>("/lookup/countries"),
   getProjectGeos: (id: number) => req<ProjectGeos>(`/projects/${id}/geos`),

@@ -8,6 +8,7 @@ import { AveragePositionTable, PositionTable } from "@/components/position-table
 import { ProjectProxyCheckerCard } from "@/components/proxy-checker";
 import { ProjectBlocksCard, ProjectNotPassingCard } from "@/components/project-blocks";
 import { ProjectAmpCard } from "@/components/amp-rotator";
+import { SerpCsvUploadCard } from "@/components/serp-csv-upload";
 import { ProjectGeosCard } from "@/components/project-geos";
 import { Button, Card, Empty, ErrorNote, SectionTitle, StatTile } from "@/components/ui";
 import { Icon, IconName } from "@/components/icons";
@@ -37,6 +38,9 @@ const PROJECT_TABS: { id: ProjectTab; icon: IconName }[] = [
   { id: "positions", icon: "activity" },
   { id: "blocks", icon: "shield" },
 ];
+/** A tab's sections, with air between them: the user asked for more than the
+ *  page's usual gap once a tab held five or six blocks in a row. */
+const PANEL = "space-y-10";
 /** Addresses from before the tabs: the two cards had anchors of their own. */
 const OLD_ANCHORS: Record<string, ProjectTab> = { "proxy-checker": "blocks", "project-geos": "overview" };
 
@@ -105,6 +109,10 @@ export default function ProjectPage() {
   // Bumped when the Proxy Checker card saved or sent something, so the blocks
   // table above it is read again.
   const [sendsVersion, setSendsVersion] = useState(0);
+  // The upload form for a SERP export, and a count of uploads made: an upload
+  // is a run, so the jobs, the positions and the blocks are all read again.
+  const [showUpload, setShowUpload] = useState(false);
+  const [uploadsVersion, setUploadsVersion] = useState(0);
   // What the CSV export lists per query: the whole page (who holds the other
   // spots too) or only the project's own sites, as the tables do.
   const [exportSites, setExportSites] = useState<"all" | "ours">("all");
@@ -137,7 +145,7 @@ export default function ProjectPage() {
     } finally {
       setLoading(false);
     }
-  }, [id, range, view, tab]);
+  }, [id, range, view, tab, uploadsVersion]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -146,7 +154,7 @@ export default function ProjectPage() {
     // limit covers every job a project realistically holds; the jobs list page
     // is the place for paging through hundreds.
     api.listJobs({ projectId: id, limit: 200 }).then(p => setJobs(p.items)).catch(() => {});
-  }, [id]);
+  }, [id, uploadsVersion]);
 
   // Every keyword the project's jobs watch, deduplicated case-insensitively —
   // the same term entered in two jobs is one thing being tracked, not two.
@@ -236,6 +244,15 @@ export default function ProjectPage() {
             <Icon name="plus" className="h-3.5 w-3.5" />
             {t.projects.newJob}
           </Link>
+          <button
+            type="button"
+            onClick={() => setShowUpload(v => !v)}
+            aria-expanded={showUpload}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+          >
+            <Icon name="upload" className="h-3.5 w-3.5" />
+            {t.serpCsv.button}
+          </button>
           <Link
             href="/projects"
             className="rounded-lg border border-slate-300 px-3 py-1 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
@@ -244,6 +261,17 @@ export default function ProjectPage() {
           </Link>
         </div>
       </div>
+
+      {/* A SERP read by another tool, uploaded as a CSV: it becomes a run of
+          this project. Above the tabs — it feeds all three. */}
+      {showUpload && (
+        <SerpCsvUploadCard
+          projectId={id}
+          onUploaded={() => setUploadsVersion(v => v + 1)}
+          onClose={() => setShowUpload(false)}
+          onShowPositions={() => pickTab("positions")}
+        />
+      )}
 
       <div
         role="tablist"
@@ -281,7 +309,7 @@ export default function ProjectPage() {
         id="project-panel-overview"
         aria-labelledby="project-tab-overview"
         hidden={tab !== "overview"}
-        className="space-y-6"
+        className={PANEL}
       >
         {/* What the project is, in one row. The domains themselves are not here
             on purpose: a project built from permutations runs to hundreds of
@@ -307,7 +335,7 @@ export default function ProjectPage() {
             before the scheduled jobs, where the user asked for it. */}
         <ProjectNotPassingCard
           projectId={id}
-          reloadKey={geosVersion + sendsVersion}
+          reloadKey={geosVersion + sendsVersion + uploadsVersion}
           onOpenBlocks={() => pickTab("blocks")}
         />
 
@@ -383,7 +411,7 @@ export default function ProjectPage() {
         id="project-panel-positions"
         aria-labelledby="project-tab-positions"
         hidden={tab !== "positions"}
-        className="space-y-6"
+        className={PANEL}
       >
         <section className="space-y-6">
           <div className="flex flex-wrap items-center gap-2">
@@ -520,11 +548,11 @@ export default function ProjectPage() {
         id="project-panel-blocks"
         aria-labelledby="project-tab-blocks"
         hidden={tab !== "blocks"}
-        className="space-y-6"
+        className={PANEL}
       >
         {/* What the tab is opened for comes first: which of the domains in the
             SERPs are blocked. */}
-        <ProjectBlocksCard projectId={id} reloadKey={geosVersion + sendsVersion} />
+        <ProjectBlocksCard projectId={id} reloadKey={geosVersion + sendsVersion + uploadsVersion} />
 
         {/* Where this project's own domains, found in the SERPs, are handed on
             to be checked for blocking, and WHEN — a project setting, so it
@@ -533,7 +561,7 @@ export default function ProjectPage() {
         <section id="proxy-checker" className="scroll-mt-4">
           <ProjectProxyCheckerCard
             projectId={id}
-            reloadKey={geosVersion}
+            reloadKey={geosVersion + uploadsVersion}
             onChanged={() => setSendsVersion(v => v + 1)}
           />
         </section>

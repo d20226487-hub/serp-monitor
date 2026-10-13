@@ -6,6 +6,7 @@ from .brightdata import BrightDataProvider
 from .oxylabs import OxylabsProvider
 from .dataforseo import DataForSEOProvider
 from .own_android import OwnAndroidProvider
+from .csv_upload import CsvUploadProvider
 
 PROVIDERS: dict[str, type[SerpProvider]] = {
     "serpapi": SerpAPIProvider,
@@ -15,6 +16,8 @@ PROVIDERS: dict[str, type[SerpProvider]] = {
     "dataforseo": DataForSEOProvider,
     # Our own browser. Its runs are imported; not runnable from here yet.
     "own_android": OwnAndroidProvider,
+    # SERPs read by another tool and uploaded as CSV. Nothing to run.
+    "csv": CsvUploadProvider,
 }
 
 

@@ -11,9 +11,16 @@ One row per (country, domain), joined from two sources:
   query and SERP inside the window), so this table and the Positions tab can
   never disagree about what ranks now. A domain that ranked last week and is
   gone from the latest run is not "in the SERPs".
-* The proxies' statuses — what the Proxy Checker last said about that domain
-  in that country (models.DomainProxyCheck): a status per proxy, in its own
-  names and words ({"KG - Provider A": "PASS", …}), shown as given.
+* The proxies' statuses — what the Proxy Checker said about that domain in
+  that country, in the period being looked at (models.DomainProxyCheckLog,
+  the newest answer inside the period): a status per proxy, in its own names
+  and words ({"KG - Provider A": "PASS", …}), shown as given.
+
+The period is the same choice everywhere on the project page — today,
+yesterday, this week … — and it is about WHEN THE PROXIES ANSWERED. Where a
+domain ranks is read a week further back (STANDING_DAYS): a domain is sent to
+the Proxy Checker because a SERP showed it, and that SERP may have been read
+the evening before.
 
 Nothing here turns those statuses into a verdict of ours. The one thing read
 into them is whether every proxy said PASS — the only status seen so far — and
@@ -28,10 +35,6 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timedelta
-
-#: The periods the table can look back over, in days.
-WINDOWS = (1, 7, 30)
-DEFAULT_WINDOW = 7
 
 #: The status that means a proxy reached the domain. The only one seen so far.
 PASS_WORD = "PASS"
@@ -101,10 +104,53 @@ def amp_rows(rows: list[dict], amp: dict[str, list[str]]) -> list[dict]:
     return out
 
 
-#: A check's "where does it rank" is looked up this many days back from the end
-#: of the period: a domain is sent to the Proxy Checker because a SERP showed
+#: "Where does it rank" is read from the SERPs of the period and of this many
+#: days before it: a domain is sent to the Proxy Checker because a SERP showed
 #: it, but that SERP may have been read the evening before the check.
 STANDING_DAYS = 7
+
+
+def period_rows(standing: list[dict], checks: list[dict],
+                amp_now: dict[str, list[str]]) -> tuple[list[dict], list[dict]]:
+    """The Blocks tab for a period: (main rows, AMP rows), every row with its
+    `proxies` and `checked_at` — None where no proxy answered in the period.
+
+    `standing` are the project's domains in the SERPs around the period
+    (in_serps). `checks` are the newest answers INSIDE the period, one per
+    (country, domain), `main_domain` set on a domain that was sent as an AMP
+    domain. `amp_now` is today's domain → AMP domain(s) mapping, given only
+    when the period reaches today: it adds the AMP domains that have not been
+    checked yet, which for a past period nobody knows.
+
+    A checked domain that no SERP on record around the period shows is still
+    a row — it was sent because a SERP showed it — with its standing empty.
+    """
+    by_key = {(r["geo"], r["domain"]): r for r in standing}
+    main_checks = {(c["geo"], c["domain"]): c for c in checks if not c.get("main_domain")}
+    amp_checks = {(c["geo"], c["domain"]): c for c in checks if c.get("main_domain")}
+
+    def empty(geo: str, domain: str) -> dict:
+        return {"geo": geo, "domain": domain, "keywords": None, "engines": [], "best_position": None,
+                "best_keyword": None, "best_engine": None, "last_seen": None}
+
+    def with_check(row: dict, check: dict | None) -> dict:
+        proxies = dict(check["statuses"] or {}) if check else None
+        return {**row, "proxies": proxies or None, "checked_at": check["checked_at"] if check else None,
+                "kind": kind_of(proxies)}
+
+    main = [with_check(r, main_checks.get((r["geo"], r["domain"]))) for r in standing]
+    main += [with_check(empty(*key), c) for key, c in main_checks.items() if key not in by_key]
+
+    amp: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    for (geo, domain), c in amp_checks.items():
+        site = by_key.get((geo, c["main_domain"])) or empty(geo, c["main_domain"])
+        amp.append(with_check({**site, "domain": domain, "main_domain": c["main_domain"]}, c))
+        seen.add((geo, domain))
+    for r in amp_rows(standing, amp_now):
+        if (r["geo"], r["domain"]) not in seen:
+            amp.append(with_check(r, None))
+    return ordered(main), ordered(amp)
 
 
 def not_passing(checks: list[dict], standing: dict[tuple[str, str], dict]) -> tuple[list[dict], list[dict]]:

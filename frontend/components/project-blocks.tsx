@@ -23,6 +23,11 @@ import { RANGE_PRESETS, RangePreset, customRange, rangeFor, toInputValue, toQuer
  * of each of them — the host a visitor from the SERP actually lands on. An
  * AMP row stands where its main domain stands and names it.
  *
+ * The period is the one the Overview card and the positions use — today,
+ * yesterday, this week … (user, 2026-10-13: "give the same time selection
+ * options for consistency") — and it is about when the proxies answered: a
+ * row's statuses are their newest answer inside the period.
+ *
  * The table always opens on the REAL data. Demo statuses exist — the user
  * asked to see the table on mock data before the Proxy Checker had answered —
  * but only behind a button, never by default: opening on made-up statuses
@@ -54,6 +59,7 @@ const SEG_OFF = "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hove
 const TH = "px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400";
 const TD = "px-3 py-2 align-top";
 const HINT = "text-xs text-slate-500 dark:text-slate-400";
+const DATE_INPUT = "rounded-lg border border-slate-300 bg-white px-2 py-1 text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100";
 const GEO_TAG = "rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200";
 
 /** One proxy's word on one domain, as given. PASS is the one status known to
@@ -134,7 +140,9 @@ export function ProjectBlocksCard({ projectId, reloadKey = 0 }: {
 }) {
   const { t } = useT();
   const x = t.tools.blocks;
-  const [days, setDays] = useState(7);
+  const [preset, setPreset] = useState<RangePreset>("today");
+  const [from, setFrom] = useState(() => toInputValue(new Date()));
+  const [to, setTo] = useState(() => toInputValue(new Date()));
   const [demo, setDemo] = useState(false);
   const [data, setData] = useState<ProjectBlocks | null>(null);
   const [kind, setKind] = useState<"all" | BlockKind>("all");
@@ -142,12 +150,19 @@ export function ProjectBlocksCard({ projectId, reloadKey = 0 }: {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  // null while a custom range is half-typed, which is the signal not to query.
+  const range = useMemo(
+    () => (preset === "custom" ? customRange(from, to) : rangeFor(preset)),
+    [preset, from, to],
+  );
+
   // `demo` is false until the reader presses "show an example": the table
   // never switches to made-up statuses on its own.
   useEffect(() => {
+    if (!range) return;
     let stale = false;
     setLoading(true);
-    api.getProjectBlocks(projectId, days, demo)
+    api.getProjectBlocks(projectId, toQuery(range), demo)
       .then(next => {
         if (stale) return;
         setData(next);
@@ -156,7 +171,7 @@ export function ProjectBlocksCard({ projectId, reloadKey = 0 }: {
       .catch(e => { if (!stale) setErr(e?.message ?? String(e)); })
       .finally(() => { if (!stale) setLoading(false); });
     return () => { stale = true; };
-  }, [projectId, days, demo, reloadKey]);
+  }, [projectId, range, demo, reloadKey]);
 
   if (!data) return err ? <Callout tone="bad" icon="alert">{err}</Callout> : null;
 
@@ -200,26 +215,33 @@ export function ProjectBlocksCard({ projectId, reloadKey = 0 }: {
         </span>
       }
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {loading && <Icon name="refresh" className="h-3 w-3 animate-spin text-slate-500" />}
           <div
             role="group"
-            aria-label={x.periodHint}
+            aria-label={x.failingPeriod}
             title={x.periodHint}
             className="inline-flex overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700"
           >
-            {data.windows.map(d => (
+            {RANGE_PRESETS.map(p => (
               <button
-                key={d}
+                key={p}
                 type="button"
-                onClick={() => setDays(d)}
-                aria-pressed={days === d}
-                className={`${SEG} ${days === d ? SEG_ON : SEG_OFF}`}
+                onClick={() => setPreset(p)}
+                aria-pressed={preset === p}
+                className={`${SEG} ${preset === p ? SEG_ON : SEG_OFF}`}
               >
-                {x.period(d)}
+                {t.positions.presets[p]}
               </button>
             ))}
           </div>
+          {preset === "custom" && (
+            <span className="inline-flex items-center gap-1.5 text-xs">
+              <input type="date" value={from} onChange={e => setFrom(e.target.value)} className={DATE_INPUT} />
+              <span className="text-slate-500 dark:text-slate-400">–</span>
+              <input type="date" value={to} onChange={e => setTo(e.target.value)} className={DATE_INPUT} />
+            </span>
+          )}
         </div>
       }
     >
@@ -228,6 +250,11 @@ export function ProjectBlocksCard({ projectId, reloadKey = 0 }: {
           {x.help}{data.has_amp && <> {x.helpAmp}</>}
         </p>
 
+        {preset === "custom" && !range && (
+          <div className="rounded-lg border-l-4 border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            {t.positions.badRange}
+          </div>
+        )}
         {data.demo && (
           <Callout tone="warn" icon="alert" title={x.demoTitle}>
             <p>{x.demoText}</p>
@@ -245,7 +272,7 @@ export function ProjectBlocksCard({ projectId, reloadKey = 0 }: {
         {/* With nothing checked the tables would be rows of dashes: the user
             asked for the notice alone ("It clutters the UX"). */}
         {nothingChecked ? null : data.rows.length === 0 ? (
-          <Empty>{x.empty(data.window_days)}</Empty>
+          <Empty>{x.empty}</Empty>
         ) : (
           <>
             <div className="flex flex-wrap items-center gap-2">
@@ -421,7 +448,6 @@ export function ProjectNotPassingCard({ projectId, reloadKey = 0, onOpenBlocks }
   const link = (
     <button type="button" onClick={onOpenBlocks} className="underline underline-offset-2">{x.failingLink}</button>
   );
-  const dateInput = "rounded-lg border border-slate-300 bg-white px-2 py-1 text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100";
 
   return (
     <Card
@@ -457,9 +483,9 @@ export function ProjectNotPassingCard({ projectId, reloadKey = 0, onOpenBlocks }
           </div>
           {preset === "custom" && (
             <span className="inline-flex items-center gap-1.5 text-xs">
-              <input type="date" value={from} onChange={e => setFrom(e.target.value)} className={dateInput} />
-              <span className="text-slate-500 dark:text-slate-400">–</span>
-              <input type="date" value={to} onChange={e => setTo(e.target.value)} className={dateInput} />
+              <input type="date" value={from} onChange={e => setFrom(e.target.value)} className={DATE_INPUT} />
+              <span className="text-slate-500 dark:text-slate-400">{"–"}</span>
+              <input type="date" value={to} onChange={e => setTo(e.target.value)} className={DATE_INPUT} />
             </span>
           )}
         </div>

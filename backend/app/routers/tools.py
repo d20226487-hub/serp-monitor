@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from .. import blocks
 from .. import proxy_checker as pc
 from ..db import get_db
-from ..models import DomainProxyCheck, DomainProxyCheckLog, Project, ToolDelivery
+from ..models import DomainProxyCheckLog, Project, ToolDelivery
 from ..scheduler import proxy_checker_next_run, upsert_proxy_checker_schedule
 from .project_positions import _parse_stamp, project_positions
 
@@ -212,89 +212,13 @@ async def send_project_now(project_id: int, db: Session = Depends(get_db)):
 
 # --- which domains are in the SERPs, and what each proxy says of them --------
 
-@router.get("/projects/{project_id}/blocks")
-def project_blocks(
-    project_id: int,
-    days: int = Query(blocks.DEFAULT_WINDOW, description="How far back the SERPs are read"),
-    demo: bool = Query(False, description="Made-up proxy statuses over the real rows, to preview the table"),
-    db: Session = Depends(get_db),
-):
-    """One row per (country, domain): where it ranks, and the status each
-    proxy last gave it there. See ../blocks.py."""
-    project = _project(db, project_id)
-    if days not in blocks.WINDOWS:
-        raise HTTPException(400, f"days must be one of {list(blocks.WINDOWS)}")
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    since = now - timedelta(days=days)
-    project_geos = pc.project_geos(db, project)
-    rows = blocks.in_serps(project_positions(project_id, since.isoformat(), None, db), project_geos)
-
-    # The AMP side: the AMP domain of the day of every row's domain.
-    amp_map = pc.amp_of(db, project.id)
-    amp_rows = blocks.amp_rows(rows, amp_map)
-
-    sending = set(pc.send_geos(db, project))
-    domains = sorted({r["domain"] for r in rows} | {r["domain"] for r in amp_rows})
-    known: dict[tuple[str, str], DomainProxyCheck] = {}
-    for i in range(0, len(domains), 400):
-        for c in db.query(DomainProxyCheck).filter(DomainProxyCheck.domain.in_(domains[i:i + 400])).all():
-            known[(c.geo, c.domain)] = c
-    # The last time each domain went to the Proxy Checker for each country, and
-    # how that went — the reason behind a row no proxy has reported on.
-    last_send: dict[tuple[str, str], dict] = {}
-    recent = (db.query(ToolDelivery)
-              .filter(ToolDelivery.tool == pc.TOOL, ToolDelivery.project_id == project.id)
-              .order_by(ToolDelivery.sent_at.desc(), ToolDelivery.id.desc()).limit(500).all())
-    for d in recent:
-        for domain in d.domains or []:
-            last_send.setdefault((d.geo, domain), {"at": d.sent_at, "ok": d.ok, "status_code": d.status_code})
-
-    everything = rows + amp_rows
-    for r in everything:
-        c = known.get((r["geo"], r["domain"]))
-        r["proxies"] = dict(c.statuses or {}) if c else None
-        r["checked_at"] = c.checked_at if c else None
-        r["sending"] = r["geo"] in sending
-        r["last_send"] = last_send.get((r["geo"], r["domain"]))
-    has_real = any(r["proxies"] for r in everything)
-    if demo:
-        for r in everything:
-            r["proxies"], r["checked_at"] = blocks.demo_statuses(r["geo"], r["domain"], now)
-    for r in everything:
-        r["kind"] = blocks.kind_of(r["proxies"])
-    return {
-        "window_days": days, "windows": list(blocks.WINDOWS),
-        "demo": demo,
-        # Whether any proxy has reported on any of these rows.
-        "has_real": has_real,
-        "connected": pc.connection_status()["connected"],
-        "geos": project_geos,
-        # The tables' columns, per country.
-        "proxies": blocks.proxies_by_geo(rows),
-        "counts": blocks.counts(rows),
-        "rows": blocks.ordered(rows),
-        # The same for the AMP domains of those rows. `has_amp`: the project's
-        # AMP Rotators have named at least one AMP domain.
-        "has_amp": bool(amp_map),
-        "amp_proxies": blocks.proxies_by_geo(amp_rows),
-        "amp_counts": blocks.counts(amp_rows),
-        "amp_rows": blocks.ordered(amp_rows),
-    }
-
-
-@router.get("/projects/{project_id}/blocks/failing")
-def project_blocks_failing(
-    project_id: int,
-    start: str | None = Query(None, description="ISO-8601, inclusive"),
-    end: str | None = Query(None, description="ISO-8601, exclusive"),
-    db: Session = Depends(get_db),
-):
-    """The Overview's list: what some proxy did not pass in a period — the
-    project's own domains, and the AMP domains sent with them. Read from the
-    log of answers, by each domain's newest check INSIDE the period (the
-    period is about when the proxies answered). See blocks.not_passing."""
-    project = _project(db, project_id)
+def _period(db: Session, project: Project, start: str | None, end: str | None) -> tuple[list[dict], list[dict], bool]:
+    """What both views of a period are built from: (the project's domains in
+    the SERPs around it, the proxies' newest answers inside it, whether the
+    period reaches today). See ../blocks.py for why the SERPs are read a week
+    further back than the answers."""
     since, until = _parse_stamp(start, "start"), _parse_stamp(end, "end")
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     query = db.query(DomainProxyCheckLog).filter(DomainProxyCheckLog.project_id == project.id)
     if since is not None:
@@ -309,14 +233,85 @@ def project_blocks_failing(
         for c in newest.values()
     ]
 
-    # Where the checked domains rank: read a little further back than the
-    # period, because the SERP that got a domain sent may predate the check.
-    upto = until or datetime.now(timezone.utc).replace(tzinfo=None)
+    upto = until or now
     back = (since or upto) - timedelta(days=blocks.STANDING_DAYS)
-    rows = blocks.in_serps(
-        project_positions(project_id, back.isoformat(), upto.isoformat(), db), pc.project_geos(db, project))
-    standing = {(r["geo"], r["domain"]): r for r in rows}
-    main, amp = blocks.not_passing(checks, standing)
+    standing = blocks.in_serps(
+        project_positions(project.id, back.isoformat(), upto.isoformat(), db), pc.project_geos(db, project))
+    return standing, checks, until is None or until > now
+
+
+@router.get("/projects/{project_id}/blocks")
+def project_blocks(
+    project_id: int,
+    start: str | None = Query(None, description="ISO-8601, inclusive"),
+    end: str | None = Query(None, description="ISO-8601, exclusive"),
+    demo: bool = Query(False, description="Made-up proxy statuses over the real rows, to preview the table"),
+    db: Session = Depends(get_db),
+):
+    """The Blocks tab for a period: one row per (country, domain) — where it
+    ranks, and the status each proxy gave it in that period — and the same for
+    the AMP domains. See blocks.period_rows."""
+    project = _project(db, project_id)
+    standing, checks, reaches_today = _period(db, project, start, end)
+    # Today's AMP domains can only be added to a period that includes today:
+    # yesterday's are known only where they were checked.
+    amp_map = pc.amp_of(db, project.id) if reaches_today else {}
+    rows, amp_rows = blocks.period_rows(standing, checks, amp_map)
+
+    sending = set(pc.send_geos(db, project))
+    # The last time each domain went to the Proxy Checker for each country, and
+    # how that went — the reason behind a row no proxy has reported on.
+    last_send: dict[tuple[str, str], dict] = {}
+    recent = (db.query(ToolDelivery)
+              .filter(ToolDelivery.tool == pc.TOOL, ToolDelivery.project_id == project.id)
+              .order_by(ToolDelivery.sent_at.desc(), ToolDelivery.id.desc()).limit(500).all())
+    for d in recent:
+        for domain in d.domains or []:
+            last_send.setdefault((d.geo, domain), {"at": d.sent_at, "ok": d.ok, "status_code": d.status_code})
+
+    everything = rows + amp_rows
+    for r in everything:
+        r["sending"] = r["geo"] in sending
+        r["last_send"] = last_send.get((r["geo"], r["domain"]))
+    has_real = any(r["proxies"] for r in everything)
+    if demo:
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        for r in everything:
+            r["proxies"], r["checked_at"] = blocks.demo_statuses(r["geo"], r["domain"], now)
+            r["kind"] = blocks.kind_of(r["proxies"])
+        rows, amp_rows = blocks.ordered(rows), blocks.ordered(amp_rows)
+    return {
+        "demo": demo,
+        # Whether any proxy answered about any of these rows in the period.
+        "has_real": has_real,
+        "connected": pc.connection_status()["connected"],
+        "geos": sorted({r["geo"] for r in everything}),
+        # The tables' columns, per country.
+        "proxies": blocks.proxies_by_geo(rows),
+        "counts": blocks.counts(rows),
+        "rows": rows,
+        # The same for the AMP domains. `has_amp`: there is an AMP side to show.
+        "has_amp": bool(amp_rows) or bool(pc.amp_of(db, project.id)),
+        "amp_proxies": blocks.proxies_by_geo(amp_rows),
+        "amp_counts": blocks.counts(amp_rows),
+        "amp_rows": amp_rows,
+    }
+
+
+@router.get("/projects/{project_id}/blocks/failing")
+def project_blocks_failing(
+    project_id: int,
+    start: str | None = Query(None, description="ISO-8601, inclusive"),
+    end: str | None = Query(None, description="ISO-8601, exclusive"),
+    db: Session = Depends(get_db),
+):
+    """The Overview's list: what some proxy did not pass in a period — the
+    project's own domains, and the AMP domains sent with them, each by its
+    newest answer INSIDE the period. See blocks.not_passing."""
+    project = _project(db, project_id)
+    standing, checks, _reaches_today = _period(db, project, start, end)
+    by_key = {(r["geo"], r["domain"]): r for r in standing}
+    main, amp = blocks.not_passing(checks, by_key)
     checked_main = {(c["geo"], c["domain"]) for c in checks if not c["main_domain"]}
     return {
         # How many of the project's domains some proxy reported on inside the
@@ -324,7 +319,7 @@ def project_blocks_failing(
         "checked": len(checked_main),
         "amp_checked": sum(1 for c in checks if c["main_domain"]),
         # In the SERPs around then, and not reported on inside the period.
-        "unchecked": sum(1 for key in standing if key not in checked_main),
+        "unchecked": sum(1 for key in by_key if key not in checked_main),
         "has_amp": any(c["main_domain"] for c in checks) or bool(pc.amp_of(db, project.id)),
         "rows": main,
         "amp_rows": amp,

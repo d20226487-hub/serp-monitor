@@ -22,7 +22,8 @@ One request per country:
   (Project.proxy_checker_geos; unset = all of them). A country outside both is
   never sent, however many of our domains its SERPs showed.
 * When, per project (Project.proxy_checker_mode): "off"; "after_run" — what
-  each finished run found, straight after it; "daily" — once a day at
+  each finished run found, straight after it (an uploaded CSV is a run: "the
+  CSV upload will equal прогон"); "daily" — once a day at
   proxy_checker_time (UTC, HH:MM), everything found in the last 24 hours. A
   "Send now" on the project page sends the last 24 hours at any time.
 * Every request made is kept in tool_deliveries: what went, where, and what
@@ -43,7 +44,7 @@ had been received yet, every request from here being refused with 403):
 
 One entry per domain, and in it one status per PROXY — several per country,
 named by the Proxy Checker. `read_answer` takes that apart and
-`record_statuses` keeps it per (country, domain) for the Blocks tab, which
+`record_statuses` keeps every answer per (country, domain) for the Blocks tab, which
 shows each proxy's status as given: the user, on a first table that reduced
 this to blocked / not blocked — "we do not show blocked or not blocked we
 display the status by each proxy". "PASS" is the only status seen so far; what
@@ -79,7 +80,7 @@ from ._redact import redact
 from .app_settings import _get, _set
 from .db import SessionLocal
 from .models import (
-    AmpDomain, DomainProxyCheck, DomainProxyCheckLog, Job, JobRun, Project, Result, ToolDelivery,
+    AmpDomain, DomainProxyCheckLog, Job, JobRun, Project, Result, ToolDelivery,
 )
 from .positions_csv import counted_host
 
@@ -306,8 +307,11 @@ def send_geos(db: Session, project: Project) -> list[str]:
 def found_by_geo(db: Session, project: Project, *, run_id: int | None = None,
                  since: datetime | None = None) -> dict[str, list[str]]:
     """The project's domains its checks captured, by country — in one run, or
-    in every run of the project started since `since` (naive UTC, as runs are
-    stored)."""
+    in every run of the project since `since` (naive UTC, as runs are stored).
+
+    "Since" is when a run started or, for an uploaded one, when it was
+    uploaded: an export of last week's SERPs uploaded an hour ago is an hour
+    old to the Proxy Checker, which is asked whether those domains open NOW."""
     domains = [d for d in (project.domains or []) if d]
     if not domains:
         return {}
@@ -325,7 +329,7 @@ def found_by_geo(db: Session, project: Project, *, run_id: int | None = None,
         if run_id is not None:
             q = q.filter(Result.run_id == run_id)
         if since is not None:
-            q = q.filter(JobRun.started_at >= since)
+            q = q.filter(or_(JobRun.started_at >= since, JobRun.uploaded_at >= since))
         rows += [tuple(r) for r in q.distinct().all()]
     return group_found(rows, domains)
 
@@ -394,27 +398,16 @@ def read_answer(data: object, sent: list[str]) -> dict[str, dict[str, str]]:
 
 def record_statuses(db: Session, geo: str, sent: list[str], data: object, delivery_id: int | None, *,
                     project_id: int | None = None, amp_parents: dict[str, str] | None = None) -> int:
-    """Keep what an answer said about the domains it was asked about.
+    """Keep what an answer said about the domains it was asked about: a line
+    per domain in the log, so that "what did not pass on the 10th" still has
+    an answer on the 13th.
 
-    Twice: the newest answer per (country, domain), replacing the one before
-    with its whole set of proxies, so a proxy the Proxy Checker has stopped
-    reporting does not linger with a stale status; and a line in the log, so
-    "what did not pass on the 10th" still has an answer on the 13th.
     `amp_parents` maps each AMP domain in this request to the project domain
     it was the AMP domain of — recorded with the line, because tomorrow that
     AMP domain belongs to nothing. Not committed here."""
     answered = read_answer(data, sent)
-    if not answered:
-        return 0
-    have = {c.domain: c for c in db.query(DomainProxyCheck).filter(
-        DomainProxyCheck.geo == geo, DomainProxyCheck.domain.in_(list(answered))).all()}
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     for domain, statuses in answered.items():
-        row = have.get(domain)
-        if row is None:
-            row = DomainProxyCheck(geo=geo, domain=domain)
-            db.add(row)
-        row.statuses, row.checked_at, row.delivery_id = statuses, now, delivery_id
         db.add(DomainProxyCheckLog(
             project_id=project_id, geo=geo, domain=domain, main_domain=(amp_parents or {}).get(domain),
             statuses=statuses, checked_at=now, delivery_id=delivery_id))

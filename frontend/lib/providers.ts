@@ -15,6 +15,9 @@ const LABELS: Record<string, string> = {
   // Not in PROVIDER_IDS: its runs are imported, the job form cannot start it
   // yet. Listed so imported runs show a real name.
   own_android: "Own browser (Android)",
+  // Not in PROVIDER_IDS either: SERPs read by another tool and uploaded to a
+  // project as a CSV. Listed so those runs show a real name.
+  csv: "CSV upload",
 };
 
 // DataForSEO's SERP API has no Yandex endpoint at all.
@@ -24,6 +27,7 @@ const ENGINES: Record<string, readonly string[]> = {
   oxylabs: ["google", "yandex"],
   dataforseo: ["google"],
   own_android: ["google", "yandex"],
+  csv: ["google", "yandex"],
 };
 
 export function providerLabel(id: string | null | undefined): string {

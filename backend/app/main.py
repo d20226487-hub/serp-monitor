@@ -13,7 +13,7 @@ from .amp_rotator import catch_up as amp_rotator_catch_up
 from .provider_locations import warm_up as warm_up_locations
 from .routers import (
     amp_rotator as amp_rotator_router, export, jobs, keyword_volumes, locations, project_positions,
-    projects, runs, settings as settings_router, tools,
+    projects, runs, serp_upload, settings as settings_router, tools,
 )
 from .scheduler import (
     get_scheduler, prune_amp_rotator_schedules, reload_all_schedules, reload_tool_schedules,
@@ -121,6 +121,8 @@ def _migrate_sqlite_columns() -> None:
         # Per-run spend. NULL on runs that predate cost tracking — the UI shows
         # "—" for those rather than pretending they were free.
         ("job_runs", "cost", "FLOAT"),
+        # When an uploaded run arrived (CSV uploads); NULL on every other run.
+        ("job_runs", "uploaded_at", "DATETIME"),
         ("job_runs", "cost_source", "VARCHAR(16)"),
         # Analyzer mode. Existing jobs default to "serp" so behaviour is
         # unchanged for everything created before this.
@@ -259,6 +261,7 @@ app.include_router(projects.router)
 app.include_router(project_positions.router)
 app.include_router(tools.router)
 app.include_router(amp_rotator_router.router)
+app.include_router(serp_upload.router)
 app.include_router(runs.router)
 app.include_router(export.router)
 app.include_router(locations.router)

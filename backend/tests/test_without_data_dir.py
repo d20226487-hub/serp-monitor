@@ -17,7 +17,7 @@ BACKEND = Path(app.__file__).resolve().parents[1]
 
 # Everything that reaches the locations mirror or the connected tools.
 MODULES = ("app.providers", "app.provider_locations", "app.proxy_checker", "app.routers.tools",
-           "app.amp_rotator", "app.routers.amp_rotator", "app.scheduler",
+           "app.amp_rotator", "app.routers.amp_rotator", "app.scheduler", "app.routers.serp_upload",
            "app.routers.locations")
 
 
