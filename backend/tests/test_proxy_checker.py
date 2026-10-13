@@ -48,6 +48,35 @@ class TestWhatIsSent:
         assert group_found([("kg", "zazino.kg", None, False)], []) == {}
 
 
+class TestAmpDomainsFoundInTheSerps:
+    """An AMP domain a SERP shows itself is sent in its own right (user,
+    2026-10-13, asked whether it should be: "Yes, send them and show in
+    Blocks")."""
+
+    #: AMP host → the project domain it is, or was, the AMP domain of.
+    AMP = {"amp-a.example": "zazino.kg", "amp-b.example": "lucky-zazino.pro"}
+
+    def test_it_is_found_under_its_own_name_after_the_projects_domains(self):
+        rows = [
+            ("kg", "www.amp-b.example", None, False),
+            ("kg", "zazino.kg", None, False),
+            ("kz", "amp-a.example", None, False),        # its site is on no page there
+        ]
+        assert group_found(rows, DOMAINS, self.AMP) == {
+            "KG": ["zazino.kg", "amp-b.example"],
+            "KZ": ["amp-a.example"],
+        }
+
+    def test_once_however_many_pages_show_it(self):
+        rows = [("kg", "amp-a.example", None, False), ("kg", "www.amp-a.example", None, False)]
+        assert group_found(rows, DOMAINS, self.AMP) == {"KG": ["amp-a.example"]}
+
+    def test_a_host_no_rotator_named_is_somebody_elses(self):
+        rows = [("kg", "amp-a.example", None, False)]
+        assert group_found(rows, DOMAINS) == {}
+        assert group_found(rows, DOMAINS, {}) == {}
+
+
 class TestRequest:
     """The exact request the user specified (2026-10-05)."""
 

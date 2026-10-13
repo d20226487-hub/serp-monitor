@@ -3,7 +3,7 @@ Keywords, GEO, Domain / URL, Position"; everything else in the file is
 ignored)."""
 import pytest
 
-from app.serp_csv import MissingColumns, countries_index, decode, delimiter, fold, parse, target
+from app.serp_csv import MissingColumns, countries_index, decode, delimiter, fold, parse, target, with_geos
 
 COUNTRIES = countries_index([("Azerbaijan", "AZ"), ("Kazakhstan", "KZ"), ("Turkiye", "TR"), ("Kyrgyzstan", "kg")])
 
@@ -108,3 +108,25 @@ class TestDecoding:
         assert decode(text.encode("utf-8")) == text
         assert decode(text.encode("utf-8-sig")) == text
         assert decode(text.encode("cp1251")) == text
+
+
+class TestProjectGeos:
+    """User, 2026-10-13: "From the CSV import the project GEOs should be added
+    like keywords are (from the GEO column)"."""
+
+    def test_countries_the_project_did_not_have_are_added_after_the_ones_it_had(self):
+        assert with_geos(["KG", "KZ", "UZ"], ["AZ", "KZ"]) == (["KG", "KZ", "UZ", "AZ"], ["AZ"])
+
+    def test_nothing_new_changes_nothing(self):
+        assert with_geos(["KG", "KZ"], ["KZ"]) == (["KG", "KZ"], [])
+        assert with_geos(["KG"], []) == (["KG"], [])
+
+    def test_a_project_whose_geos_were_never_saved_stays_unsaved(self):
+        # Its jobs' countries stand in for the list, and the upload's are among them.
+        assert with_geos(None, ["AZ"]) == (None, [])
+
+    def test_a_list_saved_empty_gains_the_uploads_countries(self):
+        assert with_geos([], ["AZ", "KZ"]) == (["AZ", "KZ"], ["AZ", "KZ"])
+
+    def test_codes_are_compared_whatever_their_case(self):
+        assert with_geos(["kg"], ["KG", "AZ"]) == (["KG", "AZ"], ["AZ"])

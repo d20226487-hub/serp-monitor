@@ -146,6 +146,7 @@ export function SerpCsvUploadCard({ projectId, onUploaded, onClose, onShowPositi
               {x.doneGeos(Object.entries(done.geos).map(([g, n]) => `${g} ${n}`).join(", "))}{" "}
               {x.doneDay(new Date(/[zZ]$/.test(done.checked_at) ? done.checked_at : `${done.checked_at}Z`).toLocaleDateString())}
             </p>
+            {done.geos_added.length > 0 && <p>{x.doneGeosAdded(done.geos_added.join(", "))}</p>}
             {done.proxy_checker_after && <p>{x.doneProxyChecker}</p>}
             <Skipped report={done} />
             <div className="flex flex-wrap items-center gap-2 pt-1">

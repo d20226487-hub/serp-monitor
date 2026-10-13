@@ -15,7 +15,13 @@ import { Icon } from "@/components/icons";
  * Until a list is saved, the countries the project's jobs already check stand
  * in for it, so an untouched project behaves exactly as it did before.
  */
-export function ProjectGeosCard({ projectId, onSaved }: { projectId: number; onSaved?: () => void }) {
+export function ProjectGeosCard({ projectId, onSaved, reloadKey = 0 }: {
+  projectId: number;
+  onSaved?: () => void;
+  /** Bumped when the list may have changed elsewhere: a CSV upload adds its
+   *  countries to it. */
+  reloadKey?: number;
+}) {
   const { t } = useT();
   const s = t.tools.geos;
   const [data, setData] = useState<ProjectGeos | null>(null);
@@ -32,7 +38,7 @@ export function ProjectGeosCard({ projectId, onSaved }: { projectId: number; onS
   useEffect(() => {
     api.getProjectGeos(projectId).then(take).catch(e => setErr(e?.message ?? String(e)));
     api.getCountries().then(rows => setNames(new Map(rows.map(r => [r.code, r.name])))).catch(() => {});
-  }, [projectId]);
+  }, [projectId, reloadKey]);
 
   // Every country, plus any code already on the project that the list does not
   // know (it must stay visible to be removable).

@@ -113,6 +113,13 @@ def upload_serp_csv(
     job = _job(db, project)
     geos = sorted({r.geo for r in parsed.rows})
     queries = {(r.keyword, r.geo) for r in parsed.rows}
+    # The upload's countries become GEOs of the project, as its keywords become
+    # the project's keywords. Which GEOs are SENT to the Proxy Checker is a
+    # separate choice and is not touched: with "all" chosen a new GEO is sent
+    # too, with a narrower choice it is added switched off.
+    saved_geos, geos_added = serp_csv.with_geos(project.geos, geos)
+    if geos_added:
+        project.geos = saved_geos
     # The job describes everything it has ever been given, so the project's
     # keywords, locations and engines include the uploaded ones.
     job.keywords = _union(job.keywords, sorted({r.keyword for r in parsed.rows}))
@@ -152,5 +159,7 @@ def upload_serp_csv(
         "engine": engine, "device": device,
         # Whether this project sends to the Proxy Checker after a run.
         "proxy_checker_after": project.proxy_checker_mode == "after_run",
+        # Countries of this file that were not GEOs of the project and are now.
+        "geos_added": geos_added,
         **report,
     }

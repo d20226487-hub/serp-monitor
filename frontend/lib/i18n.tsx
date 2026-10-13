@@ -527,18 +527,23 @@ melbet	kz	34	20,000	0.45`,
       `Displayed as ${shown}, links to ${linked}`,
     unresolvedHint:
       "This job resolves to the displayed site, but the engine reported none for this result — the host below is the raw link.",
+    ampHint: (host: string, site: string) =>
+      `${host} is an AMP domain of ${site}. AMP domains are not added to the project — they change daily — so the ones its AMP Rotator has named count as the project's.`,
+    ampAvgHint: (site: string, hosts: string) =>
+      `Results on the AMP domains of ${site}, as one line: the AMP domain changes daily. In this range they were on: ${hosts}.`,
+    ampMore: (n: number) => `+${n} more`,
 
     notRanking: "not in the captured results",
     ranking: (ranking: number, total: number) =>
       `ranking for ${ranking} of ${total} keyword(s)`,
-    footnote: "Each row shows its most recent run inside the range, listing every project domain that ranked, best position first. Monopolisation is how much of that page the project holds between all its domains, weighting each slot by position. A keyword with nothing listed had no project domain among the positions that run captured, which is not the same as not ranking at all.",
+    footnote: "Each row shows its most recent run inside the range, listing every project domain that ranked, best position first. Monopolisation is how much of that page the project holds between all its domains, weighting each slot by position. A keyword with nothing listed had no project domain among the positions that run captured, which is not the same as not ranking at all. A result on an AMP domain the project's AMP Rotator has named counts as the project's too, and is marked AMP.",
 
     view: "View",
     viewLatest: "Latest",
     viewLatestHint: "Where each keyword stands now: its most recent run inside the range.",
     viewAverage: "Average",
     viewAverageHint: "Every run in the range, averaged per keyword and domain.",
-    avgFootnote: "One row per keyword and domain, over every run of that SERP in the range, sorted by visibility. The average position covers only the runs where the domain was actually present — an absence has no position to average — so presence is reported beside it as its own figure. Visibility combines the two: the share of the page the domain held, averaged over every run including the ones it missed. Best and worst bound the average; a wide spread over few runs is a weak reading, not a position.",
+    avgFootnote: "One row per keyword and domain, over every run of that SERP in the range, sorted by visibility. The average position covers only the runs where the domain was actually present — an absence has no position to average — so presence is reported beside it as its own figure. Visibility combines the two: the share of the page the domain held, averaged over every run including the ones it missed. Best and worst bound the average; a wide spread over few runs is a weak reading, not a position. The AMP domains of one site are a single line, marked AMP: the host changes daily.",
     visibilityWhat:
       "The share of the page this domain held, averaged over every run in the range — including the runs where it did not appear at all, which count as zero.\n\n" +
       "Position and presence in one number: a domain that ranks rarely but high and one that is always there but lower are put on the same scale. Which of them comes out ahead depends on the weights.\n\n" +
@@ -851,6 +856,7 @@ melbet	kz	34	20,000	0.45`,
       `Uploaded: ${rows} ${rows === 1 ? "position" : "positions"} for ${queries} ${queries === 1 ? "query" : "queries"}.`,
     doneGeos: (list: string) => `By country: ${list}.`,
     doneDay: (day: string) => `Stored as checked on ${day}.`,
+    doneGeosAdded: (list: string) => `Added to the project's GEOs: ${list}.`,
     doneProxyChecker: "This project sends to the Proxy Checker after every run, so the domains found in this file are being sent now.",
     showPositions: "Show positions",
     openRun: (id: number) => `Open run #${id}`,
@@ -932,8 +938,10 @@ melbet	kz	34	20,000	0.45`,
         failing: "Not PASS", checked: "Checked",
       },
       helpAmp:
-        "Under each country's table is a second one for today's AMP domains of those domains — the host a visitor from the SERP lands on.",
+        "Under each country's table is a second one for AMP domains: the ones that country's SERPs show themselves, and today's AMP domain of every domain found there — the host a visitor from the SERP lands on.",
       ampOf: (main: string) => `AMP of ${main}`,
+      ampInSerps: "in the SERPs itself",
+      viaMain: "its main domain's position",
       ampDomains: (n: number) => `${n} AMP ${n === 1 ? "domain" : "domains"}`,
       failingTitle: "Not passing in Blocks",
       failingSome: (n: number) => `${n} not passing`,
@@ -1011,7 +1019,7 @@ melbet	kz	34	20,000	0.45`,
       fetchFailed: (code: number | null) => (code ? `failed · HTTP ${code}` : "no answer"),
       nextRun: (when: string) => `next: ${when}`,
       projectTitle: "AMP domains today",
-      projectHelp: "Today's AMP domain of each of this project's domains, as its AMP Rotator last answered.",
+      projectHelp: "Today's AMP domain of each of this project's domains, as its AMP Rotator last answered. Results on these domains, and on the ones named on earlier days, count as the project's on the Positions tab.",
       settingsLink: "Endpoints are set in Settings → Tools Connection",
       fetchedAt: (when: string) => `fetched ${when}`,
       projectFailed: (url: string, when: string) =>
@@ -1036,7 +1044,7 @@ melbet	kz	34	20,000	0.45`,
       previewEmpty: (hours: number) =>
         `No check ran and no CSV was uploaded in the last ${hours} hours with a domain of this project in it, so there is nothing to send.`,
       previewAmpNote:
-        "Domains marked AMP are today's AMP domains from the project's AMP Rotator: each is sent together with its main domain, for the countries that domain was found in.",
+        "Domains marked AMP are AMP domains from the project's AMP Rotator. One is sent for a country when a SERP there showed it; and today's AMP domain of every found domain is sent along with that domain.",
       sendNow: "Send now",
       sending: "Sending\u2026",
       sendNowHint: (hours: number) => `Sends what the checks and uploaded CSVs of the last ${hours} hours found, whatever the schedule.`,
@@ -1900,18 +1908,23 @@ melbet	kz	34	20 000	0,45`,
       `Показан как ${shown}, ведёт на ${linked}`,
     unresolvedHint:
       "Задача приводит к показанному сайту, но поисковик его не сообщил для этого результата — ниже исходная ссылка.",
+    ampHint: (host: string, site: string) =>
+      `${host} — AMP-домен сайта ${site}. AMP-домены в проект не добавляются: они меняются каждый день. Поэтому доменами проекта считаются и те, которые назвал его AMP Rotator.`,
+    ampAvgHint: (site: string, hosts: string) =>
+      `Результаты на AMP-доменах сайта ${site} — одной строкой, потому что AMP-домен меняется каждый день. За период они были на: ${hosts}.`,
+    ampMore: (n: number) => `и ещё ${n}`,
 
     notRanking: "нет в снятых результатах",
     ranking: (ranking: number, total: number) =>
       `ранжируется по ${ranking} из ${total} запросов`,
-    footnote: "В каждой строке — последний прогон внутри периода: перечислены все домены проекта, которые ранжируются, начиная с лучшей позиции. «Монополизация» — какую часть этой страницы занимает проект всеми своими доменами, с учётом веса каждой позиции. Если у запроса ничего не указано, ни одного домена проекта не было среди снятых позиций этого прогона, а это не то же самое, что «не ранжируется вовсе».",
+    footnote: "В каждой строке — последний прогон внутри периода: перечислены все домены проекта, которые ранжируются, начиная с лучшей позиции. «Монополизация» — какую часть этой страницы занимает проект всеми своими доменами, с учётом веса каждой позиции. Если у запроса ничего не указано, ни одного домена проекта не было среди снятых позиций этого прогона, а это не то же самое, что «не ранжируется вовсе». Результат на AMP-домене, который назвал AMP Rotator проекта, тоже считается результатом проекта и отмечен «AMP».",
 
     view: "Вид",
     viewLatest: "Последние",
     viewLatestHint: "Где запрос стоит сейчас: последний прогон внутри периода.",
     viewAverage: "Средние",
     viewAverageHint: "Все прогоны периода, усреднённые по запросу и домену.",
-    avgFootnote: "По строке на каждую пару «запрос — домен», по всем прогонам этой выдачи за период, отсортировано по видимости. В среднюю позицию входят только те прогоны, где домен действительно присутствовал: у отсутствия нет позиции, которую можно усреднить, поэтому присутствие показано отдельной величиной. Видимость объединяет то и другое: это доля страницы, которую занимал домен, усреднённая по всем прогонам, включая те, где его не было. Лучшая и худшая позиции ограничивают среднее: большой разброс на нескольких прогонах — это слабое измерение, а не позиция.",
+    avgFootnote: "По строке на каждую пару «запрос — домен», по всем прогонам этой выдачи за период, отсортировано по видимости. В среднюю позицию входят только те прогоны, где домен действительно присутствовал: у отсутствия нет позиции, которую можно усреднить, поэтому присутствие показано отдельной величиной. Видимость объединяет то и другое: это доля страницы, которую занимал домен, усреднённая по всем прогонам, включая те, где его не было. Лучшая и худшая позиции ограничивают среднее: большой разброс на нескольких прогонах — это слабое измерение, а не позиция. AMP-домены одного сайта — одна строка с пометкой «AMP»: сам домен меняется каждый день.",
     visibilityWhat:
       "Доля страницы, которую занимал этот домен, усреднённая по всем прогонам за период — включая те, где его вообще не было: они считаются нулём.\n\n" +
       "Позиция и присутствие в одном числе: домен, который ранжируется редко, но высоко, и домен, который есть всегда, но ниже, попадают на одну шкалу. Кто из них окажется выше, зависит от весов.\n\n" +
@@ -2234,6 +2247,7 @@ melbet	kz	34	20 000	0,45`,
       `Загружено: ${rows} ${pluralRu(rows, ["позиция", "позиции", "позиций"])} по ${queries} ${pluralRu(queries, ["запросу", "запросам", "запросам"])}.`,
     doneGeos: (list: string) => `По странам: ${list}.`,
     doneDay: (day: string) => `Сохранено как проверка за ${day}.`,
+    doneGeosAdded: (list: string) => `В GEO проекта добавлено: ${list}.`,
     doneProxyChecker: "Проект отправляет в Proxy Checker после каждого прогона, поэтому домены из этого файла отправляются сейчас.",
     showPositions: "Показать позиции",
     openRun: (id: number) => `Открыть прогон №${id}`,
@@ -2315,8 +2329,10 @@ melbet	kz	34	20 000	0,45`,
         failing: "Не PASS", checked: "Проверен",
       },
       helpAmp:
-        "Под таблицей каждой страны — вторая, для сегодняшних AMP-доменов этих доменов: именно на них попадает посетитель из выдачи.",
+        "Под таблицей каждой страны — вторая, для AMP-доменов: тех, что сами есть в выдаче этой страны, и сегодняшнего AMP-домена каждого найденного там домена — именно на него попадает посетитель из выдачи.",
       ampOf: (main: string) => `AMP для ${main}`,
+      ampInSerps: "сам в выдаче",
+      viaMain: "позиция основного домена",
       ampDomains: (n: number) => `${n} ${pluralRu(n, ["AMP-домен", "AMP-домена", "AMP-доменов"])}`,
       failingTitle: "Не проходят в «Блокировках»",
       failingSome: (n: number) => `не проходят: ${n}`,
@@ -2395,7 +2411,7 @@ melbet	kz	34	20 000	0,45`,
       fetchFailed: (code: number | null) => (code ? `ошибка · HTTP ${code}` : "нет ответа"),
       nextRun: (when: string) => `следующий: ${when}`,
       projectTitle: "AMP-домены сегодня",
-      projectHelp: "Сегодняшний AMP-домен каждого домена проекта — по последнему ответу его AMP Rotator.",
+      projectHelp: "Сегодняшний AMP-домен каждого домена проекта — по последнему ответу его AMP Rotator. Результаты на этих доменах и на тех, что были названы в прежние дни, считаются результатами проекта на вкладке «Позиции».",
       settingsLink: "Эндпоинты задаются в «Настройки → Подключение инструментов»",
       fetchedAt: (when: string) => `получено ${when}`,
       projectFailed: (url: string, when: string) =>
@@ -2420,7 +2436,7 @@ melbet	kz	34	20 000	0,45`,
       previewEmpty: (hours: number) =>
         `За последние ${hours} ч не было ни проверки, ни загрузки CSV с доменами проекта — отправлять нечего.`,
       previewAmpNote:
-        "Домены с пометкой AMP — сегодняшние AMP-домены из AMP Rotator проекта: каждый отправляется вместе со своим основным доменом, для тех стран, где этот домен найден.",
+        "Домены с пометкой AMP — AMP-домены из AMP Rotator проекта. AMP-домен отправляется для страны, если он сам найден в её выдаче; кроме того, вместе с каждым найденным доменом отправляется его сегодняшний AMP-домен.",
       sendNow: "Отправить сейчас",
       sending: "Отправка…",
       sendNowHint: (hours: number) => `Отправляет найденное в проверках и загруженных CSV за последние ${hours} ч независимо от расписания.`,

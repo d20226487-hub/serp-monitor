@@ -458,9 +458,10 @@ export function ProjectProxyCheckerCard({ projectId, reloadKey = 0, onChanged }:
             <div className="flex flex-wrap items-center gap-1.5">
               {data.project_geos.map(g => {
                 const on = chosen.includes(g);
-                // The project's own domains found there; their AMP domains
-                // ride along and are not counted as found.
-                const found = (data.preview[g] ?? []).length - (data.preview_amp[g] ?? []).length;
+                // What the SERPs there showed — the project's domains, and
+                // AMP domains too. An AMP domain that only rides along with a
+                // found domain is not counted as found.
+                const found = data.preview_found[g] ?? 0;
                 return (
                   <button
                     key={g}
@@ -499,9 +500,19 @@ export function ProjectProxyCheckerCard({ projectId, reloadKey = 0, onChanged }:
         </div>
         {err && <Callout tone="bad" icon="alert">{err}</Callout>}
 
+        {/* Folded: the line beside the button already says how the send went;
+            the requests and raw answers are for when that needs explaining
+            (user, 2026-10-13: "If needed for debugging, the user will open it"). */}
         {justSent.length > 0 && (
-          <div className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            <div className="text-sm font-medium">{s.exchange.justSent}</div>
+          <details className="group/just rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+            <summary className="flex cursor-pointer list-none flex-wrap items-center gap-1.5 text-sm font-medium">
+              <Icon name="chevronRight" className="h-3.5 w-3.5 transition group-open/just:rotate-90" />
+              {s.exchange.justSent}
+              <span className="font-normal text-slate-500 dark:text-slate-400">
+                · {p.sentResult(justSent.filter(d => d.ok).length, justSent.length)}
+              </span>
+            </summary>
+            <div className="mt-3 space-y-3">
             {justSent.map(d => (
               <details key={d.id} open className="group/sent">
                 <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 text-sm">
@@ -521,7 +532,8 @@ export function ProjectProxyCheckerCard({ projectId, reloadKey = 0, onChanged }:
                 </div>
               </details>
             ))}
-          </div>
+            </div>
+          </details>
         )}
 
         {/* Open by default: what would go is what the "Send now" above it is

@@ -113,8 +113,10 @@ def _geos_state(db: Session, project: Project) -> dict:
 
 def _project_state(db: Session, project: Project) -> dict:
     project_geos = pc.project_geos(db, project)
-    amp_hosts = {host for hosts in pc.amp_of(db, project.id).values() for host in hosts}
-    preview = pc.to_send(db, project, since=pc.recent_window(), geos=project_geos)
+    amp_parents = pc.amp_parents(db, project)
+    # What the SERPs of the last 24 hours showed, then what rides along.
+    found = pc.keep_geos(pc.found_by_geo(db, project, since=pc.recent_window()), project_geos)
+    preview = pc.add_amp(found, pc.amp_of(db, project.id))
     return {
         "mode": project.proxy_checker_mode or "off",
         "time": project.proxy_checker_time,
@@ -125,13 +127,16 @@ def _project_state(db: Session, project: Project) -> dict:
         "project_geos": project_geos,
         "geos": pc.clean_geos(project.proxy_checker_geos) if project.proxy_checker_geos is not None else None,
         # What a send would carry: the project's domains its checks found in
-        # the last 24 hours, each followed by its AMP domain of the day, by
-        # country, for EVERY project GEO — the page narrows it to the chosen
-        # ones as they are toggled, so the effect of a choice shows before saving.
+        # the last 24 hours, the AMP domains found there themselves, and the
+        # AMP domain of the day of each found domain, by country, for EVERY
+        # project GEO — the page narrows it to the chosen ones as they are
+        # toggled, so the effect of a choice shows before saving.
         "preview": preview,
-        # Which of those are AMP domains — sent because their main domain was
-        # found in that country.
-        "preview_amp": {geo: [d for d in domains if d in amp_hosts] for geo, domains in preview.items()},
+        # Which of those are AMP domains: found in that country themselves, or
+        # sent because their main domain was found there.
+        "preview_amp": {geo: [d for d in domains if d in amp_parents] for geo, domains in preview.items()},
+        # How many of them the SERPs showed; the rest ride along.
+        "preview_found": {geo: len(domains) for geo, domains in found.items()},
         "deliveries": _recent(db, project.id),
     }
 
@@ -312,14 +317,16 @@ def project_blocks_failing(
     standing, checks, _reaches_today = _period(db, project, start, end)
     by_key = {(r["geo"], r["domain"]): r for r in standing}
     main, amp = blocks.not_passing(checks, by_key)
+    checked = {(c["geo"], c["domain"]) for c in checks}
     checked_main = {(c["geo"], c["domain"]) for c in checks if not c["main_domain"]}
     return {
         # How many of the project's domains some proxy reported on inside the
         # period, and how many AMP domains.
         "checked": len(checked_main),
         "amp_checked": sum(1 for c in checks if c["main_domain"]),
-        # In the SERPs around then, and not reported on inside the period.
-        "unchecked": sum(1 for key in by_key if key not in checked_main),
+        # In the SERPs around then — a project domain or an AMP domain — and
+        # not reported on inside the period.
+        "unchecked": sum(1 for key in by_key if key not in checked),
         "has_amp": any(c["main_domain"] for c in checks) or bool(pc.amp_of(db, project.id)),
         "rows": main,
         "amp_rows": amp,

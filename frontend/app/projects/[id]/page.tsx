@@ -401,7 +401,7 @@ export default function ProjectPage() {
         {/* The project's GEOs: every country it works in. The Proxy Checker
             card on the Blocks tab chooses among them and re-reads them on save. */}
         <section id="project-geos" className="scroll-mt-4">
-          <ProjectGeosCard projectId={id} onSaved={() => setGeosVersion(v => v + 1)} />
+          <ProjectGeosCard projectId={id} reloadKey={uploadsVersion} onSaved={() => setGeosVersion(v => v + 1)} />
         </section>
       </div>
 

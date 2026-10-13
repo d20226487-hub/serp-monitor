@@ -181,6 +181,23 @@ def parse(text: str, countries: dict[str, str]) -> Parsed:
     return Parsed(rows, empty, dict(unknown), bad)
 
 
+def with_geos(saved: list[str] | None, uploaded: list[str]) -> tuple[list[str] | None, list[str]]:
+    """(the project's saved GEO list after an upload, the GEOs it gained).
+
+    The countries of an upload join the project's GEOs the way its keywords
+    join the project's keywords (user, 2026-10-13: "the project GEOs should be
+    added like keywords are (from the GEO column)") — only the ones not there
+    yet, after the ones that are. A project whose GEOs were never saved (None)
+    stays that way: the countries of its jobs stand in for the list, and the
+    upload's are among them already.
+    """
+    if saved is None:
+        return None, []
+    have = [g.upper() for g in saved]
+    added = [g for g in uploaded if g not in have]
+    return have + added, added
+
+
 def decode(raw: bytes) -> str:
     """UTF-8 as spreadsheets export it; Windows-1251 as a Russian-locale Excel
     saves it — tried in that order, since a 1251 file is not valid UTF-8."""

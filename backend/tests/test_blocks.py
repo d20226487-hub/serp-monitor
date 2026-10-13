@@ -310,3 +310,73 @@ class TestTheBlocksTabForAPeriod:
         # No mapping is given for a period that does not reach today.
         _main, amp = period_rows(self.STANDING, [], {})
         assert amp == []
+
+
+#: SERPs that show AMP domains themselves, as the positions tables report
+#: them: the hit is the AMP host, `amp_of` its site.
+AMP_POSITIONS = {"serps": [
+    serp("google", "kg", [
+        {"keyword": "zazino", "checked_at": TUE, "hits": [
+            {"domain": "amp-shown.example", "position": 2, "amp_of": "zazino.kg"},
+            {"domain": "zazino.kg", "position": 5, "amp_of": None},
+        ]},
+        {"keyword": "zazino вход", "checked_at": TUE, "hits": [
+            {"domain": "amp-alone.example", "position": 3, "amp_of": "lucky-zazino.pro"},
+        ]},
+    ]),
+]}
+
+
+class TestAmpDomainsInTheSerpsThemselves:
+    """An AMP domain a SERP shows is listed in its own right, whether or not
+    its main domain is on that page (user, 2026-10-13: "Yes, send them and
+    show in Blocks")."""
+
+    STANDING = in_serps(AMP_POSITIONS, ["KG"])
+    DOWN = {"KG - Provider A": "PASS", "KG - Provider B": "FAIL"}
+
+    def check(self, domain, statuses, main_domain=None):
+        return {"geo": "KG", "domain": domain, "main_domain": main_domain, "statuses": statuses, "checked_at": TUE}
+
+    def test_it_is_in_the_serps_under_its_own_name_and_names_its_site(self):
+        got = {r["domain"]: r for r in self.STANDING}
+        assert set(got) == {"zazino.kg", "amp-shown.example", "amp-alone.example"}
+        assert (got["amp-shown.example"]["main_domain"], got["amp-shown.example"]["best_position"]) == ("zazino.kg", 2)
+        assert got["amp-alone.example"]["main_domain"] == "lucky-zazino.pro"
+        assert "main_domain" not in got["zazino.kg"] and got["zazino.kg"]["best_position"] == 5
+
+    def test_it_is_a_row_of_the_amp_table_with_its_own_standing_checked_or_not(self):
+        main, amp = period_rows(self.STANDING, [self.check("amp-shown.example", self.DOWN, "zazino.kg")], {})
+        assert [r["domain"] for r in main] == ["zazino.kg"]
+        got = {r["domain"]: r for r in amp}
+        assert set(got) == {"amp-shown.example", "amp-alone.example"}
+        shown, alone = got["amp-shown.example"], got["amp-alone.example"]
+        assert (shown["kind"], shown["own_standing"], shown["best_position"]) == (NOT_PASS, True, 2)
+        # Its main domain is on no page, and no proxy has answered: a row all the same.
+        assert (alone["kind"], alone["own_standing"], alone["best_position"], alone["main_domain"]) == (
+            UNCHECKED, True, 3, "lucky-zazino.pro")
+
+    def test_an_amp_domain_that_only_rides_along_carries_its_sites_standing_and_says_so(self):
+        amp_now = {"zazino.kg": ["amp-today.example", "amp-shown.example"]}
+        _main, amp = period_rows(self.STANDING, [], amp_now)
+        got = {r["domain"]: r for r in amp}
+        assert (got["amp-today.example"]["own_standing"], got["amp-today.example"]["best_position"]) == (False, 5)
+        # Today's AMP domain that a SERP also shows is one row, with its own standing.
+        assert len(amp) == 3 and (got["amp-shown.example"]["own_standing"], got["amp-shown.example"]["best_position"]) == (True, 2)
+
+    def test_an_amp_domain_checked_in_a_period_no_serp_shows_it_in_stands_with_its_site(self):
+        _main, amp = period_rows(self.STANDING, [self.check("amp-old.example", self.DOWN, "zazino.kg")], {})
+        old = {r["domain"]: r for r in amp}["amp-old.example"]
+        assert (old["own_standing"], old["best_position"], old["main_domain"]) == (False, 5, "zazino.kg")
+
+    def test_what_did_not_pass_takes_the_amp_domains_own_standing_when_it_has_one(self):
+        by_key = {(r["geo"], r["domain"]): r for r in self.STANDING}
+        checks = [self.check("amp-shown.example", self.DOWN, "zazino.kg"),
+                  self.check("amp-old.example", self.DOWN, "zazino.kg"),
+                  self.check("zazino.kg", self.DOWN)]
+        main, amp = not_passing(checks, by_key)
+        assert [(r["domain"], r["best_position"]) for r in main] == [("zazino.kg", 5)]
+        assert "own_standing" not in main[0]
+        got = {r["domain"]: r for r in amp}
+        assert (got["amp-shown.example"]["own_standing"], got["amp-shown.example"]["best_position"]) == (True, 2)
+        assert (got["amp-old.example"]["own_standing"], got["amp-old.example"]["best_position"]) == (False, 5)

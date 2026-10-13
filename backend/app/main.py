@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .db import Base, SessionLocal, engine
 from .models import SavedLocation
 from .amp_rotator import catch_up as amp_rotator_catch_up
+from .amp_rotator import remember_current as amp_rotator_remember_current
 from .provider_locations import warm_up as warm_up_locations
 from .routers import (
     amp_rotator as amp_rotator_router, export, jobs, keyword_volumes, locations, project_positions,
@@ -225,6 +226,8 @@ async def lifespan(_: FastAPI):
         _backfill_yandex_lr_from_seed(db)
         reload_all_schedules(db)
         reload_tool_schedules(db)
+        # AMP hosts fetched before their history was kept: in it from now on.
+        amp_rotator_remember_current(db)
     finally:
         db.close()
     sched = get_scheduler()

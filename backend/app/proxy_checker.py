@@ -56,9 +56,17 @@ an AMP Rotator has, for some of its domains, an AMP domain of the day — the
 host a visitor coming from the SERP actually lands on. So for each country,
 every domain found there is followed by ITS AMP domain (amp_of / add_amp): the
 rule for what goes stays "what the SERPs of that country showed", and the AMP
-domain rides with the domain that was shown. An AMP domain whose main domain
-was not found in a country is not sent for it. Nothing has to be switched on:
-a project without a rotator simply has no AMP domains to add.
+domain rides with the domain that was shown.
+
+And an AMP domain that a SERP of the country shows ITSELF is sent in its own
+right, whether or not its main domain is on that page (the user, asked whether
+it should be, 2026-10-13: "Yes, send them and show in Blocks"). Today's or an
+earlier day's: a page can still list the host the rotator has moved on from,
+and that is the one a visitor clicks — so the hosts looked for are every one a
+rotator has ever named (amp_rotator.amp_hosts), as on the positions tables.
+An AMP domain neither shown nor riding with a shown domain is not sent for
+that country. Nothing has to be switched on: a project without a rotator
+simply has no AMP domains.
 
 The connection (URL, token) is global: Settings → Tools Connection. The token
 is stored like the SERP providers' and never returned to the browser. No
@@ -77,12 +85,13 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ._redact import redact
+from .amp_rotator import amp_hosts
 from .app_settings import _get, _set
 from .db import SessionLocal
 from .models import (
     AmpDomain, DomainProxyCheckLog, Job, JobRun, Project, Result, ToolDelivery,
 )
-from .positions_csv import counted_host
+from .positions_csv import counted_host, ours_index
 
 log = logging.getLogger(__name__)
 
@@ -148,22 +157,32 @@ def connection_status() -> dict:
 # Pure: what to send
 # --------------------------------------------------------------------------
 
-def group_found(rows: list[tuple], domains: list[str]) -> dict[str, list[str]]:
-    """Country → the project's domains found there, sorted.
+def group_found(rows: list[tuple], domains: list[str], amp: dict[str, str] | None = None) -> dict[str, list[str]]:
+    """Country → what of the project's was found there: its domains, sorted,
+    then the AMP domains found there themselves, sorted.
 
     `rows` are (country_code, linked_host, shown_host, job_prefers_shown) for
     captured results. A result counts as the host the positions tables count
     it as, and matches a project domain exactly or as its www. spelling — a
     subdomain is a different target, which is why projects list them apart.
+    `amp` (AMP host → project domain) are the AMP domains a rotator has named
+    for the project: matched by the same rule, and reported under their own
+    name, since that is the host to check.
     """
-    by_host = {h: d for d in domains for h in (d.lower(), f"www.{d.lower()}")}
-    found: dict[str, set[str]] = {}
+    whose_host = ours_index(domains, amp)
+    sites: dict[str, set[str]] = {}
+    amp_found: dict[str, set[str]] = {}
     for country, linked, shown, prefers_shown in rows:
         geo = (country or "").strip().upper()
-        domain = by_host.get(counted_host(linked, shown, bool(prefers_shown)).lower())
-        if geo and domain:
-            found.setdefault(geo, set()).add(domain)
-    return {geo: sorted(ds) for geo, ds in sorted(found.items())}
+        whose = whose_host.get(counted_host(linked, shown, bool(prefers_shown)).lower())
+        if not geo or whose is None:
+            continue
+        if whose.amp_host:
+            amp_found.setdefault(geo, set()).add(whose.amp_host)
+        else:
+            sites.setdefault(geo, set()).add(whose.domain)
+    return {geo: sorted(sites.get(geo, ())) + sorted(amp_found.get(geo, ()))
+            for geo in sorted(set(sites) | set(amp_found))}
 
 
 def clean_geos(values) -> list[str]:
@@ -307,7 +326,8 @@ def send_geos(db: Session, project: Project) -> list[str]:
 def found_by_geo(db: Session, project: Project, *, run_id: int | None = None,
                  since: datetime | None = None) -> dict[str, list[str]]:
     """The project's domains its checks captured, by country — in one run, or
-    in every run of the project since `since` (naive UTC, as runs are stored).
+    in every run of the project since `since` (naive UTC, as runs are stored) —
+    and, after them, the AMP domains those checks captured themselves.
 
     "Since" is when a run started or, for an uploaded one, when it was
     uploaded: an export of last week's SERPs uploaded an hour ago is an hour
@@ -315,7 +335,8 @@ def found_by_geo(db: Session, project: Project, *, run_id: int | None = None,
     domains = [d for d in (project.domains or []) if d]
     if not domains:
         return {}
-    hosts = [h for d in domains for h in (d, f"www.{d}")]
+    amp = amp_hosts(db, project)
+    hosts = list(ours_index(domains, amp))
     rows: list[tuple] = []
     for i in range(0, len(hosts), _HOSTS_PER_QUERY):
         part = hosts[i:i + _HOSTS_PER_QUERY]
@@ -331,7 +352,7 @@ def found_by_geo(db: Session, project: Project, *, run_id: int | None = None,
         if since is not None:
             q = q.filter(or_(JobRun.started_at >= since, JobRun.uploaded_at >= since))
         rows += [tuple(r) for r in q.distinct().all()]
-    return group_found(rows, domains)
+    return group_found(rows, domains, amp)
 
 
 def amp_of(db: Session, project_id: int) -> dict[str, list[str]]:
@@ -347,11 +368,21 @@ def amp_of(db: Session, project_id: int) -> dict[str, list[str]]:
     return out
 
 
+def amp_parents(db: Session, project: Project) -> dict[str, str]:
+    """AMP host → the project domain it is the AMP domain of, for every AMP
+    host a send can carry: today's, and the earlier ones a SERP may still
+    show. What marks a domain as an AMP domain in a request, in the log and on
+    the page."""
+    today = {host: domain for domain, hosts in amp_of(db, project.id).items() for host in hosts}
+    return {**today, **amp_hosts(db, project)}
+
+
 def to_send(db: Session, project: Project, *, run_id: int | None = None,
             since: datetime | None = None, geos: list[str] | None = None) -> dict[str, list[str]]:
-    """What a send carries, by country: the project's domains found in the
-    SERPs, in the countries given (default: the ones chosen for sending), each
-    followed by its AMP domain of the day."""
+    """What a send carries, by country, in the countries given (default: the
+    ones chosen for sending): the project's domains found in the SERPs, the
+    AMP domains found there themselves, and the AMP domain of the day of each
+    found domain — once each."""
     found = found_by_geo(db, project, run_id=run_id, since=since)
     allowed = send_geos(db, project) if geos is None else geos
     return add_amp(keep_geos(found, allowed), amp_of(db, project.id))
@@ -453,8 +484,8 @@ def deliver(db: Session, project: Project, by_geo: dict[str, list[str]], *, trig
     if not conn["url"] or not conn["token"] or not by_geo:
         return []
     # Which of the domains going out are AMP domains, and of what: the same
-    # mapping that put them in the list a moment ago.
-    amp_parents = {host: domain for domain, hosts in amp_of(db, project.id).items() for host in hosts}
+    # mappings that put them in the list a moment ago.
+    parents = amp_parents(db, project)
     out = []
     for geo, domains in by_geo.items():
         sent = send_one(conn["url"], conn["token"], geo, domains, client)
@@ -466,7 +497,7 @@ def deliver(db: Session, project: Project, by_geo: dict[str, list[str]], *, trig
         if sent.ok and sent.data is not None:
             db.flush()               # the row's id, for the statuses to point back at
             record_statuses(db, geo, domains, sent.data, row.id, project_id=project.id,
-                            amp_parents={d: amp_parents[d] for d in domains if d in amp_parents})
+                            amp_parents={d: parents[d] for d in domains if d in parents})
         if not sent.ok:
             log.warning("proxy checker refused %s for project %s: %s %s",
                         geo, project.id, sent.status_code, sent.excerpt[:120])

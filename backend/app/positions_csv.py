@@ -16,7 +16,8 @@ And two scopes: ``all`` puts every site on the page in the file, ours marked;
 The page is the one the tables show: per (query, SERP), the LATEST run inside
 the window. A site "is ours" by the same rule as the tables: the project
 domain, or its www. spelling, of the host the result counts as (the displayed
-host when the job prefers it).
+host when the job prefers it) — or, the same way, an AMP domain a rotator has
+named for a project domain (`ours_index`).
 
 Russian files use ";" between fields and a decimal comma, because that is what
 Excel in a Russian locale expects: with "," every row lands in column A, and
@@ -41,6 +42,8 @@ class PageResult(NamedTuple):
     ours: bool
     url: str | None
     title: str | None
+    #: The project domain this host is an AMP domain of, when it is one.
+    amp_of: str | None = None
 
 
 class Page(NamedTuple):
@@ -68,6 +71,7 @@ _LABELS = {
         "share": "Монополизация, %", "ours_list": "Наши позиции", "slots": "Наших результатов",
         "slots_total": "Результатов на странице", "checked": "Проверено", "position": "Позиция",
         "site": "Сайт", "is_ours": "Наш сайт", "url": "URL", "title": "Заголовок",
+        "amp_of": "AMP-домен сайта",
         "yes": "да", "no": "нет", "google": "Google", "yandex": "Яндекс",
         "mobile": "Мобильный", "desktop": "Десктоп",
     },
@@ -77,6 +81,7 @@ _LABELS = {
         "share": "Monopolisation, %", "ours_list": "Our positions", "slots": "Our results",
         "slots_total": "Results on page", "checked": "Checked", "position": "Position",
         "site": "Site", "is_ours": "Our site", "url": "URL", "title": "Title",
+        "amp_of": "AMP domain of",
         "yes": "yes", "no": "no", "google": "Google", "yandex": "Yandex",
         "mobile": "Mobile", "desktop": "Desktop",
     },
@@ -97,6 +102,37 @@ def project_domain(host: str, domains: list[str]) -> str | None:
         if host in (d, f"www.{d}"):
             return d
     return None
+
+
+class Ours(NamedTuple):
+    """Whose a host is, when it is the project's."""
+    #: The project domain.
+    domain: str
+    #: The host itself, when the result is not on the domain but on one of its
+    #: AMP domains.
+    amp_host: str | None = None
+
+
+def ours_index(domains: list[str], amp: dict[str, str] | None = None) -> dict[str, Ours]:
+    """Every spelling of a host that counts as the project's → whose it is.
+
+    A project domain and its www. spelling, as `project_domain` has it. And,
+    by the same rule, every AMP domain a rotator has named for one of those
+    domains (`amp`: AMP host → project domain): the project never lists them —
+    they change daily — but a result on one is a result of ours (user,
+    2026-10-13: "they appear in SERPs. Then they should be counted in
+    positions as well"). A host that is both is the project domain: that one
+    is on the project's own list.
+    """
+    index: dict[str, Ours] = {}
+    for host, domain in (amp or {}).items():
+        host = host.lower()
+        for spelling in (host, f"www.{host}"):
+            index[spelling] = Ours(domain, host)
+    for d in domains:
+        for spelling in (d.lower(), f"www.{d.lower()}"):
+            index[spelling] = Ours(d)
+    return index
 
 
 def _num(value: float, lang: str) -> str:
@@ -139,7 +175,9 @@ def grid_rows(pages: list[Page], sites: str, lang: str, tz_minutes: int = 0) -> 
                 name = f"{OURS_MARK}{r.host}" if (r.ours and sites == "all") else r.host
                 # Two results on one slot should not happen; if it does, both show.
                 cells[r.position - 1] = f"{cells[r.position - 1]} | {name}" if cells[r.position - 1] else name
-        ours = ", ".join(f"{r.position} {r.host}" for r in p.results if r.ours)
+        # An AMP domain names its site: the host alone says nothing of whose it is.
+        ours = ", ".join(f"{r.position} {r.host}" + (f" (AMP {r.amp_of})" if r.amp_of else "")
+                         for r in p.results if r.ours)
         rows.append([*_place(p, L, lang), p.keyword, _num(p.share, lang), ours, str(p.slots),
                      str(p.slots_total), _when(p.checked_at, tz_minutes), *cells])
     return rows
@@ -150,13 +188,13 @@ def list_rows(pages: list[Page], sites: str, lang: str, tz_minutes: int = 0) -> 
     L = _LABELS[lang]
     header = [L["engine"], L["device"], L["country"], L["location"], L["language"], L["google_domain"],
               L["keyword"], L["position"], L["site"], L["is_ours"], L["url"], L["title"], L["share"],
-              L["checked"]]
+              L["checked"], L["amp_of"]]
     rows = [header]
     for p in pages:
         for r in _shown(p.results, sites):
             rows.append([*_place(p, L, lang), p.keyword, str(r.position), r.host,
                          L["yes"] if r.ours else L["no"], r.url or "", r.title or "",
-                         _num(p.share, lang), _when(p.checked_at, tz_minutes)])
+                         _num(p.share, lang), _when(p.checked_at, tz_minutes), r.amp_of or ""])
     return rows
 
 

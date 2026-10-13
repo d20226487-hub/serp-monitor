@@ -19,9 +19,12 @@ import { RANGE_PRESETS, RangePreset, customRange, rangeFor, toInputValue, toQuer
  * ranks comes from the same reading the Positions tab shows.
  *
  * Two kinds of rows, in two tables (user, 2026-10-13: "One table for non-AMP
- * and one for AMP"): the project's own domains, and the AMP domain of the day
- * of each of them — the host a visitor from the SERP actually lands on. An
- * AMP row stands where its main domain stands and names it.
+ * and one for AMP"): the project's own domains, and AMP domains. An AMP
+ * domain is a row for either of two reasons (user, 2026-10-13: "Yes, send
+ * them and show in Blocks"): a SERP shows it itself — then the row has its own
+ * standing and says so — or it is the AMP domain of the day of a domain in the
+ * SERPs, the host a visitor actually lands on, and stands where that domain
+ * stands, which the row also says.
  *
  * The period is the one the Overview card and the positions use — today,
  * yesterday, this week … (user, 2026-10-13: "give the same time selection
@@ -76,6 +79,8 @@ function Standing({ r }: { r: BlockRow }) {
   if (r.best_position === null || r.best_position === undefined) {
     return <span className="text-slate-400 dark:text-slate-600">—</span>;
   }
+  // An AMP domain that no SERP shows itself stands where its main domain does.
+  const viaMain = !!r.main_domain && !r.own_standing;
   return (
     <>
       <span className="font-semibold tabular-nums">#{r.best_position}</span>
@@ -83,6 +88,7 @@ function Standing({ r }: { r: BlockRow }) {
         {r.best_keyword}
         {" · "}
         {r.engines.map(e => (e === "yandex" ? t.variantLabel.yandex : t.variantLabel.google)).join(", ")}
+        {viaMain && <>{" · "}{t.tools.blocks.viaMain}</>}
       </div>
     </>
   );
@@ -115,7 +121,11 @@ function StatusTable({ geo, rows, proxies, amp, note }: {
             <tr key={`${r.domain}|${r.main_domain ?? ""}`}>
               <td className={TD}>
                 <div className="break-all font-mono text-xs">{r.domain}</div>
-                {r.main_domain && <div className={`mt-0.5 break-all ${HINT}`}>{x.ampOf(r.main_domain)}</div>}
+                {r.main_domain && (
+                  <div className={`mt-0.5 break-all ${HINT}`}>
+                    {x.ampOf(r.main_domain)}{r.own_standing && <>{" · "}{x.ampInSerps}</>}
+                  </div>
+                )}
                 <div className={`mt-0.5 ${HINT}`}>{note(r)}</div>
               </td>
               {proxies.map(p => (
@@ -187,7 +197,9 @@ export function ProjectBlocksCard({ projectId, reloadKey = 0 }: {
     .filter(s => s.main.length + s.amp.length > 0);
   // No proxy has reported on anything in this period (and the example is off):
   // there is a notice to show, and no table worth showing.
-  const nothingChecked = !data.demo && !data.has_real && data.rows.length > 0;
+  const nothingChecked = !data.demo && !data.has_real && all.length > 0;
+  // In the SERPs: the project's domains, and the AMP domains a SERP shows itself.
+  const inSerps = data.counts.in_serps + data.amp_rows.filter(r => r.own_standing).length;
   // The filter counts cover both tables: the buttons filter both.
   const count = (k: "all" | BlockKind) =>
     k === "all" ? all.length : data.counts[k] + data.amp_counts[k];
@@ -210,7 +222,7 @@ export function ProjectBlocksCard({ projectId, reloadKey = 0 }: {
     <Card
       title={
         <span className="flex flex-wrap items-center gap-2">
-          <SectionTitle icon="shield" count={data.counts.in_serps}>{x.title}</SectionTitle>
+          <SectionTitle icon="shield" count={inSerps}>{x.title}</SectionTitle>
           {data.demo && <Pill tone="warn" icon="alert">{x.demoBadge}</Pill>}
         </span>
       }
@@ -271,7 +283,7 @@ export function ProjectBlocksCard({ projectId, reloadKey = 0 }: {
 
         {/* With nothing checked the tables would be rows of dashes: the user
             asked for the notice alone ("It clutters the UX"). */}
-        {nothingChecked ? null : data.rows.length === 0 ? (
+        {nothingChecked ? null : all.length === 0 ? (
           <Empty>{x.empty}</Empty>
         ) : (
           <>
@@ -384,7 +396,11 @@ function FailingTable({ rows, amp }: { rows: BlockRow[]; amp: boolean }) {
             <tr key={`${r.geo}|${r.domain}|${r.main_domain ?? ""}`}>
               <td className={TD}>
                 <div className="break-all font-mono text-xs">{r.domain}</div>
-                {r.main_domain && <div className={`mt-0.5 break-all ${HINT}`}>{x.ampOf(r.main_domain)}</div>}
+                {r.main_domain && (
+                  <div className={`mt-0.5 break-all ${HINT}`}>
+                    {x.ampOf(r.main_domain)}{r.own_standing && <>{" · "}{x.ampInSerps}</>}
+                  </div>
+                )}
               </td>
               <td className={`${TD} font-mono`}>{r.geo}</td>
               <td className={TD}><Failing r={r} /></td>

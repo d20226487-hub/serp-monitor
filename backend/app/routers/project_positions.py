@@ -39,6 +39,20 @@ Decisions worth knowing, because they are what make the numbers mean something:
   NOT match their parent: kz.example.com is a different target from
   example.com, which is exactly why the project stores them separately.
 
+* An AMP domain counts as the project's too. A project lists its sites, not
+  their AMP domains — those change daily — so every AMP host a rotator has
+  named for one of the project's domains is matched by the same rule (the
+  user, 2026-10-13: "we have not added the today's AMP domains to the project
+  BUT they appear in SERPs. Then they should be counted in positions as
+  well"). Every one EVER named, not today's: a page read last week shows last
+  week's AMP host. Such a result is listed under the host that ranked, marked
+  as an AMP domain of its site, and every AMP host is an entry of its own: a
+  row can hold "example.com #3", today's AMP domain at #1 and yesterday's,
+  still listed, at #6 — which is each a host somebody can click, and each one
+  the Blocks tab has to show. Across a window the AMP hosts of one site are
+  ONE line — the host is new every day, and thirty lines each present once
+  would say nothing about how the site's AMP side has held up.
+
 * Which host a result COUNTS as depends on its job's `prefer_shown_host`. With
   it on, a result the engine printed as by.tribuna.com over a cloudfront.net
   link counts as by.tribuna.com, because that is what ranked as far as anyone
@@ -57,11 +71,12 @@ from fastapi.responses import Response
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+from ..amp_rotator import amp_hosts
 from ..app_settings import get_visibility_weights
 from ..db import get_db
 from ..engine_domains import yandex_domain_for
 from ..models import Job, JobRun, Project, Result
-from ..positions_csv import Page, PageResult, counted_host, grid_rows, list_rows, project_domain, to_csv
+from ..positions_csv import Page, PageResult, counted_host, grid_rows, list_rows, ours_index, to_csv
 from ..visibility import share, visibility
 from .export import _slugify
 
@@ -169,15 +184,17 @@ def _parse_stamp(value: str | None, field: str) -> datetime | None:
     return parsed
 
 
-def _host_variants(domain: str) -> list[str]:
-    """The spellings a result host might use for this domain."""
-    return [domain, f"www.{domain}"]
+#: Hosts per IN (…): a project's domains and every AMP host ever named for
+#: them can run to thousands, and each is bound twice (linked and displayed).
+_HOSTS_PER_QUERY = 400
 
 
 class _Window(NamedTuple):
     """Everything both views need before they diverge."""
     project: Project
     domains: list[str]
+    #: AMP host → the project domain it is, or was, the AMP domain of.
+    amp: dict[str, str]
     job_names: dict[int, str]
     #: Per job, not per project: two jobs in one folder can legitimately
     #: disagree about whether an AMP result counts as its publisher.
@@ -211,6 +228,7 @@ def _window(db: Session, project_id: int, start: str | None, end: str | None) ->
     return _Window(
         project=project,
         domains=list(project.domains or []),
+        amp=amp_hosts(db, project),
         job_names=job_names,
         prefers_shown={jid: bool(pref) for jid, _, pref in job_rows},
         run_by_id={r.id: r for r in runs},
@@ -249,8 +267,18 @@ def _coverage(db: Session, run_ids: Iterable[int]) -> list[tuple[tuple, int, int
     return [(tuple(r[:-3]), r[-3], r[-2] or 0, r[-1] or 0) for r in rows]
 
 
+def _whos(win: _Window) -> list[tuple[str, bool]]:
+    """The lines a keyword can have in the averaged view: each project domain,
+    and — as a line of its own — the AMP side of each domain a rotator has
+    named AMP hosts for."""
+    with_amp = set(win.amp.values())
+    return [(d, False) for d in win.domains] + [(d, True) for d in win.domains if d in with_amp]
+
+
 def _hits(db: Session, win: _Window, run_ids: set[int]) -> dict[tuple, dict]:
-    """One entry per (keyword, SERP, domain, run), for the project's domains.
+    """One entry per (keyword, SERP, host, run), for the hosts that are the
+    project's — `host` being (project domain, AMP host or None): the domain
+    itself, or one of its AMP domains.
 
     A site can hold several slots on one page, and the two questions about that
     want different answers. `position` is the best of them — the position the
@@ -262,27 +290,33 @@ def _hits(db: Session, win: _Window, run_ids: set[int]) -> dict[tuple, dict]:
     if not win.domains or not run_ids:
         return cells
 
-    wanted_hosts = [h for d in win.domains for h in _host_variants(d)]
-    host_to_domain = {h: d for d in win.domains for h in _host_variants(d)}
+    whose_host = ours_index(win.domains, win.amp)
+    wanted_hosts = list(whose_host)
     # Both hosts are candidates, so the filter cannot be a plain IN on `domain`:
     # a result whose LINK is a cloudfront host still matches when the engine
-    # displayed the publisher.
-    rows = (
-        db.query(
-            Result.keyword, *[getattr(Result, c) for c in SERP_COLUMNS],
-            Result.run_id, Result.domain, Result.position, Result.url,
-            Result.shown_host,
+    # displayed the publisher. Asked in parts, and gathered by the result's id:
+    # one whose two hosts fall in different parts comes back twice.
+    found: dict[int, tuple] = {}
+    for i in range(0, len(wanted_hosts), _HOSTS_PER_QUERY):
+        part = wanted_hosts[i:i + _HOSTS_PER_QUERY]
+        rows = (
+            db.query(
+                Result.id, Result.keyword, *[getattr(Result, c) for c in SERP_COLUMNS],
+                Result.run_id, Result.domain, Result.position, Result.url,
+                Result.shown_host,
+            )
+            .filter(
+                Result.run_id.in_(list(run_ids)),
+                or_(
+                    Result.domain.in_(part),
+                    Result.shown_host.in_(part),
+                ),
+            )
+            .all()
         )
-        .filter(
-            Result.run_id.in_(list(run_ids)),
-            or_(
-                Result.domain.in_(wanted_hosts),
-                Result.shown_host.in_(wanted_hosts),
-            ),
-        )
-        .all()
-    )
-    for row in rows:
+        for result_id, *rest in rows:
+            found[result_id] = tuple(rest)
+    for row in found.values():
         key = tuple(row[: 1 + len(SERP_COLUMNS)])
         run_id, host, position, url, displayed = row[-5:]
         linked_host = (host or "").lower()
@@ -290,11 +324,14 @@ def _hits(db: Session, win: _Window, run_ids: set[int]) -> dict[tuple, dict]:
         # The host this result counts as. Only the displayed one when the job
         # asked for that AND the engine actually reported one.
         counted = (displayed or linked_host) if use_displayed else linked_host
-        domain = host_to_domain.get(counted)
-        if domain is None:
+        whose = whose_host.get(counted)
+        if whose is None:
             continue
         made = {
-            "domain": domain,
+            # The host that ranked, as the project knows it: one of its
+            # domains, or an AMP domain of one — then `amp_of` names the site.
+            "domain": whose.amp_host or whose.domain,
+            "amp_of": whose.domain if whose.amp_host else None,
             "position": position,
             "url": url,
             # Raw values travel with every hit, so the table can reveal what
@@ -312,7 +349,7 @@ def _hits(db: Session, win: _Window, run_ids: set[int]) -> dict[tuple, dict]:
             # which is worse than a visible gap.
             "unresolved": bool(use_displayed and not displayed),
         }
-        cell_key = (*key, domain, run_id)
+        cell_key = (*key, (whose.domain, whose.amp_host), run_id)
         prior = cells.get(cell_key)
         if prior is None:
             made["positions"] = [position]
@@ -401,6 +438,9 @@ def project_positions(
 
     cells = _hits(db, win, set(latest.values()))
     weights = get_visibility_weights()
+    on_page: dict[tuple, list[dict]] = {}
+    for (*key, _host, run_id), cell in cells.items():
+        on_page.setdefault((tuple(key), run_id), []).append(cell)
 
     serps: dict[tuple, dict] = {}
     for key, run_id in latest.items():
@@ -409,13 +449,7 @@ def project_positions(
         serp = serps.setdefault(serp_key, _serp_shell(serp_key))
         # Best position first: that is the one being reported, and the rest are
         # the other places the project also holds on the same page.
-        hits = sorted(
-            (
-                cells[(*key, d, run_id)]
-                for d in win.domains if (*key, d, run_id) in cells
-            ),
-            key=lambda h: h["position"],
-        )
+        hits = sorted(on_page.get((key, run_id), []), key=lambda h: (h["position"], h["domain"]))
         # How much of this page the project holds. Every slot counts, not just
         # each domain's best one: a network occupying #2, #5 and #6 has taken
         # three slots off the page, and a figure that only saw its best would
@@ -482,7 +516,9 @@ def export_positions_csv(
     can never disagree about which reading is "now".
     """
     data = project_positions(project_id, start, end, db)
-    domains = data["project"]["domains"]
+    # The same rule the table was built by: the project's domains and the AMP
+    # domains named for them.
+    whose_host = ours_index(data["project"]["domains"], amp_hosts(db, db.get(Project, project_id)))
     table_rows = [(serp, row) for serp in data["serps"] for row in serp["rows"]]
     run_ids = {row["run_id"] for _serp, row in table_rows}
     job_ids = {row["job_id"] for _serp, row in table_rows}
@@ -524,8 +560,12 @@ def export_positions_csv(
         results = []
         for position, linked, displayed, url, title in on_page.get((row["run_id"], row["keyword"], serp_key), []):
             host = counted_host(linked, displayed, prefer)
-            ours = project_domain(host, domains)
-            results.append(PageResult(position, ours or host, ours is not None, url, title))
+            whose = whose_host.get(host.lower())
+            if whose is None:
+                results.append(PageResult(position, host, False, url, title))
+            else:
+                results.append(PageResult(position, whose.amp_host or whose.domain, True, url, title,
+                                          whose.domain if whose.amp_host else None))
         pages.append(Page(
             **{c: serp[c] for c in SERP_COLUMNS if c != "google_domain"},
             google_domain=engine_domain(serp, row["run_id"]), keyword=row["keyword"], checked_at=row["checked_at"],
@@ -583,9 +623,21 @@ def project_position_averages(
     # Every reading of one domain on one keyword, gathered across runs. The run
     # each reading came from travels with it: what a cell blends is decided by
     # the runs the domain actually appeared in, not by every run of the keyword.
-    samples: dict[tuple, list[tuple[int, dict]]] = {}
-    for (*key, domain, run_id), cell in cells.items():
-        samples.setdefault((tuple(key), domain), []).append((run_id, cell))
+    #
+    # A line is a project domain, or the AMP side of one — all its AMP hosts
+    # together. Two of them on one page are ONE reading of that run, the
+    # better placed, as a site with two listings is read by its best: a line
+    # cannot have ranked twice in a run.
+    best: dict[tuple, dict[int, dict]] = {}
+    on_hosts: dict[tuple, set[str]] = {}
+    for (*key, (domain, amp_host), run_id), cell in cells.items():
+        line = (tuple(key), (domain, amp_host is not None))
+        prior = best.setdefault(line, {}).get(run_id)
+        if prior is None or cell["position"] < prior["position"]:
+            best[line][run_id] = cell
+        on_hosts.setdefault(line, set()).add(cell["domain"])
+    samples = {line: list(by_run.items()) for line, by_run in best.items()}
+    whos = _whos(win)
 
     serps: dict[tuple, dict] = {}
     for key, depths in measured.items():
@@ -595,8 +647,9 @@ def project_position_averages(
         serp.setdefault("run_ids", set()).update(run_ids)
 
         hits = []
-        for domain in win.domains:
-            readings = samples.get((key, domain))
+        for who in whos:
+            domain, on_amp = who
+            readings = samples.get((key, who))
             if not readings:
                 continue
             stat = average_position([c["position"] for _rid, c in readings], len(run_ids))
@@ -608,6 +661,11 @@ def project_position_averages(
             providers = [win.run_by_id[rid].provider for rid, _c in readings]
             hits.append({
                 "domain": domain,
+                # The site's AMP side: its results on its AMP domains. One
+                # line for all of them, since the host changes daily — with
+                # the hosts these readings were actually on.
+                "amp": on_amp,
+                "amp_hosts": sorted(on_hosts[(key, who)]) if on_amp else [],
                 "avg_position": stat.average,
                 "best": stat.best,
                 "worst": stat.worst,
@@ -645,7 +703,7 @@ def project_position_averages(
         # sorting by the number that already accounts for that puts the real
         # story at the top. Ties fall back to position, then name, so the order
         # never moves between visits.
-        hits.sort(key=lambda h: (-h["visibility"], h["avg_position"], h["domain"]))
+        hits.sort(key=lambda h: (-h["visibility"], h["avg_position"], h["domain"], h["amp"]))
 
         serp["rows"].append({
             "keyword": keyword,

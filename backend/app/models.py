@@ -358,6 +358,29 @@ class AmpDomain(Base):
     fetched_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class AmpDomainSeen(Base):
+    """Every AMP domain a rotator has ever named for one of a project's
+    domains — the history `amp_domains` does not keep.
+
+    Read by the positions tables: a result on an AMP domain counts as the
+    project's (user, 2026-10-13: "we have not added the today's AMP domains to
+    the project BUT they appear in SERPs. Then they should be counted in
+    positions as well"). AMP domains change daily and a SERP is read on some
+    day in the past, so today's mapping alone would count yesterday's page as
+    holding nothing of ours. A row is never removed by a rotation: a host that
+    was a site's AMP domain is that site's on every page that shows it.
+    """
+    __tablename__ = "amp_domains_seen"
+    __table_args__ = (UniqueConstraint("project_id", "domain", "amp_domain", name="uq_amp_domains_seen"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    domain: Mapped[str] = mapped_column(String(255))
+    amp_domain: Mapped[str] = mapped_column(String(255))
+    first_seen: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    last_seen: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class RunUrlMetric(Base):
     """Ahrefs metrics for one unique URL within one run (analyzer mode).
 

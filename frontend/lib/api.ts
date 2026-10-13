@@ -70,6 +70,8 @@ export type SerpCsvUpload = SerpCsvReport & {
   device: string;
   /** The project sends to the Proxy Checker after a run, so after this too. */
   proxy_checker_after: boolean;
+  /** Countries of the file that were added to the project's saved GEO list. */
+  geos_added: string[];
 };
 /** An upload the server refused, with what it found in the file when it got that far. */
 export class SerpCsvError extends Error {
@@ -129,6 +131,10 @@ export type BlockRow = {
   domain: string;
   /** On an AMP row: the project domain this is the AMP domain of. */
   main_domain?: string;
+  /** On an AMP row: a SERP shows this AMP domain itself, and the standing
+   *  below is its own. False: it is there as today's AMP domain of a domain
+   *  in the SERPs, and the standing is that domain's. */
+  own_standing?: boolean;
   kind: BlockKind;
   /** Proxy → status, as the Proxy Checker gave them ({"KG - Provider B": "PASS"}).
    *  null while no proxy has reported. */
@@ -206,11 +212,14 @@ export type ProjectProxyChecker = {
   /** Which of them are sent. null = all, also ones added to the project later. */
   geos: string[] | null;
   /** Country → what a send would carry: the project's domains found in the
-   *  SERPs in the last 24 h, each followed by its AMP domain of the day. For
-   *  every project GEO (the page narrows it to the chosen ones). */
+   *  SERPs in the last 24 h, the AMP domains found there themselves, and the
+   *  AMP domain of the day of each found domain. For every project GEO (the
+   *  page narrows it to the chosen ones). */
   preview: Record<string, string[]>;
   /** Country → which of those are AMP domains. */
   preview_amp: Record<string, string[]>;
+  /** Country → how many of those the SERPs showed; the rest ride along. */
+  preview_found: Record<string, number>;
   deliveries: ToolDelivery[];
 };
 
@@ -255,7 +264,12 @@ export type Project = {
 /** One project domain's place on a SERP. Only ranked domains get one, so a
  *  project watching ten sites does not carry ten nulls per keyword. */
 export type PositionHit = {
+  /** The host that ranked: a project domain, or an AMP domain of one. */
   domain: string;
+  /** Set when `domain` is an AMP domain: the project domain it is the AMP
+   *  domain of. The project never lists AMP domains — they change daily — so
+   *  the ones its AMP Rotator has named are counted as its own. */
+  amp_of: string | null;
   /** The best slot this domain holds — the position it "has". */
   position: number;
   /** Every slot it holds on this page, ascending. A site with three listings
@@ -325,6 +339,11 @@ export type SerpGroup = SerpIdentity & {
 /** One project domain's record on one keyword, across a window of runs. */
 export type AverageHit = {
   domain: string;
+  /** This line is the domain's AMP side: its results on its AMP domains, as
+   *  one line because the host changes daily. `amp_hosts` are the ones the
+   *  readings were on. */
+  amp: boolean;
+  amp_hosts: string[];
   /** Mean of the runs where it RANKED. Absences have no position to average,
    *  so they are counted below instead of folded into this number. */
   avg_position: number;

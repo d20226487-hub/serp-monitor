@@ -29,6 +29,12 @@ scheduler that was not running cannot fire a tick it missed.
   AMP host and since when that host has been the answer. A domain the rotator
   stops naming is dropped. A fetch that FAILS changes nothing — yesterday's
   hosts stay, visibly dated, rather than vanish on a timeout.
+* Beside that, every AMP host a rotator has ever named is remembered
+  (AmpDomainSeen), and nothing but deleting the project forgets one. The
+  positions tables count a result on an AMP host as the project's (the user:
+  "we have not added the today's AMP domains to the project BUT they appear in
+  SERPs. Then they should be counted in positions as well"), and a SERP read
+  yesterday shows yesterday's AMP host, which today's answer no longer names.
 * ONE login and password serve every rotator (the user: "All the AMP rotators
   have the same passwords" — "It will be one for each AMP rotator endpoint"),
   so the pair is a setting of the connection, not of an endpoint. The password
@@ -43,11 +49,12 @@ from datetime import datetime, timedelta, timezone
 from typing import NamedTuple
 
 import httpx
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from ._redact import redact
 from .app_settings import _get, _set
 from .db import SessionLocal
-from .models import AmpDomain, AmpEndpoint, Project
+from .models import AmpDomain, AmpDomainSeen, AmpEndpoint, Project
 
 log = logging.getLogger(__name__)
 
@@ -94,6 +101,30 @@ def read_answer(data: object, sent: list[str]) -> dict[str, str]:
         if domain is not None and amp is not None:
             found[domain] = amp
     return found
+
+
+def owners(seen: list[tuple[str, str, datetime]], domains: list[str]) -> dict[str, str]:
+    """AMP host → the project domain it is, or was, the AMP domain of.
+
+    `seen` are (domain, AMP host, last named) from the history; `domains` are
+    the project's own, as it spells them.
+
+    * Only for domains still in the project: one taken off the list takes its
+      AMP hosts with it.
+    * A host that is itself on the project's list is not an AMP host here — it
+      was put there by hand and counts as itself.
+    * A host named for two domains goes to the one it was named for last.
+    """
+    mine = {clean_host(d): d for d in domains if clean_host(d)}
+    out: dict[str, str] = {}
+    when: dict[str, datetime] = {}
+    for domain, host, last in seen:
+        owner = mine.get(domain)
+        if owner is None or host in mine:
+            continue
+        if host not in out or last > when[host]:
+            out[host], when[host] = owner, last
+    return out
 
 
 def valid_time(value: str | None) -> bool:
@@ -193,6 +224,44 @@ def credentials_status() -> dict:
 # Asking and keeping
 # --------------------------------------------------------------------------
 
+#: Rows per statement when the history is written, and hosts per IN (…) when
+#: it is read: far under SQLite's limit on bound values whatever the build.
+_CHUNK = 400
+
+
+def remember(db, rows: list[tuple[int, str, str, datetime, datetime]], *, again: bool = True) -> None:
+    """Add (project, domain, AMP host, first named, last named) to the history.
+    A pair already there keeps its first date and, with `again`, takes the new
+    last one. One statement per chunk, so two endpoints of one project fetched
+    at the same minute cannot trip over each other. Not committed here."""
+    for i in range(0, len(rows), _CHUNK):
+        stmt = sqlite_insert(AmpDomainSeen).values([
+            {"project_id": p, "domain": d, "amp_domain": h, "first_seen": first, "last_seen": last}
+            for p, d, h, first, last in rows[i:i + _CHUNK]
+        ])
+        key = ["project_id", "domain", "amp_domain"]
+        db.execute(stmt.on_conflict_do_update(index_elements=key, set_={"last_seen": stmt.excluded.last_seen})
+                   if again else stmt.on_conflict_do_nothing(index_elements=key))
+
+
+def remember_current(db) -> None:
+    """Start-up: the AMP hosts on record today are in the history too. They
+    are once a rotator has answered; this covers the answers that came before
+    the history was kept. Changes nothing when they are all there."""
+    remember(db, [(a.project_id, a.domain, a.amp_domain, a.since, a.fetched_at)
+                  for a in db.query(AmpDomain).all()], again=False)
+    db.commit()
+
+
+def amp_hosts(db, project: Project) -> dict[str, str]:
+    """AMP host → the project domain it is, or was, the AMP domain of: every
+    one a rotator has named for this project. What the positions tables count
+    as the project's beside its own domains. See `owners` for the rules."""
+    rows = (db.query(AmpDomainSeen.domain, AmpDomainSeen.amp_domain, AmpDomainSeen.last_seen)
+            .filter(AmpDomainSeen.project_id == project.id).all())
+    return owners([tuple(r) for r in rows], list(project.domains or []))
+
+
 def project_domains(project: Project) -> list[str]:
     seen: list[str] = []
     for d in project.domains or []:
@@ -248,6 +317,8 @@ def refresh_endpoint(endpoint_id: int, client: httpx.Client | None = None) -> bo
                     row.fetched_at = now
             for gone in have.values():           # the rotator no longer names these
                 db.delete(gone)
+            # Into the history too, where a host stays after the rotator moves on.
+            remember(db, [(endpoint.project_id, domain, amp, now, now) for domain, amp in got.amp.items()])
         else:
             log.warning("amp rotator: endpoint %s (project %s) not fetched: %s", endpoint_id, endpoint.project_id, got.error)
         db.commit()
@@ -311,9 +382,10 @@ def remove_endpoint(db, endpoint: AmpEndpoint) -> None:
 
 
 def remove_project(db, project_id: int) -> list[int]:
-    """A deleted project's endpoints and AMP domains. Returns the endpoints'
-    ids, whose daily ticks the caller takes off the scheduler. Not committed
-    here."""
+    """A deleted project's endpoints and AMP domains, with their history.
+    Returns the endpoints' ids, whose daily ticks the caller takes off the
+    scheduler. Not committed here."""
+    db.query(AmpDomainSeen).filter(AmpDomainSeen.project_id == project_id).delete(synchronize_session=False)
     endpoints = db.query(AmpEndpoint).filter(AmpEndpoint.project_id == project_id).all()
     ids = [e.id for e in endpoints]
     for endpoint in endpoints:

@@ -213,6 +213,10 @@ export function PositionTable({ data }: { data: ProjectPositions }) {
   );
 }
 
+/** Marks a result that is on an AMP domain of a project domain. */
+const AMP_TAG =
+  "rounded bg-sky-100 px-1 py-px font-sans text-[10px] font-semibold text-sky-800 dark:bg-sky-950 dark:text-sky-300";
+
 function LatestRows({ serp, showRaw }: { serp: SerpGroup; showRaw: boolean }) {
   const { t } = useT();
   return (
@@ -266,6 +270,17 @@ function LatestRows({ serp, showRaw }: { serp: SerpGroup; showRaw: boolean }) {
                         <span className="font-semibold tabular-nums">{h.position}</span>
                         <span className="font-mono">{h.domain}</span>
                       </a>
+                      {/* An AMP domain is not on the project's list, so the
+                          pill has to say whose it is. */}
+                      {h.amp_of && (
+                        <Tip
+                          text={t.positions.ampHint(h.domain, h.amp_of)}
+                          label={t.positions.ampHint(h.domain, h.amp_of)}
+                          className={AMP_TAG}
+                        >
+                          AMP
+                        </Tip>
+                      )}
                       {/* A site holding several listings has taken several
                           slots off the page. The pill reports its best one, so
                           the others would be invisible without this. */}
@@ -473,7 +488,7 @@ function AverageKeyword({ row, first }: { row: AverageRow; first: boolean }) {
     <>
       {row.hits.map((h, i) => (
         <tr
-          key={`${row.keyword}|${h.domain}`}
+          key={`${row.keyword}|${h.domain}|${h.amp ? "amp" : ""}`}
           className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${i === 0 ? edge : ""}`}
         >
           <td className="break-words px-3 py-2.5 text-sm font-medium">
@@ -494,6 +509,18 @@ function AverageKeyword({ row, first }: { row: AverageRow; first: boolean }) {
           </td>
           <td className="break-words px-3 py-2.5 font-mono text-xs">
             {h.domain}
+            {/* The site's AMP side, as one line: the AMP domain is a new host
+                every day, so the hosts are named under it rather than each
+                given a row that was present once. */}
+            {h.amp && (
+              <Tip
+                text={t.positions.ampAvgHint(h.domain, h.amp_hosts.join(", "))}
+                label={t.positions.ampAvgHint(h.domain, h.amp_hosts.join(", "))}
+                className={`ml-1 ${AMP_TAG}`}
+              >
+                AMP
+              </Tip>
+            )}
             {/* An average must not become the one place a substitution goes
                 unmarked — it is the same field a doorway spoofs. */}
             {h.substituted_in > 0 && (
@@ -527,6 +554,12 @@ function AverageKeyword({ row, first }: { row: AverageRow; first: boolean }) {
               >
                 ?
               </Tip>
+            )}
+            {h.amp && (
+              <span className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400">
+                {h.amp_hosts.slice(0, 2).join(", ")}
+                {h.amp_hosts.length > 2 && ` ${t.positions.ampMore(h.amp_hosts.length - 2)}`}
+              </span>
             )}
           </td>
           {/* The headline, and what the rows are sorted by: the one figure
