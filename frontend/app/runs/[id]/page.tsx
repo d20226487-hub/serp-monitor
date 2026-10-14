@@ -52,7 +52,7 @@ type VariantBucket = {
 };
 
 export default function RunPage() {
-  const { t } = useT();
+  const { t, lang } = useT();
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
   const [run, setRun] = useState<JobRun | null>(null);
@@ -286,7 +286,7 @@ export default function RunPage() {
             >{t.report.open}</Link>
           )}
           <a
-            href={api.exportUrl(id, topExport)}
+            href={api.exportUrl(id, topExport, lang)}
             className="px-3 py-1.5 rounded-md bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-sm"
           >{t.run.downloadCsv}</a>
           <Button variant="ghost" onClick={copyAll}>{t.common.copyAll}</Button>

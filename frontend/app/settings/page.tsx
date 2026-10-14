@@ -345,7 +345,7 @@ export default function SettingsPage() {
               value={bulk}
               onChange={e => setBulk(e.target.value)}
               rows={8}
-              placeholder={"Almaty,Almaty Province,Kazakhstan | Almaty | kz | City | 162\nTashkent,Tashkent Region,Uzbekistan | Tashkent | uz | City | 11353"}
+              placeholder={"Almaty,Almaty Province,Kazakhstan | Almaty | kz | City | 162\nTashkent,Tashkent Region,Uzbekistan | Tashkent | uz | City | 10335"}
               className={`${inputClass} font-mono`}
             />
             <div className="flex items-center gap-3">

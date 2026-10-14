@@ -71,7 +71,7 @@ from fastapi.responses import Response
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from ..amp_rotator import amp_hosts
+from ..amp_rotator import AmpPeriod, amp_hosts, amp_periods, as_dates
 from ..app_settings import get_visibility_weights
 from ..db import get_db
 from ..engine_domains import yandex_domain_for
@@ -195,6 +195,8 @@ class _Window(NamedTuple):
     domains: list[str]
     #: AMP host → the project domain it is, or was, the AMP domain of.
     amp: dict[str, str]
+    #: The same hosts, with when the rotators named them.
+    amp_periods: dict[str, AmpPeriod]
     job_names: dict[int, str]
     #: Per job, not per project: two jobs in one folder can legitimately
     #: disagree about whether an AMP result counts as its publisher.
@@ -225,10 +227,12 @@ def _window(db: Session, project_id: int, start: str | None, end: str | None) ->
         runs_q = runs_q.filter(JobRun.started_at < started_to)
     runs = runs_q.order_by(JobRun.started_at.desc()).all()
 
+    periods = amp_periods(db, project)
     return _Window(
         project=project,
         domains=list(project.domains or []),
-        amp=amp_hosts(db, project),
+        amp={host: p.domain for host, p in periods.items()},
+        amp_periods=periods,
         job_names=job_names,
         prefers_shown={jid: bool(pref) for jid, _, pref in job_rows},
         run_by_id={r.id: r for r in runs},
@@ -332,6 +336,9 @@ def _hits(db: Session, win: _Window, run_ids: set[int]) -> dict[tuple, dict]:
             # domains, or an AMP domain of one — then `amp_of` names the site.
             "domain": whose.amp_host or whose.domain,
             "amp_of": whose.domain if whose.amp_host else None,
+            # When it was the AMP domain of that site, as far as the rotators'
+            # answers go: {"from", "to"}, `to` null while it still is.
+            "amp_period": as_dates(win.amp_periods.get(whose.amp_host)) if whose.amp_host else None,
             "position": position,
             "url": url,
             # Raw values travel with every hit, so the table can reveal what
@@ -665,7 +672,10 @@ def project_position_averages(
                 # line for all of them, since the host changes daily — with
                 # the hosts these readings were actually on.
                 "amp": on_amp,
-                "amp_hosts": sorted(on_hosts[(key, who)]) if on_amp else [],
+                "amp_hosts": [
+                    {"host": host, **(as_dates(win.amp_periods.get(host)) or {"from": None, "to": None})}
+                    for host in sorted(on_hosts[(key, who)])
+                ] if on_amp else [],
                 "avg_position": stat.average,
                 "best": stat.best,
                 "worst": stat.worst,

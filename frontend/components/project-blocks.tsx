@@ -4,6 +4,8 @@ import { api, BlockKind, BlockRow, ProjectBlocks, ProjectFailing } from "@/lib/a
 import { useT } from "@/lib/i18n";
 import { Button, Callout, Card, Empty, Pill, SectionTitle } from "@/components/ui";
 import { Icon } from "@/components/icons";
+import { Tip } from "@/components/tip";
+import { ampPeriodText } from "@/lib/amp-period";
 import { RANGE_PRESETS, RangePreset, customRange, rangeFor, toInputValue, toQuery } from "@/lib/date-range";
 
 /**
@@ -72,6 +74,28 @@ function StatusCell({ status }: { status: string | undefined }) {
   return <Pill tone={isPass(status) ? "good" : "bad"} icon={isPass(status) ? "check" : "cross"}>{status}</Pill>;
 }
 
+/** Under an AMP domain: whose it is, since when the rotator has named it so
+ *  (user, 2026-10-14: "give the date when the domain was AMP for the main
+ *  domain"), and whether a SERP shows it itself. */
+function AmpLine({ r }: { r: BlockRow }) {
+  const { t } = useT();
+  const x = t.tools.blocks;
+  if (!r.main_domain) return null;
+  const when = ampPeriodText(r.amp_period, t.positions.ampSince);
+  return (
+    <div className={`mt-0.5 break-all ${HINT}`}>
+      {x.ampOf(r.main_domain)}
+      {when && (
+        <>
+          {" · "}
+          <Tip text={t.positions.ampPeriodHint(r.main_domain, when)} className="whitespace-nowrap">{when}</Tip>
+        </>
+      )}
+      {r.own_standing && <>{" · "}{x.ampInSerps}</>}
+    </div>
+  );
+}
+
 /** Where the domain ranks: its best position, on which query and engines. */
 function Standing({ r }: { r: BlockRow }) {
   const { t } = useT();
@@ -121,11 +145,7 @@ function StatusTable({ geo, rows, proxies, amp, note }: {
             <tr key={`${r.domain}|${r.main_domain ?? ""}`}>
               <td className={TD}>
                 <div className="break-all font-mono text-xs">{r.domain}</div>
-                {r.main_domain && (
-                  <div className={`mt-0.5 break-all ${HINT}`}>
-                    {x.ampOf(r.main_domain)}{r.own_standing && <>{" · "}{x.ampInSerps}</>}
-                  </div>
-                )}
+                <AmpLine r={r} />
                 <div className={`mt-0.5 ${HINT}`}>{note(r)}</div>
               </td>
               {proxies.map(p => (
@@ -396,11 +416,7 @@ function FailingTable({ rows, amp }: { rows: BlockRow[]; amp: boolean }) {
             <tr key={`${r.geo}|${r.domain}|${r.main_domain ?? ""}`}>
               <td className={TD}>
                 <div className="break-all font-mono text-xs">{r.domain}</div>
-                {r.main_domain && (
-                  <div className={`mt-0.5 break-all ${HINT}`}>
-                    {x.ampOf(r.main_domain)}{r.own_standing && <>{" · "}{x.ampInSerps}</>}
-                  </div>
-                )}
+                <AmpLine r={r} />
               </td>
               <td className={`${TD} font-mono`}>{r.geo}</td>
               <td className={TD}><Failing r={r} /></td>

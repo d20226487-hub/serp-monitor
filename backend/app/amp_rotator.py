@@ -103,11 +103,27 @@ def read_answer(data: object, sent: list[str]) -> dict[str, str]:
     return found
 
 
-def owners(seen: list[tuple[str, str, datetime]], domains: list[str]) -> dict[str, str]:
-    """AMP host → the project domain it is, or was, the AMP domain of.
+class AmpPeriod(NamedTuple):
+    """Whose AMP domain a host is, or was, and when."""
+    #: The project domain, as the project spells it.
+    domain: str
+    #: The first and the last time a rotator named it for that domain. These
+    #: are the days SERP Monitor HEARD it — the rotator says which host is
+    #: current, never since when — so it may have been the AMP domain before
+    #: the first of them.
+    first: datetime
+    last: datetime
+    #: The latest answer about that domain still names it.
+    current: bool
 
-    `seen` are (domain, AMP host, last named) from the history; `domains` are
-    the project's own, as it spells them.
+
+def periods(seen: list[tuple[str, str, datetime, datetime]], domains: list[str],
+            current: set[tuple[str, str]] | frozenset = frozenset()) -> dict[str, AmpPeriod]:
+    """AMP host → whose AMP domain it is, or was, and when.
+
+    `seen` are (domain, AMP host, first named, last named) from the history;
+    `domains` are the project's own, as it spells them; `current` the
+    (domain, AMP host) pairs of the rotators' latest answers.
 
     * Only for domains still in the project: one taken off the list takes its
       AMP hosts with it.
@@ -116,15 +132,29 @@ def owners(seen: list[tuple[str, str, datetime]], domains: list[str]) -> dict[st
     * A host named for two domains goes to the one it was named for last.
     """
     mine = {clean_host(d): d for d in domains if clean_host(d)}
-    out: dict[str, str] = {}
-    when: dict[str, datetime] = {}
-    for domain, host, last in seen:
+    out: dict[str, AmpPeriod] = {}
+    for domain, host, first, last in seen:
         owner = mine.get(domain)
         if owner is None or host in mine:
             continue
-        if host not in out or last > when[host]:
-            out[host], when[host] = owner, last
+        prior = out.get(host)
+        if prior is None or last > prior.last:
+            out[host] = AmpPeriod(owner, first, last, (domain, host) in current)
     return out
+
+
+def owners(seen: list[tuple[str, str, datetime]], domains: list[str]) -> dict[str, str]:
+    """AMP host → the project domain it is, or was, the AMP domain of. `seen`
+    are (domain, AMP host, last named); the rules are `periods`'."""
+    return {host: p.domain for host, p in periods([(d, h, last, last) for d, h, last in seen], domains).items()}
+
+
+def as_dates(period: AmpPeriod | None) -> dict | None:
+    """A period as the page gets it: {"from", "to"} — `to` None while the
+    latest answer still names the host."""
+    if period is None:
+        return None
+    return {"from": period.first, "to": None if period.current else period.last}
 
 
 def valid_time(value: str | None) -> bool:
@@ -253,13 +283,22 @@ def remember_current(db) -> None:
     db.commit()
 
 
+def amp_periods(db, project: Project) -> dict[str, AmpPeriod]:
+    """AMP host → whose AMP domain it is, or was, and when: every one a
+    rotator has named for this project. See `periods` for the rules."""
+    rows = (db.query(AmpDomainSeen.domain, AmpDomainSeen.amp_domain,
+                     AmpDomainSeen.first_seen, AmpDomainSeen.last_seen)
+            .filter(AmpDomainSeen.project_id == project.id).all())
+    current = {(d, h) for d, h in db.query(AmpDomain.domain, AmpDomain.amp_domain)
+               .filter(AmpDomain.project_id == project.id).all()}
+    return periods([tuple(r) for r in rows], list(project.domains or []), current)
+
+
 def amp_hosts(db, project: Project) -> dict[str, str]:
     """AMP host → the project domain it is, or was, the AMP domain of: every
     one a rotator has named for this project. What the positions tables count
-    as the project's beside its own domains. See `owners` for the rules."""
-    rows = (db.query(AmpDomainSeen.domain, AmpDomainSeen.amp_domain, AmpDomainSeen.last_seen)
-            .filter(AmpDomainSeen.project_id == project.id).all())
-    return owners([tuple(r) for r in rows], list(project.domains or []))
+    as the project's beside its own domains."""
+    return {host: p.domain for host, p in amp_periods(db, project).items()}
 
 
 def project_domains(project: Project) -> list[str]:

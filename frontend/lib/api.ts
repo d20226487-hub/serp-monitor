@@ -1,3 +1,4 @@
+import type { AmpPeriod } from "@/lib/amp-period";
 import type { OpportunityFormula } from "@/lib/opportunity";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE || "/api";
@@ -45,7 +46,10 @@ export type ToolDelivery = {
   sent_at: string;
 };
 
-export type ProxyCheckerMode = "off" | "after_run" | "daily";
+/** "inherit" follows the global switch in Settings → Tools Connection. */
+export type ProxyCheckerMode = "inherit" | "off" | "after_run" | "daily";
+/** What a mode comes to: "inherit" is "after_run" while the switch is on. */
+export type ProxyCheckerEffectiveMode = "off" | "after_run" | "daily";
 
 /** What was left out of an uploaded SERP export, and why. */
 export type SerpCsvReport = {
@@ -72,6 +76,28 @@ export type SerpCsvUpload = SerpCsvReport & {
   proxy_checker_after: boolean;
   /** Countries of the file that were added to the project's saved GEO list. */
   geos_added: string[];
+};
+/** One upload in the project's log. The file's name and what it skipped are
+ *  null for uploads made before they were recorded. */
+export type SerpCsvLogEntry = {
+  run_id: number;
+  uploaded_at: string | null;
+  /** The day the SERPs were read. */
+  checked_at: string;
+  file_name: string | null;
+  engine: string | null;
+  device: string | null;
+  rows: number;
+  queries: number;
+  geos: Record<string, number>;
+  empty: number | null;
+  /** Rows left out: a country not recognised, or a line that could not be read. */
+  not_loaded: number | null;
+  unknown_geos: Record<string, number> | null;
+  bad_total: number | null;
+  geos_added: string[] | null;
+  /** What went to the Proxy Checker after it; null = nothing was sent. */
+  proxy_checker: { requests: number; accepted: number; no_answer: number; refused: number; at: string | null } | null;
 };
 /** An upload the server refused, with what it found in the file when it got that far. */
 export class SerpCsvError extends Error {
@@ -135,6 +161,8 @@ export type BlockRow = {
    *  below is its own. False: it is there as today's AMP domain of a domain
    *  in the SERPs, and the standing is that domain's. */
   own_standing?: boolean;
+  /** On an AMP row: when the rotator named it as its site's AMP domain. */
+  amp_period?: AmpPeriod | null;
   kind: BlockKind;
   /** Proxy → status, as the Proxy Checker gave them ({"KG - Provider B": "PASS"}).
    *  null while no proxy has reported. */
@@ -196,13 +224,25 @@ export type ProxyCheckerConnection = {
   /** An address AND a token are saved, so something can be sent. */
   connected: boolean;
   token: { configured: boolean; last4?: string; length?: number };
-  projects: { id: number; name: string; mode: ProxyCheckerMode; time: string | null }[];
+  /** The global switch: send after every SERP check and CSV upload, for the
+   *  projects on "inherit". On unless turned off. */
+  auto_after_run: boolean;
+  /** How long an answer is waited for, in minutes, and the range allowed. */
+  timeout_minutes: number;
+  timeout_range: [number, number];
+  projects: {
+    id: number; name: string; mode: ProxyCheckerMode; time: string | null;
+    effective_mode: ProxyCheckerEffectiveMode;
+  }[];
   deliveries: ToolDelivery[];
 };
 
 /** One project's Proxy Checker schedule. `time` is HH:MM in UTC. */
 export type ProjectProxyChecker = {
   mode: ProxyCheckerMode;
+  /** The global switch "inherit" follows, and what the mode comes to now. */
+  auto_after_run: boolean;
+  effective_mode: ProxyCheckerEffectiveMode;
   time: string | null;
   next_run: string | null;
   connected: boolean;
@@ -270,6 +310,8 @@ export type PositionHit = {
    *  domain of. The project never lists AMP domains — they change daily — so
    *  the ones its AMP Rotator has named are counted as its own. */
   amp_of: string | null;
+  /** On an AMP domain: when the rotator named it as that site's. */
+  amp_period: AmpPeriod | null;
   /** The best slot this domain holds — the position it "has". */
   position: number;
   /** Every slot it holds on this page, ascending. A site with three listings
@@ -343,7 +385,7 @@ export type AverageHit = {
    *  one line because the host changes daily. `amp_hosts` are the ones the
    *  readings were on. */
   amp: boolean;
-  amp_hosts: string[];
+  amp_hosts: ({ host: string } & AmpPeriod)[];
   /** Mean of the runs where it RANKED. Absences have no position to average,
    *  so they are counted below instead of folded into this number. */
   avg_position: number;
@@ -860,8 +902,10 @@ export const api = {
     req<{ formula: OpportunityFormula; formula_is_override: boolean }>(
       `/runs/${runId}/opportunity`, { method: "DELETE" },
     ),
-  exportUrl: (id: number, top: number) =>
-    `${BASE}/runs/${id}/export.csv?top=${top}`,
+  /** `lang` "ru" separates fields with ";", as Excel with Russian regional
+   *  settings expects; "en" with ",". */
+  exportUrl: (id: number, top: number, lang: "ru" | "en") =>
+    `${BASE}/runs/${id}/export.csv?top=${top}&lang=${lang}`,
   /** `providers`: only places every one of them can search (see the backend's
    *  provider_locations.py — DataForSEO has a location list of its own). */
   searchLocations: (q: string, providers: string[] = []) => {
@@ -870,7 +914,7 @@ export const api = {
     return req<LocationRef[]>(`/lookup/locations?${qs}`);
   },
   getProxyChecker: () => req<ProxyCheckerConnection>("/settings/tools/proxy-checker"),
-  saveProxyChecker: (body: { url?: string; token?: string }) =>
+  saveProxyChecker: (body: { url?: string; token?: string; auto_after_run?: boolean; timeout_minutes?: number }) =>
     req<ProxyCheckerConnection>("/settings/tools/proxy-checker", { method: "PUT", body: JSON.stringify(body) }),
   clearProxyChecker: () =>
     req<ProxyCheckerConnection>("/settings/tools/proxy-checker", { method: "DELETE" }),
@@ -902,6 +946,10 @@ export const api = {
     req<ProjectAmpDomains>(`/projects/${id}/amp-domains/refresh`, { method: "POST" }),
   /** A file, so multipart and not the JSON helper above. The uploader's
    *  offset from UTC goes along: the day of the check is a day on their clock. */
+  getProjectSerpCsvUploads: (id: number) =>
+    req<{ uploads: SerpCsvLogEntry[] }>(`/projects/${id}/serp-csv`),
+  deleteProjectSerpCsvUpload: (id: number, runId: number) =>
+    req<{ uploads: SerpCsvLogEntry[] }>(`/projects/${id}/serp-csv/${runId}`, { method: "DELETE" }),
   uploadProjectSerpCsv: async (
     id: number, file: File, opts: { engine: string; device: string; checkedOn: string },
   ): Promise<SerpCsvUpload> => {

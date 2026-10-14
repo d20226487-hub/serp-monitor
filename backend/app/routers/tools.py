@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from .. import blocks
 from .. import proxy_checker as pc
+from ..amp_rotator import amp_periods, as_dates
 from ..db import get_db
 from ..models import DomainProxyCheckLog, Project, ToolDelivery
 from ..scheduler import proxy_checker_next_run, upsert_proxy_checker_schedule
@@ -50,15 +51,28 @@ class ProxyCheckerConnectionIn(BaseModel):
     #: Omitted = unchanged. "" = cleared.
     url: str | None = None
     token: str | None = None
+    #: The global switch: send after every SERP check and CSV upload, for the
+    #: projects that follow it. Omitted = unchanged.
+    auto_after_run: bool | None = None
+    #: How long an answer is waited for, in minutes. Omitted = unchanged.
+    timeout_minutes: int | None = None
 
 
 @router.get("/settings/tools/proxy-checker")
 def get_proxy_checker(db: Session = Depends(get_db)):
+    auto = pc.auto_after_run()
     projects = [
-        {"id": p.id, "name": p.name, "mode": p.proxy_checker_mode, "time": p.proxy_checker_time}
+        {"id": p.id, "name": p.name, "mode": p.proxy_checker_mode, "time": p.proxy_checker_time,
+         "effective_mode": pc.effective_mode(p.proxy_checker_mode, auto)}
         for p in db.query(Project).order_by(Project.name).all()
     ]
-    return {**pc.connection_status(), "projects": projects, "deliveries": _recent(db)}
+    return {
+        **pc.connection_status(), "auto_after_run": auto,
+        # How long an answer is waited for, and the range it may be set in.
+        "timeout_minutes": pc.timeout_minutes(),
+        "timeout_range": [pc.TIMEOUT_MINUTES_MIN, pc.TIMEOUT_MINUTES_MAX],
+        "projects": projects, "deliveries": _recent(db),
+    }
 
 
 @router.put("/settings/tools/proxy-checker")
@@ -66,7 +80,15 @@ def update_proxy_checker(payload: ProxyCheckerConnectionIn, db: Session = Depend
     url = payload.url
     if url is not None and url.strip() and not url.strip().lower().startswith(("https://", "http://")):
         raise HTTPException(400, "The API address must start with https:// or http://")
+    if payload.timeout_minutes is not None and not (
+            pc.TIMEOUT_MINUTES_MIN <= payload.timeout_minutes <= pc.TIMEOUT_MINUTES_MAX):
+        raise HTTPException(
+            400, f"The wait must be {pc.TIMEOUT_MINUTES_MIN}–{pc.TIMEOUT_MINUTES_MAX} minutes")
     pc.set_connection(url=url, token=payload.token)
+    if payload.auto_after_run is not None:
+        pc.set_auto_after_run(payload.auto_after_run)
+    if payload.timeout_minutes is not None:
+        pc.set_timeout_minutes(payload.timeout_minutes)
     return get_proxy_checker(db)
 
 
@@ -117,8 +139,12 @@ def _project_state(db: Session, project: Project) -> dict:
     # What the SERPs of the last 24 hours showed, then what rides along.
     found = pc.keep_geos(pc.found_by_geo(db, project, since=pc.recent_window()), project_geos)
     preview = pc.add_amp(found, pc.amp_of(db, project.id))
+    auto = pc.auto_after_run()
     return {
         "mode": project.proxy_checker_mode or "off",
+        # "inherit" follows the global switch in Settings; what it comes to now.
+        "auto_after_run": auto,
+        "effective_mode": pc.effective_mode(project.proxy_checker_mode, auto),
         "time": project.proxy_checker_time,
         "next_run": proxy_checker_next_run(project.id),
         "connected": pc.connection_status()["connected"],
@@ -245,6 +271,15 @@ def _period(db: Session, project: Project, start: str | None, end: str | None) -
     return standing, checks, until is None or until > now
 
 
+def _with_amp_dates(db: Session, project: Project, amp_rows: list[dict]) -> None:
+    """When each AMP domain was the AMP domain of its site, as far as the
+    rotators' answers go (user, 2026-10-14: "give the date when the domain was
+    AMP for the main domain"): {"from", "to"}, `to` null while it still is."""
+    periods = amp_periods(db, project)
+    for r in amp_rows:
+        r["amp_period"] = as_dates(periods.get(r["domain"]))
+
+
 @router.get("/projects/{project_id}/blocks")
 def project_blocks(
     project_id: int,
@@ -262,6 +297,7 @@ def project_blocks(
     # yesterday's are known only where they were checked.
     amp_map = pc.amp_of(db, project.id) if reaches_today else {}
     rows, amp_rows = blocks.period_rows(standing, checks, amp_map)
+    _with_amp_dates(db, project, amp_rows)
 
     sending = set(pc.send_geos(db, project))
     # The last time each domain went to the Proxy Checker for each country, and
@@ -317,6 +353,7 @@ def project_blocks_failing(
     standing, checks, _reaches_today = _period(db, project, start, end)
     by_key = {(r["geo"], r["domain"]): r for r in standing}
     main, amp = blocks.not_passing(checks, by_key)
+    _with_amp_dates(db, project, amp)
     checked = {(c["geo"], c["domain"]) for c in checks}
     checked_main = {(c["geo"], c["domain"]) for c in checks if not c["main_domain"]}
     return {

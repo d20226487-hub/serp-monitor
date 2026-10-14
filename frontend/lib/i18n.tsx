@@ -457,7 +457,7 @@ melbet	kz	34	20,000	0.45`,
   },
   projects: {
     // The project page's tabs.
-    tabs: { overview: "Overview", positions: "Positions", blocks: "Blocks" },
+    tabs: { overview: "Overview", positions: "Positions", blocks: "Blocks", uploads: "CSV uploads" },
     title: "Projects",
     lead: "A project holds the domains you are watching for a client or site. It is also the folder the jobs list groups by — assign a job to a project and it files itself there.",
     newProject: "+ New project",
@@ -532,6 +532,9 @@ melbet	kz	34	20,000	0.45`,
     ampAvgHint: (site: string, hosts: string) =>
       `Results on the AMP domains of ${site}, as one line: the AMP domain changes daily. In this range they were on: ${hosts}.`,
     ampMore: (n: number) => `+${n} more`,
+    ampSince: (day: string) => `since ${day}`,
+    ampPeriodHint: (site: string, period: string) =>
+      `The AMP domain of ${site}: ${period}. These are the days the AMP Rotator named it in its answers to SERP Monitor. The rotator says which AMP domain is current, not since when, so it may have been one before the first of them.`,
 
     notRanking: "not in the captured results",
     ranking: (ranking: number, total: number) =>
@@ -586,10 +589,10 @@ melbet	kz	34	20,000	0.45`,
     engines: "Search engines",
     noGeo: "no geo",
     scheduled: "Scheduled jobs",
-    noScheduled: "No job in this project is on a schedule. Positions will only update when a job is run by hand.",
     manualJobs: (n: number) => `${n} more job(s) in this project run only when started by hand.`,
     keywords: "Keywords tracked",
     noKeywords: "No keywords yet — they come from the jobs in this project.",
+    exportButton: "Export CSV",
     exportSites: "Sites in the file",
     exportAll: "Whole page",
     exportAllHint: "Every site at every position, ours marked ★: who holds the other spots too.",
@@ -628,9 +631,9 @@ melbet	kz	34	20,000	0.45`,
     whoisHelp:
       "Look up when each domain was registered and give the age to the AI. A site with hundreds of referring domains and no top-10 keywords reads very differently at six months old than at ten years.",
     whoisCost:
-      "Uses DataForSEO WHOIS. Billed per request (~$0.12), not per domain, and only when a domain isn't already cached — registration dates don't change, so a recurring job pays once and then reads the cache.",
+      "Asked of RDAP first, which is free; DataForSEO WHOIS only for the domains RDAP cannot answer (mostly country zones such as .kz, .ru, .by, .uz). DataForSEO bills per request (~$0.12), not per domain. Answers are cached for 180 days, \u201cnot found\u201d for 14.",
     whoisNoCreds:
-      "⚠ DataForSEO credentials are not set — domain age will fail for this job. Add them in Settings → SERP Monitor → DataForSEO.",
+      "⚠ DataForSEO credentials are not set — domains RDAP cannot answer (mostly country zones) will have no age. The rest of the run is unaffected. Add them in Settings → SERP Monitor → DataForSEO.",
     ahrefsCacheTitle: "Metric cache",
     ahrefsCacheHelp:
       "How long a fetched Ahrefs metric is reused across runs instead of being bought again. Unlike a domain's registration date, DR and backlink counts move — too long a TTL means a monitoring run reports figures it never re-measured. 0 turns the cache off.",
@@ -693,7 +696,6 @@ melbet	kz	34	20,000	0.45`,
     languagesPlaceholder: "Pick languages…",
     googleDomains: "Google domains (optional)",
     googleDomainsPlaceholder: "Defaults from country if empty",
-    fieldsToScrape: "Fields to scrape",
     topN: "Top N positions",
     schedule: "Schedule",
     cronHelpPrefix: (tz: string) => (
@@ -703,7 +705,7 @@ melbet	kz	34	20,000	0.45`,
     ),
     cronEditHint: (
       <>
-        {" "}Edit <code>scheduler.py</code> &amp; restart api to change.
+        {" "}To change it, edit <code>scheduler.py</code> and rebuild the api (<code>docker compose up -d --build api</code>).
       </>
     ),
     enabled: "Enabled",
@@ -731,11 +733,6 @@ melbet	kz	34	20,000	0.45`,
     saveAndRunUpdate: "Save & run now",
     engineOptions: { google: "Google", yandex: "Yandex" },
     deviceOptions: { desktop: "Desktop", mobile: "Mobile" },
-    scrapeFieldOptions: {
-      url: "URL",
-      title: "Title",
-      description: "Meta description",
-    },
     targeting: {
       noLocations:
         "No locations chosen — queries will run with no geo targeting (or country-default if a Google domain is set).",
@@ -852,14 +849,41 @@ melbet	kz	34	20,000	0.45`,
       "The file does not say which search engine or device it was checked on, so choose them here. The day is read off the file name when it has one.",
     upload: "Upload",
     uploading: "Uploading…",
-    doneTitle: (rows: number, queries: number) =>
-      `Uploaded: ${rows} ${rows === 1 ? "position" : "positions"} for ${queries} ${queries === 1 ? "query" : "queries"}.`,
-    doneGeos: (list: string) => `By country: ${list}.`,
-    doneDay: (day: string) => `Stored as checked on ${day}.`,
-    doneGeosAdded: (list: string) => `Added to the project's GEOs: ${list}.`,
-    doneProxyChecker: "This project sends to the Proxy Checker after every run, so the domains found in this file are being sent now.",
     showPositions: "Show positions",
-    openRun: (id: number) => `Open run #${id}`,
+    barTitle: (rows: number, queries: number) =>
+      `Uploaded ${rows} ${rows === 1 ? "position" : "positions"} for ${queries} ${queries === 1 ? "query" : "queries"}`,
+    barDay: (day: string) => `checked on ${day}`,
+    barEmpty: (n: number) => `${n} empty (\u201c\u2013\u201d) skipped`,
+    barGeosAdded: (list: string) => `added to the project's GEOs: ${list}`,
+    barProxyChecker: "being sent to the Proxy Checker",
+    barNotLoaded: (n: number) => `${n} ${n === 1 ? "row" : "rows"} not loaded`,
+    barRun: (id: number) => `Run #${id}`,
+    dismiss: "Hide",
+    log: {
+      title: "CSV uploads",
+      help: "Every SERP export uploaded to this project, newest first. Deleting an upload removes its positions from the Positions and Blocks tabs; keywords and GEOs it added to the project stay.",
+      empty: "Nothing has been uploaded yet. Use \u201cUpload CSV\u201d at the top of the page.",
+      col: {
+        uploaded: "Uploaded", file: "File", day: "Checked on", serp: "Engine \u00b7 device", rows: "Positions / queries",
+        geos: "Countries", skipped: "Skipped", actions: "Actions",
+      },
+      rowsQueries: (rows: number, queries: number) => `${rows} / ${queries}`,
+      geosAdded: (list: string) => `added to GEOs: ${list}`,
+      empty_: (n: number) => `${n} empty (\u201c\u2013\u201d)`,
+      notLoaded: (n: number) => `${n} ${n === 1 ? "row" : "rows"} not loaded`,
+      bad: (n: number) => `${n} unreadable`,
+      none: "none",
+      notKept: "Not recorded for uploads made before 14.10.2026",
+      notSent: "not sent",
+      accepted: (ok: number, all: number) => `accepted ${ok} of ${all}`,
+      noAnswer: (n: number) => `no answer: ${n}`,
+      refused: (n: number) => `refused: ${n}`,
+      runName: (id: number) => `Run #${id}`,
+      delete: "Delete",
+      deleting: "Deleting\u2026",
+      deleteConfirm: (what: string, day: string, rows: number) =>
+        `Delete the upload \u201c${what}\u201d for ${day} and its ${rows} positions? Keywords and GEOs it added stay in the project.`,
+    },
     failTitle: "The file was not uploaded",
     skippedEmpty: (n: number) => `${n} ${n === 1 ? "position" : "positions"} listed with nothing on ${n === 1 ? "it" : "them"} (“–”): skipped.`,
     skippedGeo: (list: string) => `Rows left out because the country was not recognised: ${list}.`,
@@ -875,6 +899,11 @@ melbet	kz	34	20,000	0.45`,
       urlPlaceholder: "https://\u2026/api/daily-check",
       token: "Token",
       tokenPlaceholder: "Bearer token",
+      wait: "Wait for the answer",
+      waitUnit: "minutes",
+      waitHint: (lo: number, hi: number) =>
+        `The Proxy Checker checks the domains through its proxies before it answers, so a request with more domains takes longer. With no answer in this time, the send is logged as \u201cno answer\u201d. From ${lo} to ${hi} minutes. \u201cSend now\u201d on a project page waits as long for each country.`,
+      waitBad: (lo: number, hi: number) => `The wait must be a whole number of minutes from ${lo} to ${hi}.`,
       connected: "connected",
       notConnected: "not connected",
       noTest:
@@ -887,6 +916,9 @@ melbet	kz	34	20,000	0.45`,
         after_run: "After every run / CSV upload",
         daily: (time: string) => `Daily at ${time}`,
       },
+      auto: "Send automatically after every SERP check and CSV upload",
+      autoHint:
+        "When on, a project's domains go to the Proxy Checker right after every SERP check or CSV upload. This applies to every project except those with their own choice on the project page.",
       logTitle: "Recent sends",
       logEmpty: "Nothing has been sent yet.",
       col: { when: "Sent", project: "Project", geo: "Country", domains: "Domains", trigger: "Why", result: "Answer" },
@@ -1035,6 +1067,13 @@ melbet	kz	34	20,000	0.45`,
       connectLink: "Connect it in Settings \u2192 Tools Connection",
       when: "When to send",
       modeDaily: "Once a day",
+      modeInherit: "As in Settings",
+      modeInheritOn:
+        "As set in Settings \u2192 Tools Connection, which right now is: right after each of this project's checks finishes, or a CSV is uploaded \u2014 the domains found in it.",
+      modeInheritOff:
+        "As set in Settings \u2192 Tools Connection, where automatic sending is off right now: nothing is sent on its own. \u201cSend now\u201d below still works.",
+      bySettings: "as in Settings",
+      settingsLink: "Change it there",
       modeOffHint: "Nothing is sent automatically. \u201cSend now\u201d below still works.",
       modeAfterRunHint: "Right after each of this project's checks finishes, or a CSV is uploaded: the domains found in it.",
       modeDailyHint: (hours: number) => `Once a day at the time you set: every domain found in the last ${hours} hours.`,
@@ -1083,7 +1122,7 @@ melbet	kz	34	20,000	0.45`,
         <>
           <code>canonical_name</code> uses SerpAPI&rsquo;s comma-separated format.{" "}
           <code>yandex_lr</code> is Yandex&rsquo;s numeric region ID — required for
-          city-level Yandex targeting (e.g. Moscow=213, Almaty=162, Tashkent=11353).
+          city-level Yandex targeting (e.g. Moscow=213, Almaty=162, Tashkent=10335).
         </>
       ),
       phCanonical: "canonical_name",
@@ -1183,7 +1222,7 @@ melbet	kz	34	20,000	0.45`,
     ai: {
       title: "AI providers",
       help:
-        "Gemini access for upcoming AI features. Nothing uses these yet — configure and test them now so the plumbing is proven before the first feature lands.",
+        "Gemini access for the SERP Analyzer's difficulty verdict. Set up one provider and test it here; the analyzer jobs use it.",
       authServiceAccount: "service account",
       authExpress: "Express (API key)",
       testing: "Testing…",
@@ -1837,7 +1876,7 @@ melbet	kz	34	20 000	0,45`,
       "Все числа в строке — среднее по ОДНИМ И ТЕМ ЖЕ самым слабым конкурентам: двум на ограниченной глубине и трём по всей выдаче. Они перечислены под столбиками и отмечены точкой. Больше одного, потому что одна самая слабая страница — это лотерея; по DR, а не по каждой метрике отдельно, потому что поколоночный минимум выбирает в каждом столбце свою страницу и позволяет авторитетному домену с пустым ссылочным профилем страницы задавать «самую лёгкую» планку по бэклинкам, которой он на деле не является. По одной странице с домена: DR принадлежит сайту, поэтому сайт, занявший два места, иначе занял бы собой весь расчёт. В расчёт попадают только проанализированные страницы, а звёздочка означает, что среднее посчитано по меньшему числу страниц, чем в наборе. URL анализируются в режиме точного URL (exact), поэтому UR относится к странице, а не к домену; AMP- и трекинговые варианты предварительно приводятся к каноническому URL, поскольку Ahrefs считает их отдельными страницами с пустым ссылочным профилем. Если ключевое слово снималось по нескольким движкам, устройствам или локациям, страница ставится на ЛУЧШУЮ из своих позиций. Кликните по ключевому слову, чтобы увидеть сырые данные по каждому URL.",
   },
   projects: {
-    tabs: { overview: "Обзор", positions: "Позиции", blocks: "Блокировки" },
+    tabs: { overview: "Обзор", positions: "Позиции", blocks: "Блокировки", uploads: "Загрузки CSV" },
     title: "Проекты",
     lead: "Проект хранит домены, которые вы отслеживаете для клиента или сайта. Он же — папка, по которой группируется список задач: назначьте задаче проект, и она попадёт туда.",
     newProject: "+ Новый проект",
@@ -1913,6 +1952,9 @@ melbet	kz	34	20 000	0,45`,
     ampAvgHint: (site: string, hosts: string) =>
       `Результаты на AMP-доменах сайта ${site} — одной строкой, потому что AMP-домен меняется каждый день. За период они были на: ${hosts}.`,
     ampMore: (n: number) => `и ещё ${n}`,
+    ampSince: (day: string) => `с ${day}`,
+    ampPeriodHint: (site: string, period: string) =>
+      `AMP-домен сайта ${site}: ${period}. Это дни, когда AMP Rotator называл его в ответах SERP Monitor. Ротатор сообщает, какой AMP-домен текущий, но не с какого времени, — поэтому AMP-доменом он мог быть и раньше первого из этих дней.`,
 
     notRanking: "нет в снятых результатах",
     ranking: (ranking: number, total: number) =>
@@ -1968,10 +2010,10 @@ melbet	kz	34	20 000	0,45`,
     engines: "Поисковики",
     noGeo: "без гео",
     scheduled: "Задачи по расписанию",
-    noScheduled: "Ни одна задача проекта не стоит на расписании. Позиции будут обновляться только при ручном запуске.",
     manualJobs: (n: number) => `Ещё задач в проекте, запускаемых вручную: ${n}.`,
     keywords: "Отслеживаемые запросы",
     noKeywords: "Запросов пока нет — они берутся из задач проекта.",
+    exportButton: "Экспорт CSV",
     exportSites: "Сайты в файле",
     exportAll: "Вся страница",
     exportAllHint: "Все сайты на каждой позиции, наши отмечены ★: видно, кто занимает остальные места.",
@@ -2010,9 +2052,9 @@ melbet	kz	34	20 000	0,45`,
     whoisHelp:
       "Узнать дату регистрации каждого домена и передать возраст в AI. Сайт с сотнями ссылающихся доменов и без ключей в топ-10 читается совершенно по-разному в полгода и в десять лет.",
     whoisCost:
-      "Используется DataForSEO WHOIS. Тарифицируется за запрос (~$0,12), а не за домен, и только если домена ещё нет в кэше — даты регистрации не меняются, поэтому регулярная задача платит один раз и дальше читает кэш.",
+      "Сначала спрашивается RDAP — бесплатно; DataForSEO WHOIS — только для доменов, на которые RDAP не отвечает (в основном национальные зоны: .kz, .ru, .by, .uz). DataForSEO берёт плату за запрос (~$0,12), а не за домен. Ответы хранятся в кэше 180 дней, «не найден» — 14 дней.",
     whoisNoCreds:
-      "⚠ Доступы DataForSEO не заданы — получение возраста домена для этой задачи завершится ошибкой. Добавьте их в «Настройки → Мониторинг выдачи → DataForSEO».",
+      "⚠ Доступы DataForSEO не заданы — у доменов, на которые не отвечает RDAP (в основном национальные зоны), возраста не будет. На остальной прогон это не влияет. Добавьте доступы в «Настройки → Мониторинг выдачи → DataForSEO».",
     ahrefsCacheTitle: "Кэш метрик",
     ahrefsCacheHelp:
       "Сколько времени метрика Ahrefs переиспользуется между запусками вместо повторной покупки. В отличие от даты регистрации домена, DR и число ссылок меняются — слишком большой TTL означает, что запуск покажет значения, которые он не измерял. 0 отключает кэш.",
@@ -2076,7 +2118,6 @@ melbet	kz	34	20 000	0,45`,
     languagesPlaceholder: "Выберите языки…",
     googleDomains: "Домены Google (необязательно)",
     googleDomainsPlaceholder: "Если пусто — берётся из страны",
-    fieldsToScrape: "Извлекаемые поля",
     topN: "Топ N позиций",
     schedule: "Расписание",
     cronHelpPrefix: (tz: string) => (
@@ -2087,7 +2128,7 @@ melbet	kz	34	20 000	0,45`,
     ),
     cronEditHint: (
       <>
-        {" "}Чтобы изменить, отредактируйте <code>scheduler.py</code> и перезапустите api.
+        {" "}Чтобы изменить, отредактируйте <code>scheduler.py</code> и пересоберите api (<code>docker compose up -d --build api</code>).
       </>
     ),
     enabled: "Включено",
@@ -2116,11 +2157,6 @@ melbet	kz	34	20 000	0,45`,
     saveAndRunUpdate: "Сохранить и запустить",
     engineOptions: { google: "Google", yandex: "Yandex" },
     deviceOptions: { desktop: "Десктоп", mobile: "Мобильный" },
-    scrapeFieldOptions: {
-      url: "URL",
-      title: "Заголовок",
-      description: "Мета-описание",
-    },
     targeting: {
       noLocations:
         "Локации не выбраны — запросы будут выполняться без гео-таргетинга (или со страной по умолчанию, если задан домен Google).",
@@ -2243,14 +2279,41 @@ melbet	kz	34	20 000	0,45`,
       "В файле не сказано, в каком поисковике и на каком устройстве шла проверка, поэтому укажите их здесь. День берётся из имени файла, если он там есть.",
     upload: "Загрузить",
     uploading: "Загружаю…",
-    doneTitle: (rows: number, queries: number) =>
-      `Загружено: ${rows} ${pluralRu(rows, ["позиция", "позиции", "позиций"])} по ${queries} ${pluralRu(queries, ["запросу", "запросам", "запросам"])}.`,
-    doneGeos: (list: string) => `По странам: ${list}.`,
-    doneDay: (day: string) => `Сохранено как проверка за ${day}.`,
-    doneGeosAdded: (list: string) => `В GEO проекта добавлено: ${list}.`,
-    doneProxyChecker: "Проект отправляет в Proxy Checker после каждого прогона, поэтому домены из этого файла отправляются сейчас.",
     showPositions: "Показать позиции",
-    openRun: (id: number) => `Открыть прогон №${id}`,
+    barTitle: (rows: number, queries: number) =>
+      `Загружено ${rows} ${pluralRu(rows, ["позиция", "позиции", "позиций"])} по ${queries} ${pluralRu(queries, ["запросу", "запросам", "запросам"])}`,
+    barDay: (day: string) => `за ${day}`,
+    barEmpty: (n: number) => `без результата («–»): ${n}`,
+    barGeosAdded: (list: string) => `в GEO проекта добавлено: ${list}`,
+    barProxyChecker: "отправляется в Proxy Checker",
+    barNotLoaded: (n: number) => `не загружено строк: ${n}`,
+    barRun: (id: number) => `Прогон №${id}`,
+    dismiss: "Скрыть",
+    log: {
+      title: "Загрузки CSV",
+      help: "Все выгрузки выдачи, загруженные в этот проект, новые сверху. Удаление загрузки убирает её позиции со вкладок «Позиции» и «Блокировки»; запросы и GEO, которые она добавила в проект, остаются.",
+      empty: "Пока ничего не загружено. Кнопка «Загрузить CSV» — вверху страницы.",
+      col: {
+        uploaded: "Загружено", file: "Файл", day: "За день", serp: "Поисковик · устройство", rows: "Позиций / запросов",
+        geos: "Страны", skipped: "Пропущено", actions: "Действия",
+      },
+      rowsQueries: (rows: number, queries: number) => `${rows} / ${queries}`,
+      geosAdded: (list: string) => `добавлено в GEO: ${list}`,
+      empty_: (n: number) => `без результата («–»): ${n}`,
+      notLoaded: (n: number) => `не загружено строк: ${n}`,
+      bad: (n: number) => `не прочитано: ${n}`,
+      none: "нет",
+      notKept: "Не записывалось для загрузок до 14.10.2026",
+      notSent: "не отправлялось",
+      accepted: (ok: number, all: number) => `принято ${ok} из ${all}`,
+      noAnswer: (n: number) => `нет ответа: ${n}`,
+      refused: (n: number) => `отклонено: ${n}`,
+      runName: (id: number) => `Прогон №${id}`,
+      delete: "Удалить",
+      deleting: "Удаляю…",
+      deleteConfirm: (what: string, day: string, rows: number) =>
+        `Удалить загрузку «${what}» за ${day} и её позиции (${rows})? Запросы и GEO, которые она добавила, останутся в проекте.`,
+    },
     failTitle: "Файл не загружен",
     skippedEmpty: (n: number) => `Позиций без результата («–»): ${n} — пропущены.`,
     skippedGeo: (list: string) => `Строки пропущены, потому что страна не распознана: ${list}.`,
@@ -2266,6 +2329,11 @@ melbet	kz	34	20 000	0,45`,
       urlPlaceholder: "https://…/api/daily-check",
       token: "Токен",
       tokenPlaceholder: "Bearer-токен",
+      wait: "Ждать ответа",
+      waitUnit: "мин",
+      waitHint: (lo: number, hi: number) =>
+        `Proxy Checker проверяет домены через свои прокси, прежде чем ответить, поэтому запрос с большим числом доменов идёт дольше. Если за это время ответа нет, отправка записывается как «нет ответа». От ${lo} до ${hi} мин. Кнопка «Отправить сейчас» на странице проекта ждёт столько же на каждую страну.`,
+      waitBad: (lo: number, hi: number) => `Время ожидания — целое число минут от ${lo} до ${hi}.`,
       connected: "подключён",
       notConnected: "не подключён",
       noTest:
@@ -2278,6 +2346,9 @@ melbet	kz	34	20 000	0,45`,
         after_run: "После каждого прогона/загрузки CSV",
         daily: (time: string) => `Ежедневно в ${time}`,
       },
+      auto: "Автоматически отправлять после каждой проверки выдачи и загрузки CSV",
+      autoHint:
+        "Если включено, домены проекта уходят в Proxy Checker сразу после каждой проверки выдачи или загрузки CSV. Это действует для всех проектов, кроме тех, у которых на странице проекта выбран свой вариант.",
       logTitle: "Последние отправки",
       logEmpty: "Пока ничего не отправлялось.",
       col: { when: "Отправлено", project: "Проект", geo: "Страна", domains: "Домены", trigger: "Причина", result: "Ответ" },
@@ -2427,6 +2498,13 @@ melbet	kz	34	20 000	0,45`,
       connectLink: "Подключить в «Настройки → Подключение инструментов»",
       when: "Когда отправлять",
       modeDaily: "Раз в день",
+      modeInherit: "Как в настройках",
+      modeInheritOn:
+        "По общей настройке в «Настройки → Подключение инструментов», а она сейчас такая: сразу после завершения каждой проверки проекта или загрузки CSV — домены, найденные в ней.",
+      modeInheritOff:
+        "По общей настройке в «Настройки → Подключение инструментов», а там автоматическая отправка сейчас выключена: само ничего не отправляется. Кнопка «Отправить сейчас» ниже работает всегда.",
+      bySettings: "как в настройках",
+      settingsLink: "Изменить там",
       modeOffHint: "Автоматически ничего не отправляется. Кнопка «Отправить сейчас» ниже работает всегда.",
       modeAfterRunHint: "Сразу после завершения каждой проверки проекта или загрузки CSV: домены, найденные в ней.",
       modeDailyHint: (hours: number) => `Раз в день в указанное время: все домены, найденные за последние ${hours} ч.`,
@@ -2475,7 +2553,7 @@ melbet	kz	34	20 000	0,45`,
         <>
           <code>canonical_name</code> использует формат SerpAPI с разделителями-запятыми.{" "}
           <code>yandex_lr</code> — числовой ID региона Яндекса, нужен для
-          городского таргетинга Яндекса (напр. Москва=213, Алматы=162, Ташкент=11353).
+          городского таргетинга Яндекса (напр. Москва=213, Алматы=162, Ташкент=10335).
         </>
       ),
       phCanonical: "canonical_name",
@@ -2576,7 +2654,7 @@ melbet	kz	34	20 000	0,45`,
     ai: {
       title: "AI-провайдеры",
       help:
-        "Доступ к Gemini для будущих AI-функций. Пока ничего их не использует — настройте и проверьте сейчас, чтобы интеграция была готова к первой функции.",
+        "Доступ к Gemini для оценки сложности выдачи в анализаторе. Настройте одного провайдера и проверьте его здесь — задачи анализатора используют его.",
       authServiceAccount: "сервисный аккаунт",
       authExpress: "Express (API-ключ)",
       testing: "Проверка…",

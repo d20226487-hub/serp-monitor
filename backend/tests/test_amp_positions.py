@@ -18,7 +18,7 @@ from sqlalchemy.pool import StaticPool
 
 from app import amp_rotator
 from app import proxy_checker as pc
-from app.amp_rotator import amp_hosts, owners, remember, remember_current
+from app.amp_rotator import AmpPeriod, amp_hosts, amp_periods, as_dates, owners, periods, remember, remember_current
 from app.blocks import in_serps
 from app.db import Base
 from app.models import (
@@ -250,7 +250,7 @@ class TestTheAverages:
         by = {(h["domain"], h["amp"]): h for h in row["hits"]}
         amp, site = by[(SITE, True)], by[(SITE, False)]
         assert (amp["avg_position"], amp["ranked_in"], amp["runs"]) == (3.0, 2, 2)
-        assert amp["amp_hosts"] == ["amp-mon.example", "amp-tue.example"]
+        assert [h["host"] for h in amp["amp_hosts"]] == ["amp-mon.example", "amp-tue.example"]
         assert (site["avg_position"], site["ranked_in"], site["runs"], site["amp_hosts"]) == (5.0, 1, 2, [])
         # What the project holds on the page is both lines together.
         assert row["visibility"] == round(amp["visibility"] + site["visibility"], 1)
@@ -262,7 +262,7 @@ class TestTheAverages:
         (amp,) = rows_of(pp.project_position_averages(p.id, None, None, db))["query"]["hits"]
         # The better placed of the two; present in the one run there was.
         assert (amp["amp"], amp["avg_position"], amp["ranked_in"], amp["runs"]) == (True, 2.0, 1, 1)
-        assert amp["amp_hosts"] == ["amp-mon.example", "amp-tue.example"]
+        assert [h["host"] for h in amp["amp_hosts"]] == ["amp-mon.example", "amp-tue.example"]
 
 
 class TestTheBlocksTab:
@@ -333,6 +333,7 @@ class TestSendingToTheProxyChecker:
 
     def test_the_answer_is_kept_as_an_amp_domains_under_its_site(self, db, monkeypatch):
         monkeypatch.setattr(pc, "connection", lambda: {"url": "https://checker.example/api", "token": "t" * 20})
+        monkeypatch.setattr(pc, "timeout_minutes", lambda: pc.DEFAULT_TIMEOUT_MINUTES)   # a setting, read from the app's DB
         p, job = project(db)
         p.geos = ["KZ"]
         remember(db, [(p.id, SITE, "amp-mon.example", MON, MON)])
@@ -378,3 +379,45 @@ class TestTheCsv:
         at = {name: header.index(name) for name in ("Site", "Our site", "AMP domain of")}
         assert [(r[at["Site"]], r[at["Our site"]], r[at["AMP domain of"]]) for r in rows] == [
             ("amp-a.example", "yes", SITE), ("stranger.example", "no", ""), (SITE, "yes", "")]
+
+
+class TestWhenItWasTheAmpDomain:
+    """User, 2026-10-14: "give the date when the domain was AMP for the main
+    domain inside the overview, block, and position tables"."""
+
+    def test_the_first_and_last_day_named_and_whether_it_still_is(self):
+        seen = [(SITE, "amp-mon.example", MON, TUE), (SITE, "amp-wed.example", WED, WED)]
+        got = periods(seen, [SITE], current={(SITE, "amp-wed.example")})
+        assert got == {"amp-mon.example": AmpPeriod(SITE, MON, TUE, False),
+                       "amp-wed.example": AmpPeriod(SITE, WED, WED, True)}
+        assert as_dates(got["amp-mon.example"]) == {"from": MON, "to": TUE}
+        assert as_dates(got["amp-wed.example"]) == {"from": WED, "to": None}     # still is
+        assert as_dates(None) is None
+
+    def test_a_host_named_for_two_sites_takes_the_dates_of_the_later_one(self):
+        seen = [(SITE, "amp-a.example", MON, MON), (OTHER, "amp-a.example", TUE, WED)]
+        assert periods(seen, [SITE, OTHER])["amp-a.example"] == AmpPeriod(OTHER, TUE, WED, False)
+
+    def test_current_is_what_the_latest_answer_names(self, db):
+        p, _ = project(db)
+        endpoint = AmpEndpoint(project_id=p.id, url="https://rotator.example/api/")
+        db.add(endpoint)
+        db.flush()
+        db.add(AmpDomain(endpoint_id=endpoint.id, project_id=p.id, domain=SITE, amp_domain="amp-tue.example",
+                         since=TUE, fetched_at=WED))
+        db.commit()
+        remember(db, [(p.id, SITE, "amp-mon.example", MON, MON), (p.id, SITE, "amp-tue.example", TUE, WED)])
+        got = amp_periods(db, p)
+        assert (got["amp-mon.example"].current, got["amp-tue.example"].current) == (False, True)
+        assert amp_hosts(db, p) == {"amp-mon.example": SITE, "amp-tue.example": SITE}
+
+    def test_the_positions_carry_it(self, db):
+        p, job = project(db)
+        remember(db, [(p.id, SITE, "amp-mon.example", MON, TUE)])
+        run(db, job, TUE, [("query", 1, "amp-mon.example"), ("query", 2, SITE)])
+        hits = rows_of(pp.project_positions(p.id, None, None, db))["query"]["hits"]
+        assert [(h["domain"], h["amp_period"]) for h in hits] == [
+            ("amp-mon.example", {"from": MON, "to": TUE}), (SITE, None)]
+        avg = rows_of(pp.project_position_averages(p.id, None, None, db))["query"]["hits"]
+        amp = next(h for h in avg if h["amp"])
+        assert amp["amp_hosts"] == [{"host": "amp-mon.example", "from": MON, "to": TUE}]

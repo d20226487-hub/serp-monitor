@@ -20,7 +20,7 @@ import { Icon } from "@/components/icons";
  * backend/app/proxy_checker.py.
  */
 
-const MODES: ProxyCheckerMode[] = ["off", "after_run", "daily"];
+const MODES: ProxyCheckerMode[] = ["inherit", "off", "after_run", "daily"];
 const pad = (n: number) => String(n).padStart(2, "0");
 
 /** The server keeps the daily time in UTC; people think in their own clock. */
@@ -198,21 +198,46 @@ export function ProxyCheckerSettings({ onError }: { onError: (msg: string | null
   const [token, setToken] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [autoMsg, setAutoMsg] = useState<string | null>(null);
+  // How long an answer is waited for, in minutes, as typed.
+  const [wait, setWait] = useState("");
 
   function take(next: ProxyCheckerConnection) {
     setData(next);
     setUrl(next.url);
+    setWait(String(next.timeout_minutes));
+  }
+
+  // Saved the moment it is clicked, on its own: the address and token above
+  // have their own Save, and an address half-typed must not go with it.
+  async function setAuto(on: boolean) {
+    setBusy(true); setAutoMsg(null); onError(null);
+    try {
+      setData(await api.saveProxyChecker({ auto_after_run: on }));
+      setAutoMsg(t.common.saved);
+    } catch (e: any) {
+      onError(e?.message ?? "Save failed");
+    } finally { setBusy(false); }
   }
   useEffect(() => {
     api.getProxyChecker().then(take).catch(e => onError(e?.message ?? "Failed to load the Proxy Checker settings"));
   }, []);
 
   async function save() {
+    if (!data) return;
+    const [lo, hi] = data.timeout_range;
+    const minutes = Number(wait);
+    if (!Number.isInteger(minutes) || minutes < lo || minutes > hi) {
+      onError(s.waitBad(lo, hi));
+      return;
+    }
     setBusy(true); setMsg(null); onError(null);
     try {
       // The token is sent only when one was typed: an empty box means "keep
       // the one that is saved", never "erase it".
-      take(await api.saveProxyChecker({ url: url.trim(), ...(token.trim() ? { token: token.trim() } : {}) }));
+      take(await api.saveProxyChecker({
+        url: url.trim(), ...(token.trim() ? { token: token.trim() } : {}), timeout_minutes: minutes,
+      }));
       setToken("");
       setMsg(t.common.saved);
     } catch (e: any) {
@@ -274,6 +299,28 @@ export function ProxyCheckerSettings({ onError }: { onError: (msg: string | null
               className={inputClass}
             />
           </div>
+          {/* How long an answer is waited for (user, 2026-10-14: "Make it
+              configurable in the setting: how long will we wait for the proxy
+              checker"): a request with many domains takes longer to answer. */}
+          <div className="space-y-1">
+            <label className="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">{s.wait}</label>
+            <div className="flex items-center gap-2">
+              <div className="w-24">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={data.timeout_range[0]}
+                  max={data.timeout_range[1]}
+                  step={1}
+                  value={wait}
+                  onChange={e => setWait(e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+              <span className="text-sm text-slate-600 dark:text-slate-400">{s.waitUnit}</span>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{s.waitHint(data.timeout_range[0], data.timeout_range[1])}</p>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="primary" disabled={busy} onClick={save}>{t.common.save}</Button>
             <Button variant="danger" disabled={busy || !(hasToken || data.url)} onClick={clear}>{t.common.clear}</Button>
@@ -288,6 +335,34 @@ export function ProxyCheckerSettings({ onError }: { onError: (msg: string | null
               page — the user asked for it there, and a second copy in
               Settings read as if this were the place to set it. */}
           <p className="text-xs text-slate-500 dark:text-slate-400">{s.noTest}</p>
+        </div>
+
+        {/* The one schedule kept here: what a project on "As in Settings"
+            does (user, 2026-10-14: "one setting for auto sending block checks
+            to the proxy checker after CSV file upload or serp checks … The
+            user should be able to still overwrite this setting on the project
+            page. But default will be auto checks"). */}
+        <div className="border-t border-slate-200 pt-4 dark:border-slate-800">
+          <label className="flex cursor-pointer items-start gap-2.5">
+            <input
+              type="checkbox"
+              checked={data.auto_after_run}
+              disabled={busy}
+              onChange={e => setAuto(e.target.checked)}
+              className="mt-0.5 h-4 w-4 accent-sky-600"
+            />
+            <span className="space-y-0.5">
+              <span className="block text-sm font-medium">{s.auto}</span>
+              <span className="block text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                {s.autoHint}
+                {autoMsg && (
+                  <span className="ml-1.5 inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
+                    <Icon name="check" className="h-3 w-3" />{autoMsg}
+                  </span>
+                )}
+              </span>
+            </span>
+          </label>
         </div>
       </div>
     </Card>
@@ -387,8 +462,12 @@ export function ProjectProxyCheckerCard({ projectId, reloadKey = 0, onChanged }:
       title={<SectionTitle icon="shield">{p.title}</SectionTitle>}
       actions={
         data.connected
-          ? <Pill tone={data.mode === "off" ? "neutral" : "good"} icon={data.mode === "off" ? "dash" : "check"}>
-              {modeLabel(s, data.mode, data.time)}
+          ? <Pill
+              tone={data.effective_mode === "off" ? "neutral" : "good"}
+              icon={data.effective_mode === "off" ? "dash" : "check"}
+            >
+              {modeLabel(s, data.effective_mode, data.time)}
+              {data.mode === "inherit" && ` · ${p.bySettings}`}
             </Pill>
           : <Pill tone="neutral" icon="dash">{s.notConnected}</Pill>
       }
@@ -423,7 +502,7 @@ export function ProjectProxyCheckerCard({ projectId, reloadKey = 0, onChanged }:
                       : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
                   }`}
                 >
-                  {m === "off" ? s.mode.off : m === "after_run" ? s.mode.after_run : p.modeDaily}
+                  {m === "inherit" ? p.modeInherit : m === "off" ? s.mode.off : m === "after_run" ? s.mode.after_run : p.modeDaily}
                 </button>
               ))}
             </div>
@@ -441,7 +520,12 @@ export function ProjectProxyCheckerCard({ projectId, reloadKey = 0, onChanged }:
             <Button variant="primary" size="sm" disabled={busy || !dirty} onClick={save}>{t.common.save}</Button>
           </div>
           <p className="text-xs text-slate-600 dark:text-slate-400">
-            {mode === "off" ? p.modeOffHint : mode === "after_run" ? p.modeAfterRunHint : p.modeDailyHint(data.window_hours)}
+            {mode === "inherit"
+              ? (data.auto_after_run ? p.modeInheritOn : p.modeInheritOff)
+              : mode === "off" ? p.modeOffHint : mode === "after_run" ? p.modeAfterRunHint : p.modeDailyHint(data.window_hours)}
+            {mode === "inherit" && (
+              <> <Link href="/settings#tools" className="underline underline-offset-2">{p.settingsLink}</Link></>
+            )}
             {data.mode === "daily" && mode === "daily" && !dirty && next && (
               <> {p.nextRun(next.toLocaleString())}</>
             )}

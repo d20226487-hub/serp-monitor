@@ -1,17 +1,23 @@
 """Upload a SERP export (CSV) to a project: it becomes a run of the project,
-like any other. See ../serp_csv.py for the file and the rules."""
+like any other. See ../serp_csv.py for the file and the rules.
+
+The project's "CSV uploads" tab lists them and can remove one (user,
+2026-10-14: "a short log of uploads", with "delete an upload"): a wrong file,
+or the right file dated on the wrong day."""
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .. import serp_csv
 from ..db import get_db
-from ..models import Job, JobRun, Project, Result
+from ..models import Job, JobRun, Project, Result, ToolDelivery
 from ..proxy_checker import after_run as proxy_checker_after_run
+from ..proxy_checker import auto_after_run, effective_mode
 
 router = APIRouter(tags=["projects"])
 
@@ -136,7 +142,16 @@ def upload_serp_csv(
                  started_at=when, finished_at=when,
                  # The day above is the day the SERPs were read; this is now.
                  uploaded_at=datetime.now(timezone.utc).replace(tzinfo=None),
-                 queries_total=len(queries), queries_done=len(queries), queries_failed=0)
+                 queries_total=len(queries), queries_done=len(queries), queries_failed=0,
+                 # For the uploads log: the file and what became of it.
+                 upload={
+                     "file_name": (file.filename or "")[:255] or None,
+                     "engine": engine, "device": device,
+                     "rows": len(parsed.rows), "queries": len(queries),
+                     "geos": {g: sum(1 for r in parsed.rows if r.geo == g) for g in geos},
+                     "empty": parsed.empty, "unknown_geos": parsed.unknown_geos,
+                     "bad_total": len(parsed.bad), "geos_added": geos_added,
+                 })
     db.add(run)
     db.flush()
     for r in parsed.rows:
@@ -157,9 +172,116 @@ def upload_serp_csv(
         "keywords": len({r.keyword for r in parsed.rows}),
         "geos": {g: sum(1 for r in parsed.rows if r.geo == g) for g in geos},
         "engine": engine, "device": device,
-        # Whether this project sends to the Proxy Checker after a run.
-        "proxy_checker_after": project.proxy_checker_mode == "after_run",
+        # Whether this project sends to the Proxy Checker after a run — set
+        # so, or following the global switch while it is on.
+        "proxy_checker_after": effective_mode(project.proxy_checker_mode, auto_after_run()) == "after_run",
         # Countries of this file that were not GEOs of the project and are now.
         "geos_added": geos_added,
         **report,
     }
+
+
+# --- the uploads log ---------------------------------------------------------
+
+def _upload_runs(db: Session, project: Project) -> list[JobRun]:
+    """The project's uploads: the runs of its upload job(s)."""
+    job_ids = [j for (j,) in db.query(Job.id).filter(Job.project_id == project.id, Job.provider == PROVIDER).all()]
+    return db.query(JobRun).filter(JobRun.job_id.in_(job_ids or [-1])).all()
+
+
+def _from_results(db: Session, run_ids: list[int]) -> dict[int, dict]:
+    """For uploads made before their file was recorded: what the stored
+    positions still say — how many, for how many queries, where, on which
+    engine and device. The file's name and what it skipped are not known."""
+    out: dict[int, dict] = {i: {"rows": 0, "queries": 0, "geos": {}, "engine": None, "device": None} for i in run_ids}
+    if not run_ids:
+        return out
+    for run_id, country, rows, keywords in (
+        db.query(Result.run_id, Result.country_code, func.count(Result.id), func.count(func.distinct(Result.keyword)))
+        .filter(Result.run_id.in_(run_ids)).group_by(Result.run_id, Result.country_code).all()
+    ):
+        entry = out[run_id]
+        entry["rows"] += rows
+        entry["queries"] += keywords          # a query is a keyword in a country
+        entry["geos"][(country or "").upper() or "—"] = rows
+    for run_id, engine, device in (
+        db.query(Result.run_id, Result.engine, Result.device).filter(Result.run_id.in_(run_ids)).distinct().all()
+    ):
+        out[run_id]["engine"] = out[run_id]["engine"] or engine
+        out[run_id]["device"] = out[run_id]["device"] or device
+    return out
+
+
+def _uploads(db: Session, project: Project) -> list[dict]:
+    runs = _upload_runs(db, project)
+    older = _from_results(db, [r.id for r in runs if not r.upload])
+    # What went to the Proxy Checker after each upload.
+    sent: dict[int, dict] = {}
+    if runs:
+        for d in (db.query(ToolDelivery)
+                  .filter(ToolDelivery.run_id.in_([r.id for r in runs]))
+                  .order_by(ToolDelivery.sent_at, ToolDelivery.id).all()):
+            s = sent.setdefault(d.run_id, {"requests": 0, "accepted": 0, "no_answer": 0, "refused": 0, "at": None})
+            s["requests"] += 1
+            s["accepted"] += bool(d.ok)
+            s["no_answer"] += (not d.ok and d.status_code is None)
+            s["refused"] += (not d.ok and d.status_code is not None)
+            s["at"] = d.sent_at
+    rows = []
+    for run in runs:
+        u = run.upload or {}
+        known = bool(run.upload)
+        base = u if known else older.get(run.id, {})
+        rows.append({
+            "run_id": run.id,
+            "uploaded_at": run.uploaded_at,
+            # The day the SERPs were read.
+            "checked_at": run.started_at,
+            "file_name": u.get("file_name"),
+            "engine": base.get("engine"), "device": base.get("device"),
+            "rows": base.get("rows", 0), "queries": base.get("queries", 0), "geos": base.get("geos") or {},
+            # Unknown (null) for uploads made before the file was recorded.
+            "empty": u.get("empty") if known else None,
+            "not_loaded": (sum((u.get("unknown_geos") or {}).values()) + (u.get("bad_total") or 0)) if known else None,
+            "unknown_geos": u.get("unknown_geos") if known else None,
+            "bad_total": u.get("bad_total") if known else None,
+            "geos_added": u.get("geos_added") if known else None,
+            "proxy_checker": sent.get(run.id),
+        })
+    # Newest upload first; one made before the upload time was kept sorts by
+    # the day it was of.
+    rows.sort(key=lambda r: (r["uploaded_at"] or r["checked_at"], r["run_id"]), reverse=True)
+    return rows
+
+
+def _project(db: Session, project_id: int) -> Project:
+    project = db.get(Project, project_id)
+    if project is None:
+        raise HTTPException(404)
+    return project
+
+
+@router.get("/projects/{project_id}/serp-csv")
+def list_serp_csv_uploads(project_id: int, db: Session = Depends(get_db)):
+    """The project's CSV uploads, newest first."""
+    return {"uploads": _uploads(db, _project(db, project_id))}
+
+
+@router.delete("/projects/{project_id}/serp-csv/{run_id}")
+def delete_serp_csv_upload(project_id: int, run_id: int, db: Session = Depends(get_db)):
+    """Remove one upload: its run and every position it brought. What it added
+    to the project — keywords, GEOs — stays: those may as well have come from
+    another file. The Proxy Checker's answers stay too (they are about
+    domains, not about the file); the sends it caused stay in the log, no
+    longer tied to a run that is gone — SQLite gives a later run the same id."""
+    project = _project(db, project_id)
+    run = db.get(JobRun, run_id)
+    job = db.get(Job, run.job_id) if run else None
+    if run is None or job is None or job.project_id != project.id or job.provider != PROVIDER:
+        raise HTTPException(404, "There is no such upload in this project.")
+    db.query(Result).filter(Result.run_id == run.id).delete(synchronize_session=False)
+    db.query(ToolDelivery).filter(ToolDelivery.run_id == run.id).update(
+        {ToolDelivery.run_id: None}, synchronize_session=False)
+    db.delete(run)
+    db.commit()
+    return {"uploads": _uploads(db, project)}

@@ -24,8 +24,17 @@ One request per country:
 * When, per project (Project.proxy_checker_mode): "off"; "after_run" — what
   each finished run found, straight after it (an uploaded CSV is a run: "the
   CSV upload will equal прогон"); "daily" — once a day at
-  proxy_checker_time (UTC, HH:MM), everything found in the last 24 hours. A
-  "Send now" on the project page sends the last 24 hours at any time.
+  proxy_checker_time (UTC, HH:MM), everything found in the last 24 hours; or
+  "inherit" — whatever the global switch in Settings → Tools Connection says
+  (user, 2026-10-14: "one setting for auto sending block checks to the proxy
+  checker after CSV file upload or serp checks. When enabled, this will happen
+  automatically, when disabled the user will configure. The user should be
+  able to still overwrite this setting on the project page. But default will
+  be auto checks"). The switch is on unless turned off, and on it means
+  "after_run"; off means nothing is sent on its own. New projects inherit;
+  the projects that existed when it was added kept their "off" (the user's
+  choice). A "Send now" on the project page sends the last 24 hours at any
+  time, whatever the mode.
 * Every request made is kept in tool_deliveries: what went, where, and what
   came back — an integration that fails silently is worse than none. Kept in
   full: the request as it went out (shown as a curl command, the token
@@ -86,7 +95,7 @@ from sqlalchemy.orm import Session
 
 from ._redact import redact
 from .amp_rotator import amp_hosts
-from .app_settings import _get, _set
+from .app_settings import _get, _get_int, _set, _set_int
 from .db import SessionLocal
 from .models import (
     AmpDomain, DomainProxyCheckLog, Job, JobRun, Project, Result, ToolDelivery,
@@ -98,7 +107,9 @@ log = logging.getLogger(__name__)
 TOOL = "proxy_checker"
 KEY_URL = "proxy_checker_url"
 KEY_TOKEN = "proxy_checker_token"
-MODES = ("off", "after_run", "daily")
+MODES = ("inherit", "off", "after_run", "daily")
+#: The global switch a project on "inherit" follows. Not saved = on.
+KEY_AUTO = "proxy_checker_auto_after_run"
 #: "Send now" and the daily send look this far back.
 WINDOW_HOURS = 24
 #: SQLite's oldest builds allow 999 bound values in one statement.
@@ -106,12 +117,18 @@ _HOSTS_PER_QUERY = 400
 #: Stands where the token was, in everything that is stored or shown.
 TOKEN_MARK = "<token>"
 _MASKABLE = 8
-#: How long an answer is waited for. The Proxy Checker runs its check through
-#: the country's proxies BEFORE it answers: the first two real requests that
-#: got through (2026-10-13, 3 domains each) had no answer after 30 seconds
-#: (ReadTimeout). Five minutes, with a short limit on merely connecting so an
-#: unreachable server is still reported quickly.
-TIMEOUT = httpx.Timeout(300.0, connect=15.0)
+#: How long an answer is waited for, in minutes — a setting (Settings → Tools
+#: Connection; the user, 2026-10-14: "Make it configurable in the setting: how
+#: long will we wait for the proxy checker"). The Proxy Checker runs its check
+#: through the country's proxies BEFORE it answers, so a request with more
+#: domains takes longer: the first two real requests that got through
+#: (2026-10-13, 3 domains each) had no answer after 30 seconds (ReadTimeout).
+KEY_TIMEOUT = "proxy_checker_timeout_minutes"
+DEFAULT_TIMEOUT_MINUTES = 5
+TIMEOUT_MINUTES_MIN, TIMEOUT_MINUTES_MAX = 1, 60
+#: Merely connecting has a short limit of its own, so an unreachable server is
+#: still reported quickly however long an answer may take.
+CONNECT_SECONDS = 15.0
 #: How much of an answer's body is kept. A JSON reply or a firewall's error
 #: page fits many times over; one that does not is cut, and says so.
 RAW_BODY_LIMIT = 20_000
@@ -140,6 +157,54 @@ def set_connection(*, url: str | None = None, token: str | None = None) -> None:
             _set(db, KEY_TOKEN, token.strip() or None)
     finally:
         db.close()
+
+
+def timeout_minutes() -> int:
+    """How long an answer is waited for, in minutes."""
+    return _get_int(KEY_TIMEOUT, DEFAULT_TIMEOUT_MINUTES, TIMEOUT_MINUTES_MIN, TIMEOUT_MINUTES_MAX)
+
+
+def set_timeout_minutes(minutes: int) -> int:
+    return _set_int(KEY_TIMEOUT, minutes, DEFAULT_TIMEOUT_MINUTES, TIMEOUT_MINUTES_MIN, TIMEOUT_MINUTES_MAX)
+
+
+def request_timeout(minutes: int) -> httpx.Timeout:
+    """The whole wait for an answer, with connecting limited apart."""
+    return httpx.Timeout(minutes * 60.0, connect=CONNECT_SECONDS)
+
+
+def parse_flag(value: str | None, default: bool = True) -> bool:
+    """A stored on/off setting. Nothing stored is the default."""
+    if value is None or not value.strip():
+        return default
+    return value.strip().lower() not in ("0", "false", "off", "no")
+
+
+def auto_after_run() -> bool:
+    """The global switch: send after every SERP check and CSV upload, for the
+    projects that follow it. On unless turned off."""
+    db = SessionLocal()
+    try:
+        return parse_flag(_get(db, KEY_AUTO))
+    finally:
+        db.close()
+
+
+def set_auto_after_run(on: bool) -> None:
+    db = SessionLocal()
+    try:
+        _set(db, KEY_AUTO, "1" if on else "0")
+    finally:
+        db.close()
+
+
+def effective_mode(mode: str | None, auto: bool) -> str:
+    """What a project's mode comes to: "inherit" follows the global switch —
+    "after_run" while it is on, "off" while it is off. Anything unknown is
+    "off": a value nobody understands must not send."""
+    if mode == "inherit":
+        return "after_run" if auto else "off"
+    return mode if mode in ("off", "after_run", "daily") else "off"
 
 
 def connection_status() -> dict:
@@ -446,11 +511,13 @@ def record_statuses(db: Session, geo: str, sent: list[str], data: object, delive
 
 
 def send_one(url: str, token: str, geo: str, domains: list[str],
-             client: httpx.Client | None = None) -> Sent:
+             client: httpx.Client | None = None, *, wait_minutes: int = DEFAULT_TIMEOUT_MINUTES) -> Sent:
     """One request, and everything about it worth keeping. Never raises: a
     failed request is an outcome to record, not a reason to fail the run that
     triggered it. The token is in the request that goes out and nowhere in
-    what comes back from here — not even if the server echoes it."""
+    what comes back from here — not even if the server echoes it.
+    `wait_minutes`: how long the answer is waited for (the caller reads the
+    setting: nothing here touches the database)."""
     body = request_body(geo, domains)
     headers = request_headers(token)
     # Kept with the mark where the token goes, by construction rather than by
@@ -458,7 +525,7 @@ def send_one(url: str, token: str, geo: str, domains: list[str],
     request = {"method": "POST", "url": url, "body": body,
                "headers": [list(h) for h in request_headers(TOKEN_MARK)]}
     own = client is None
-    client = client or httpx.Client(timeout=TIMEOUT)
+    client = client or httpx.Client(timeout=request_timeout(wait_minutes))
     try:
         r = client.post(url, content=body.encode("utf-8"), headers=dict(headers))
         try:
@@ -467,6 +534,11 @@ def send_one(url: str, token: str, geo: str, domains: list[str],
             data = None
         return Sent(200 <= r.status_code < 300, r.status_code,
                     _mask(redact(r.text or ""), token)[:300], request, raw_response(r, token), data)
+    except httpx.ReadTimeout as e:
+        # Connected, asked, and no answer came in time: say how long that was,
+        # since it is a setting and the likely thing to change.
+        error = _mask(redact(f"no answer within {wait_minutes} min (ReadTimeout: {e})"), token)
+        return Sent(False, None, error[:300], request, error[:RAW_BODY_LIMIT])
     except (httpx.HTTPError, httpx.InvalidURL) as e:
         error = _mask(redact(f"{type(e).__name__}: {e}"), token)
         return Sent(False, None, error[:300], request, error[:RAW_BODY_LIMIT])
@@ -486,9 +558,10 @@ def deliver(db: Session, project: Project, by_geo: dict[str, list[str]], *, trig
     # Which of the domains going out are AMP domains, and of what: the same
     # mappings that put them in the list a moment ago.
     parents = amp_parents(db, project)
+    wait = timeout_minutes()
     out = []
     for geo, domains in by_geo.items():
-        sent = send_one(conn["url"], conn["token"], geo, domains, client)
+        sent = send_one(conn["url"], conn["token"], geo, domains, client, wait_minutes=wait)
         row = ToolDelivery(tool=TOOL, project_id=project.id, run_id=run_id, trigger=trigger, geo=geo,
                            domains=domains, ok=sent.ok, status_code=sent.status_code, response=sent.excerpt,
                            request=sent.request, response_raw=sent.raw)
@@ -507,14 +580,15 @@ def deliver(db: Session, project: Project, by_geo: dict[str, list[str]], *, trig
 
 def after_run(run_id: int) -> None:
     """Called when ANY run ends (tasks.run_job_async, and the importer of the
-    own-browser runs). Sends only for a project set to "after_run". Swallows
+    own-browser runs). Sends only for a project whose mode comes to
+    "after_run" — set so, or following the global switch while it is on. Swallows
     everything: the check that just finished must not fail on its messenger."""
     db = SessionLocal()
     try:
         run = db.get(JobRun, run_id)
         job = db.get(Job, run.job_id) if run else None
         project = db.get(Project, job.project_id) if job and job.project_id else None
-        if project is None or project.proxy_checker_mode != "after_run":
+        if project is None or effective_mode(project.proxy_checker_mode, auto_after_run()) != "after_run":
             return
         deliver(db, project, to_send(db, project, run_id=run_id), trigger="after_run", run_id=run_id)
     except Exception:  # noqa: BLE001

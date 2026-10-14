@@ -1,7 +1,8 @@
 "use client";
 import { ReactNode, useState } from "react";
+import { AmpPeriod, ampPeriodText } from "@/lib/amp-period";
 import {
-  AverageRow, AverageSerpGroup, ProjectAverages, ProjectPositions, SerpGroup,
+  AverageHit, AverageRow, AverageSerpGroup, ProjectAverages, ProjectPositions, SerpGroup,
   SerpIdentity,
 } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -217,6 +218,28 @@ export function PositionTable({ data }: { data: ProjectPositions }) {
 const AMP_TAG =
   "rounded bg-sky-100 px-1 py-px font-sans text-[10px] font-semibold text-sky-800 dark:bg-sky-950 dark:text-sky-300";
 
+/** "AMP · since 13.10": an AMP domain, and when the rotator named it as its
+ *  site's (user, 2026-10-14: "give the date when the domain was AMP for the
+ *  main domain"). */
+function AmpTag({ host, site, period }: { host: string; site: string; period: AmpPeriod | null }) {
+  const { t } = useT();
+  const when = ampPeriodText(period, t.positions.ampSince);
+  const hint = t.positions.ampHint(host, site) + (when ? `\n\n${t.positions.ampPeriodHint(site, when)}` : "");
+  return (
+    <Tip text={hint} label={hint} className={AMP_TAG}>
+      AMP{when && <span className="font-normal">{" · "}{when}</span>}
+    </Tip>
+  );
+}
+
+/** The AMP hosts of an averaged line, each with its days: "amp-a.example (since 13.10)". */
+function hostsWithDays(hosts: AverageHit["amp_hosts"], since: (day: string) => string): string[] {
+  return hosts.map(a => {
+    const when = ampPeriodText(a, since);
+    return when ? `${a.host} (${when})` : a.host;
+  });
+}
+
 function LatestRows({ serp, showRaw }: { serp: SerpGroup; showRaw: boolean }) {
   const { t } = useT();
   return (
@@ -272,15 +295,7 @@ function LatestRows({ serp, showRaw }: { serp: SerpGroup; showRaw: boolean }) {
                       </a>
                       {/* An AMP domain is not on the project's list, so the
                           pill has to say whose it is. */}
-                      {h.amp_of && (
-                        <Tip
-                          text={t.positions.ampHint(h.domain, h.amp_of)}
-                          label={t.positions.ampHint(h.domain, h.amp_of)}
-                          className={AMP_TAG}
-                        >
-                          AMP
-                        </Tip>
-                      )}
+                      {h.amp_of && <AmpTag host={h.domain} site={h.amp_of} period={h.amp_period} />}
                       {/* A site holding several listings has taken several
                           slots off the page. The pill reports its best one, so
                           the others would be invisible without this. */}
@@ -514,8 +529,8 @@ function AverageKeyword({ row, first }: { row: AverageRow; first: boolean }) {
                 given a row that was present once. */}
             {h.amp && (
               <Tip
-                text={t.positions.ampAvgHint(h.domain, h.amp_hosts.join(", "))}
-                label={t.positions.ampAvgHint(h.domain, h.amp_hosts.join(", "))}
+                text={t.positions.ampAvgHint(h.domain, hostsWithDays(h.amp_hosts, t.positions.ampSince).join(", "))}
+                label={t.positions.ampAvgHint(h.domain, hostsWithDays(h.amp_hosts, t.positions.ampSince).join(", "))}
                 className={`ml-1 ${AMP_TAG}`}
               >
                 AMP
@@ -557,7 +572,7 @@ function AverageKeyword({ row, first }: { row: AverageRow; first: boolean }) {
             )}
             {h.amp && (
               <span className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400">
-                {h.amp_hosts.slice(0, 2).join(", ")}
+                {hostsWithDays(h.amp_hosts.slice(0, 2), t.positions.ampSince).join(", ")}
                 {h.amp_hosts.length > 2 && ` ${t.positions.ampMore(h.amp_hosts.length - 2)}`}
               </span>
             )}

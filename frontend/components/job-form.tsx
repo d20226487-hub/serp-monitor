@@ -45,11 +45,6 @@ export function JobForm({ initial, onSaved }: Props) {
     { value: "desktop", label: t.jobForm.deviceOptions.desktop },
     { value: "mobile", label: t.jobForm.deviceOptions.mobile },
   ];
-  const SCRAPE_FIELDS: Option<string>[] = [
-    { value: "url", label: t.jobForm.scrapeFieldOptions.url },
-    { value: "title", label: t.jobForm.scrapeFieldOptions.title },
-    { value: "description", label: t.jobForm.scrapeFieldOptions.description },
-  ];
 
   const [name, setName] = useState(initial?.name ?? "");
   const [preferShownHost, setPreferShownHost] = useState(
@@ -70,9 +65,6 @@ export function JobForm({ initial, onSaved }: Props) {
   const [locations, setLocations] = useState<LocationRef[]>(initial?.locations ?? []);
   const [languages, setLanguages] = useState<string[]>(initial?.languages ?? []);
   const [googleDomains, setGoogleDomains] = useState<string[]>(initial?.google_domains ?? []);
-  const [scrapeFields, setScrapeFields] = useState<string[]>(
-    initial?.scrape_fields ?? ["url", "title", "description"]
-  );
   const [topN, setTopN] = useState<number>(initial?.top_n ?? 10);
   const [cron, setCron] = useState<string>(initial?.cron ?? "");
   const [scheduleEnabled, setScheduleEnabled] = useState<boolean>(initial?.schedule_enabled ?? false);
@@ -233,7 +225,6 @@ export function JobForm({ initial, onSaved }: Props) {
     locations,
     languages,
     google_domains: googleDomains,
-    scrape_fields: scrapeFields,
     top_n: topN,
     cron: cron.trim() || null,
     schedule_enabled: !!cron.trim() && scheduleEnabled,
@@ -700,13 +691,10 @@ export function JobForm({ initial, onSaved }: Props) {
         </div>
       )}
 
+      {/* There was a "Fields to scrape" choice here; nothing ever read it —
+          the URL, title and description are always kept — so it went
+          (2026-10-14). */}
       <div className="grid sm:grid-cols-2 gap-4">
-        <MultiCombobox
-          label={t.jobForm.fieldsToScrape}
-          options={SCRAPE_FIELDS}
-          selected={scrapeFields}
-          onChange={setScrapeFields}
-        />
         <div className="space-y-1.5">
           <label className="text-sm font-medium">{t.jobForm.topN}</label>
           <input

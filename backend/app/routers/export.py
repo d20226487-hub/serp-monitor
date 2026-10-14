@@ -1,5 +1,12 @@
 """CSV export. Long format: one row per (keyword, variant, position).
-The user can cap each (keyword, variant) group to top-N positions."""
+The user can cap each (keyword, variant) group to top-N positions.
+
+Written for Excel, as the project positions export is (positions_csv.py): a
+UTF-8 byte-order mark, without which Excel reads the file in the system's
+codepage and Cyrillic turns to mojibake; and, for a Russian interface, ";"
+between fields, which is what Excel with Russian regional settings splits on
+— with "," every row lands in column A. (User, 2026-10-14: "fix the garbled in
+Excel CSV".)"""
 from __future__ import annotations
 
 import csv
@@ -7,6 +14,7 @@ import io
 import re
 import unicodedata
 from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -48,6 +56,7 @@ def _human_timestamp(dt: datetime) -> str:
 def export_csv(
     run_id: int,
     top: int = Query(10, ge=1, le=100, description="Cap top-N per (keyword,variant)"),
+    lang: Literal["ru", "en"] = Query("en", description='ru: ";" between fields, for Russian-locale Excel'),
     db: Session = Depends(get_db),
 ):
     run = db.get(JobRun, run_id)
@@ -67,7 +76,7 @@ def export_csv(
     )
 
     buf = io.StringIO()
-    writer = csv.writer(buf)
+    writer = csv.writer(buf, delimiter=";" if lang == "ru" else ",", lineterminator="\r\n")
     writer.writerow(_COLS)
     for r in rows:
         # Rows from before providers were recorded per result came from the
@@ -84,8 +93,8 @@ def export_csv(
     filename = f"{job_slug}_{ts}_run{run_id}_top{top}.csv"
 
     return StreamingResponse(
-        iter([buf.getvalue()]),
-        media_type="text/csv",
+        iter(["\ufeff" + buf.getvalue()]),
+        media_type="text/csv; charset=utf-8",
         headers={
             # ASCII-safe `filename` for legacy + RFC 5987 `filename*` for unicode.
             "Content-Disposition": (

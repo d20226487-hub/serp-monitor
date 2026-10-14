@@ -8,7 +8,8 @@ import { AveragePositionTable, PositionTable } from "@/components/position-table
 import { ProjectProxyCheckerCard } from "@/components/proxy-checker";
 import { ProjectBlocksCard, ProjectNotPassingCard } from "@/components/project-blocks";
 import { ProjectAmpCard } from "@/components/amp-rotator";
-import { SerpCsvUploadCard } from "@/components/serp-csv-upload";
+import { ProjectCsvUploadsCard, SerpCsvUploadBar, SerpCsvUploadCard } from "@/components/serp-csv-upload";
+import type { SerpCsvUpload } from "@/lib/api";
 import { ProjectGeosCard } from "@/components/project-geos";
 import { Button, Card, Empty, ErrorNote, SectionTitle, StatTile } from "@/components/ui";
 import { Icon, IconName } from "@/components/icons";
@@ -32,11 +33,13 @@ import {
  * The tab is kept in the address (#positions), so a reload or a link lands on
  * the same one; no hash is the Overview.
  */
-type ProjectTab = "overview" | "positions" | "blocks";
+type ProjectTab = "overview" | "positions" | "blocks" | "uploads";
 const PROJECT_TABS: { id: ProjectTab; icon: IconName }[] = [
   { id: "overview", icon: "layers" },
   { id: "positions", icon: "activity" },
   { id: "blocks", icon: "shield" },
+  // The log of CSV uploads (user, 2026-10-14).
+  { id: "uploads", icon: "upload" },
 ];
 /** A tab's sections, with air between them: the user asked for more than the
  *  page's usual gap once a tab held five or six blocks in a row. */
@@ -112,10 +115,16 @@ export default function ProjectPage() {
   // The upload form for a SERP export, and a count of uploads made: an upload
   // is a run, so the jobs, the positions and the blocks are all read again.
   const [showUpload, setShowUpload] = useState(false);
+  // The last upload's result, as one line once the form has closed.
+  const [lastUpload, setLastUpload] = useState<SerpCsvUpload | null>(null);
+  // How many uploads the log holds, for its tab's label.
+  const [uploadsCount, setUploadsCount] = useState<number | null>(null);
   const [uploadsVersion, setUploadsVersion] = useState(0);
   // What the CSV export lists per query: the whole page (who holds the other
   // spots too) or only the project's own sites, as the tables do.
   const [exportSites, setExportSites] = useState<"all" | "ours">("all");
+  // The export's choices stay folded behind one button until asked for.
+  const [exportOpen, setExportOpen] = useState(false);
   const [preset, setPreset] = useState<RangePreset>("today");
   const [from, setFrom] = useState(() => toInputValue(new Date()));
   const [to, setTo] = useState(() => toInputValue(new Date()));
@@ -246,7 +255,7 @@ export default function ProjectPage() {
           </Link>
           <button
             type="button"
-            onClick={() => setShowUpload(v => !v)}
+            onClick={() => { setShowUpload(v => !v); setLastUpload(null); }}
             aria-expanded={showUpload}
             className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
           >
@@ -263,13 +272,20 @@ export default function ProjectPage() {
       </div>
 
       {/* A SERP read by another tool, uploaded as a CSV: it becomes a run of
-          this project. Above the tabs — it feeds all three. */}
+          this project. Above the tabs — it feeds all three. Once it is in, the
+          form closes and the result stays as one line until dismissed. */}
       {showUpload && (
         <SerpCsvUploadCard
           projectId={id}
-          onUploaded={() => setUploadsVersion(v => v + 1)}
+          onUploaded={done => { setUploadsVersion(v => v + 1); setLastUpload(done); setShowUpload(false); }}
           onClose={() => setShowUpload(false)}
+        />
+      )}
+      {lastUpload && !showUpload && (
+        <SerpCsvUploadBar
+          done={lastUpload}
           onShowPositions={() => pickTab("positions")}
+          onDismiss={() => setLastUpload(null)}
         />
       )}
 
@@ -295,6 +311,11 @@ export default function ProjectPage() {
           >
             <Icon name={icon} className="h-3.5 w-3.5" />
             {t.projects.tabs[tabId]}
+            {tabId === "uploads" && uploadsCount ? (
+              <span className="rounded-full bg-slate-100 px-1.5 text-xs tabular-nums text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                {uploadsCount}
+              </span>
+            ) : null}
           </button>
         ))}
       </div>
@@ -339,11 +360,12 @@ export default function ProjectPage() {
           onOpenBlocks={() => pickTab("blocks")}
         />
 
-        <section className="space-y-2">
-          <SectionTitle icon="clock" count={scheduled.length}>{t.positions.scheduled}</SectionTitle>
-          {scheduled.length === 0 ? (
-            <Empty>{t.positions.noScheduled}</Empty>
-          ) : (
+        {/* Only when some job is on a schedule: an empty "Scheduled jobs · 0"
+            was noise (user, 2026-10-14: "This should not be displayed on the
+            Project page if there are no scheduled jobs"). */}
+        {scheduled.length > 0 && (
+          <section className="space-y-2">
+            <SectionTitle icon="clock" count={scheduled.length}>{t.positions.scheduled}</SectionTitle>
             <div className="space-y-2">
               {scheduled.map(j => (
                 <div
@@ -363,18 +385,18 @@ export default function ProjectPage() {
                 </div>
               ))}
             </div>
-          )}
-          {/* Jobs without a schedule still feed the table when run by hand, so
-              they are worth naming rather than leaving invisible. */}
-          {jobs.length > scheduled.length && (
-            <div className="text-xs text-slate-500 dark:text-slate-400">
-              {t.positions.manualJobs(jobs.length - scheduled.length)}{" "}
-              <Link href={`/?project=${project.id}`} className="underline">
-                {t.projects.viewJobs}
-              </Link>
-            </div>
-          )}
-        </section>
+            {/* Jobs without a schedule still feed the table when run by hand, so
+                they are worth naming rather than leaving invisible. */}
+            {jobs.length > scheduled.length && (
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                {t.positions.manualJobs(jobs.length - scheduled.length)}{" "}
+                <Link href={`/?project=${project.id}`} className="underline">
+                  {t.projects.viewJobs}
+                </Link>
+              </div>
+            )}
+          </section>
+        )}
 
         <section className="space-y-2">
           <SectionTitle icon="keywords" count={keywords.length}>{t.positions.keywords}</SectionTitle>
@@ -414,6 +436,67 @@ export default function ProjectPage() {
         className={PANEL}
       >
         <section className="space-y-6">
+          {/* The tables below as a file for SEO. Latest view only: the file is
+              "which site holds which position", and an average has no page.
+              Above the title row, as the user placed it, and folded behind one
+              button until asked for (user, 2026-10-14: "move the export
+              functionality to the Export CSV button, which is collapsed by
+              default, to remove the clutter"), at the right (user: "Move it to
+              the right"), its choices opening below it ("Make it collapsible to
+              the bottom"). */}
+          {view === "latest" && range && positions && positions.serps.length > 0 && (
+            <div className="flex flex-col items-end gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => setExportOpen(o => !o)}
+                aria-expanded={exportOpen}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-2.5 py-1 font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <Icon name="download" className="h-3.5 w-3.5" />
+                {t.positions.exportButton}
+                {/* Points the way the choices open — down — and back up. */}
+                <Icon name="chevronDown" className={`h-3 w-3 transition ${exportOpen ? "rotate-180" : ""}`} />
+              </button>
+              {exportOpen && (
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <span className="text-slate-500 dark:text-slate-400">{t.positions.exportSites}</span>
+                  <div
+                    role="group"
+                    aria-label={t.positions.exportSites}
+                    className="inline-flex overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700"
+                  >
+                    {(["all", "ours"] as const).map(s => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setExportSites(s)}
+                        aria-pressed={exportSites === s}
+                        title={s === "all" ? t.positions.exportAllHint : t.positions.exportOursHint}
+                        className={`border-l px-2.5 py-1 transition first:border-l-0 dark:border-slate-700 ${
+                          exportSites === s
+                            ? "bg-slate-900 font-medium text-white dark:bg-slate-100 dark:text-slate-900"
+                            : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                        }`}
+                      >
+                        {s === "all" ? t.positions.exportAll : t.positions.exportOurs}
+                      </button>
+                    ))}
+                  </div>
+                  {(["grid", "list"] as const).map(layout => (
+                    <a
+                      key={layout}
+                      href={api.projectPositionsCsvUrl(id, { range: toQuery(range), layout, sites: exportSites, lang })}
+                      title={layout === "grid" ? t.positions.exportGridHint : t.positions.exportListHint}
+                      className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-2.5 py-1 font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                      <Icon name="download" className="h-3.5 w-3.5" />
+                      {layout === "grid" ? t.positions.exportGrid : t.positions.exportList}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <SectionTitle icon="activity">{t.positions.title}</SectionTitle>
             <div
@@ -496,46 +579,6 @@ export default function ProjectPage() {
             </div>
           )}
           {err && <ErrorNote>{err}</ErrorNote>}
-          {/* The tables below as a file for SEO. Latest view only: the file is
-              "which site holds which position", and an average has no page. */}
-          {view === "latest" && range && positions && positions.serps.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="text-slate-500 dark:text-slate-400">{t.positions.exportSites}</span>
-              <div
-                role="group"
-                aria-label={t.positions.exportSites}
-                className="inline-flex overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700"
-              >
-                {(["all", "ours"] as const).map(s => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setExportSites(s)}
-                    aria-pressed={exportSites === s}
-                    title={s === "all" ? t.positions.exportAllHint : t.positions.exportOursHint}
-                    className={`border-l px-2.5 py-1 transition first:border-l-0 dark:border-slate-700 ${
-                      exportSites === s
-                        ? "bg-slate-900 font-medium text-white dark:bg-slate-100 dark:text-slate-900"
-                        : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-                    }`}
-                  >
-                    {s === "all" ? t.positions.exportAll : t.positions.exportOurs}
-                  </button>
-                ))}
-              </div>
-              {(["grid", "list"] as const).map(layout => (
-                <a
-                  key={layout}
-                  href={api.projectPositionsCsvUrl(id, { range: toQuery(range), layout, sites: exportSites, lang })}
-                  title={layout === "grid" ? t.positions.exportGridHint : t.positions.exportListHint}
-                  className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-2.5 py-1 font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                >
-                  <Icon name="download" className="h-3.5 w-3.5" />
-                  {layout === "grid" ? t.positions.exportGrid : t.positions.exportList}
-                </a>
-              ))}
-            </div>
-          )}
           {view === "latest"
             ? positions && <PositionTable data={positions} />
             : averages && <AveragePositionTable data={averages} />}
@@ -565,6 +608,22 @@ export default function ProjectPage() {
             onChanged={() => setSendsVersion(v => v + 1)}
           />
         </section>
+      </div>
+
+      {/* ---------------- CSV uploads: what was uploaded, and removing one ---------------- */}
+      <div
+        role="tabpanel"
+        id="project-panel-uploads"
+        aria-labelledby="project-tab-uploads"
+        hidden={tab !== "uploads"}
+        className={PANEL}
+      >
+        <ProjectCsvUploadsCard
+          projectId={id}
+          reloadKey={uploadsVersion + sendsVersion}
+          onChanged={() => setUploadsVersion(v => v + 1)}
+          onCount={setUploadsCount}
+        />
       </div>
     </div>
   );

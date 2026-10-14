@@ -51,9 +51,12 @@ class Project(Base):
     # of the project's GEOs, including ones added to it later.
     proxy_checker_geos: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # When this project's domains found in the SERPs go to the Proxy Checker
-    # (see proxy_checker.py): "off" | "after_run" | "daily". The user asked
-    # for this to be chosen per project, on the project page.
-    proxy_checker_mode: Mapped[str] = mapped_column(String(16), default="off")
+    # (see proxy_checker.py): "inherit" | "off" | "after_run" | "daily". The
+    # user asked for this to be chosen per project, on the project page, with
+    # "inherit" — follow the global switch in Settings — for new projects.
+    # The column's SQL default stays 'off': the projects that existed before
+    # the switch kept "off".
+    proxy_checker_mode: Mapped[str] = mapped_column(String(16), default="inherit")
     #: For "daily": HH:MM in UTC (the scheduler's clock).
     proxy_checker_time: Mapped[str | None] = mapped_column(String(5), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
@@ -152,6 +155,12 @@ class JobRun(Base):
     # moment the data ARRIVED, or a file uploaded now would have nothing to
     # send. NULL on every run SERP Monitor made itself.
     uploaded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    #: On an uploaded run: what the file was and what became of it, for the
+    #: project's "CSV uploads" tab — {"file_name", "engine", "device", "rows",
+    #: "queries", "geos", "empty", "unknown_geos", "bad_total", "geos_added"}.
+    #: Kept on the run, not in a table of its own, so it goes when the run
+    #: goes. NULL on every other run, and on uploads made before it was kept.
+    upload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     queries_total: Mapped[int] = mapped_column(Integer, default=0)
     queries_done: Mapped[int] = mapped_column(Integer, default=0)
     queries_failed: Mapped[int] = mapped_column(Integer, default=0)
@@ -239,7 +248,7 @@ class SavedLocation(Base):
     countries (notably CIS), so this lets the user maintain their own list.
 
     yandex_lr is Yandex's numeric region ID (Moscow=213, SPB=2, Almaty=162,
-    Tashkent=11353, …). When set on a location and Yandex is the engine, we
+    Tashkent=10335, …). When set on a location and Yandex is the engine, we
     pass it as `lr=` to SerpAPI for true city-level Yandex targeting.
     """
     __tablename__ = "saved_locations"

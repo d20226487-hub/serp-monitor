@@ -124,6 +124,7 @@ def _migrate_sqlite_columns() -> None:
         ("job_runs", "cost", "FLOAT"),
         # When an uploaded run arrived (CSV uploads); NULL on every other run.
         ("job_runs", "uploaded_at", "DATETIME"),
+        ("job_runs", "upload", "JSON"),
         ("job_runs", "cost_source", "VARCHAR(16)"),
         # Analyzer mode. Existing jobs default to "serp" so behaviour is
         # unchanged for everything created before this.

@@ -10,6 +10,7 @@ from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.orm import Session
 
 from .config import settings
+from .crontab import to_apscheduler
 from .db import SessionLocal
 from .models import AmpEndpoint, Job, JobRun, Project
 from .proxy_checker import daily_send, valid_time
@@ -51,8 +52,9 @@ def _ap_id(job_id: int) -> str:
 
 def validate_cron(expr: str) -> None:
     """Raise ValueError if the cron expression is invalid. Cheap to call from
-    the API layer to surface a clear error to the user before persisting."""
-    CronTrigger.from_crontab(expr)
+    the API layer to surface a clear error to the user before persisting.
+    Weekday numbers are read as crontab means them (see crontab.py)."""
+    CronTrigger.from_crontab(to_apscheduler(expr))
 
 
 def upsert_schedule(job: Job) -> None:
@@ -65,7 +67,7 @@ def upsert_schedule(job: Job) -> None:
             pass
         return
     try:
-        trigger = CronTrigger.from_crontab(job.cron)
+        trigger = CronTrigger.from_crontab(to_apscheduler(job.cron))
     except ValueError as e:
         # Drop any stale AP entry so we don't keep firing the previous cron.
         log.warning("bad cron for job %s (%r): %s", job.id, job.cron, e)
