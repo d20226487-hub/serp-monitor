@@ -29,6 +29,12 @@ scheduler that was not running cannot fire a tick it missed.
   AMP host and since when that host has been the answer. A domain the rotator
   stops naming is dropped. A fetch that FAILS changes nothing — yesterday's
   hosts stay, visibly dated, rather than vanish on a timeout.
+* A rotator's AMP config can be uploaded too (user, 2026-10-16: "The goal is
+  to know all the past AMPs that we have missed and mark them in Positions
+  report + send them to the Proxy Checker IF they appear in SERPs"). For each
+  site in it, the AMP domains listed BEFORE the one the daily checks named
+  last are the site's earlier ones, and join the history below
+  (import_config).
 * Beside that, every AMP host a rotator has ever named is remembered
   (AmpDomainSeen), and nothing but deleting the project forgets one. The
   positions tables count a result on an AMP host as the project's (the user:
@@ -115,13 +121,16 @@ class AmpPeriod(NamedTuple):
     last: datetime
     #: The latest answer about that domain still names it.
     current: bool
+    #: "rotator" (a daily answer named it) or "config" (an uploaded AMP config
+    #: listed it before the current one: `last` is then only "before this day").
+    source: str = "rotator"
 
 
-def periods(seen: list[tuple[str, str, datetime, datetime]], domains: list[str],
+def periods(seen: list[tuple], domains: list[str],
             current: set[tuple[str, str]] | frozenset = frozenset()) -> dict[str, AmpPeriod]:
     """AMP host → whose AMP domain it is, or was, and when.
 
-    `seen` are (domain, AMP host, first named, last named) from the history;
+    `seen` are (domain, AMP host, first named, last named[, source]) from the history;
     `domains` are the project's own, as it spells them; `current` the
     (domain, AMP host) pairs of the rotators' latest answers.
 
@@ -133,13 +142,13 @@ def periods(seen: list[tuple[str, str, datetime, datetime]], domains: list[str],
     """
     mine = {clean_host(d): d for d in domains if clean_host(d)}
     out: dict[str, AmpPeriod] = {}
-    for domain, host, first, last in seen:
+    for domain, host, first, last, *rest in seen:
         owner = mine.get(domain)
         if owner is None or host in mine:
             continue
         prior = out.get(host)
         if prior is None or last > prior.last:
-            out[host] = AmpPeriod(owner, first, last, (domain, host) in current)
+            out[host] = AmpPeriod(owner, first, last, (domain, host) in current, rest[0] if rest else "rotator")
     return out
 
 
@@ -154,7 +163,113 @@ def as_dates(period: AmpPeriod | None) -> dict | None:
     latest answer still names the host."""
     if period is None:
         return None
-    return {"from": period.first, "to": None if period.current else period.last}
+    return {"from": period.first, "to": None if period.current else period.last, "source": period.source}
+
+
+# --------------------------------------------------------------------------
+# A rotator's AMP config: the past AMP domains SERP Monitor missed
+# --------------------------------------------------------------------------
+
+class ConfigSite(NamedTuple):
+    """One site of a rotator's AMP config, as it is read here."""
+    site: str
+    #: The AMP domains, in the config's order: earlier rotations first.
+    amps: list[str]
+
+
+def read_config(data: object) -> tuple[list[ConfigSite], list[str]]:
+    """(the sites, what could not be read) from a rotator's AMP config:
+
+        [{"site": "a.com", "folder": "a.com", "active-amp": "x.top",
+          "amps": ["d1.com", "d2.com", …], "verification": {…}}, …]
+
+    "folder", "active-amp" and "verification" are not used: which AMP domain
+    is current comes from SERP Monitor's own daily checks. Raises ValueError
+    when the file is not a list at all."""
+    if not isinstance(data, list):
+        raise ValueError("The AMP config must be a JSON list of sites: [{\"site\": …, \"amps\": […]}, …]")
+    sites: list[ConfigSite] = []
+    problems: list[str] = []
+    for n, item in enumerate(data, start=1):
+        site = clean_host(item.get("site")) if isinstance(item, dict) else None
+        raw = item.get("amps") if isinstance(item, dict) else None
+        if site is None:
+            problems.append(f"entry {n}: no \"site\"")
+            continue
+        if not isinstance(raw, list):
+            problems.append(f"{site}: no \"amps\" list")
+            continue
+        amps: list[str] = []
+        for value in raw:
+            host = clean_host(value)
+            if host and host not in amps:
+                amps.append(host)
+        sites.append(ConfigSite(site, amps))
+    return sites, problems
+
+
+def past_from_config(sites: list[ConfigSite], domains: list[str],
+                     last_named: dict[str, str]) -> tuple[list[tuple[str, str]], list[dict]]:
+    """(the (domain, AMP host) pairs to add, a line per site saying what was
+    taken or why not).
+
+    The user's rule (2026-10-16): "check which AMP is current based on daily
+    checks in SERP Monitor, identify the main site looking at "site", then
+    take only the AMPs that precede from "amps" the last daily checked AMP".
+    `last_named` maps a project domain (bare host) to the AMP host the daily
+    checks named last for it. The ones after it in the list are the site's
+    next AMP domains, not yet in use: not taken.
+    """
+    mine = {clean_host(d) for d in domains if clean_host(d)}
+    pairs: list[tuple[str, str]] = []
+    report: list[dict] = []
+    for s in sites:
+        if s.site not in mine:
+            report.append({"site": s.site, "status": "not_in_project"})
+            continue
+        current = last_named.get(s.site)
+        if current is None:
+            report.append({"site": s.site, "status": "never_checked"})
+            continue
+        if current not in s.amps:
+            report.append({"site": s.site, "status": "current_not_listed", "current": current})
+            continue
+        past = [h for h in s.amps[:s.amps.index(current)] if h not in mine]
+        pairs += [(s.site, h) for h in past]
+        report.append({"site": s.site, "status": "ok", "current": current, "past": past})
+    return pairs, report
+
+
+def import_config(db, endpoint: AmpEndpoint, data: object, file_name: str | None = None) -> dict:
+    """Read a rotator's AMP config and add the past AMP domains it reveals to
+    the project's history, where the positions tables, the Blocks tab and the
+    Proxy Checker find them. Dated "before" the day the current AMP domain was
+    first named. A pair already known keeps what it was known from. Commits,
+    and keeps a summary on the endpoint. Raises ValueError on a file that is
+    not a config."""
+    project = db.get(Project, endpoint.project_id)
+    sites, problems = read_config(data)
+    # What the daily checks named last for each domain, and since when.
+    latest: dict[str, tuple[str, datetime, datetime]] = {}
+    for domain, host, first, last in (
+        db.query(AmpDomainSeen.domain, AmpDomainSeen.amp_domain, AmpDomainSeen.first_seen, AmpDomainSeen.last_seen)
+        .filter(AmpDomainSeen.project_id == project.id, AmpDomainSeen.source == "rotator").all()
+    ):
+        if domain not in latest or last > latest[domain][2]:
+            latest[domain] = (host, first, last)
+    pairs, report = past_from_config(sites, list(project.domains or []), {d: v[0] for d, v in latest.items()})
+    known = {(d, h) for d, h in db.query(AmpDomainSeen.domain, AmpDomainSeen.amp_domain)
+             .filter(AmpDomainSeen.project_id == project.id).all()}
+    new = [(project.id, d, h, latest[d][1], latest[d][1]) for d, h in pairs if (d, h) not in known]
+    remember(db, new, again=False, source="config")
+    summary = {
+        "uploaded_at": utcnow().isoformat(), "file_name": file_name, "sites": len(sites),
+        "added": len(new), "known": len(pairs) - len(new),
+        "report": report, "problems": problems[:20],
+    }
+    endpoint.config = summary
+    db.commit()
+    return summary
 
 
 def valid_time(value: str | None) -> bool:
@@ -259,14 +374,15 @@ def credentials_status() -> dict:
 _CHUNK = 400
 
 
-def remember(db, rows: list[tuple[int, str, str, datetime, datetime]], *, again: bool = True) -> None:
+def remember(db, rows: list[tuple[int, str, str, datetime, datetime]], *, again: bool = True,
+             source: str = "rotator") -> None:
     """Add (project, domain, AMP host, first named, last named) to the history.
     A pair already there keeps its first date and, with `again`, takes the new
     last one. One statement per chunk, so two endpoints of one project fetched
     at the same minute cannot trip over each other. Not committed here."""
     for i in range(0, len(rows), _CHUNK):
         stmt = sqlite_insert(AmpDomainSeen).values([
-            {"project_id": p, "domain": d, "amp_domain": h, "first_seen": first, "last_seen": last}
+            {"project_id": p, "domain": d, "amp_domain": h, "first_seen": first, "last_seen": last, "source": source}
             for p, d, h, first, last in rows[i:i + _CHUNK]
         ])
         key = ["project_id", "domain", "amp_domain"]
@@ -287,7 +403,7 @@ def amp_periods(db, project: Project) -> dict[str, AmpPeriod]:
     """AMP host → whose AMP domain it is, or was, and when: every one a
     rotator has named for this project. See `periods` for the rules."""
     rows = (db.query(AmpDomainSeen.domain, AmpDomainSeen.amp_domain,
-                     AmpDomainSeen.first_seen, AmpDomainSeen.last_seen)
+                     AmpDomainSeen.first_seen, AmpDomainSeen.last_seen, AmpDomainSeen.source)
             .filter(AmpDomainSeen.project_id == project.id).all())
     current = {(d, h) for d, h in db.query(AmpDomain.domain, AmpDomain.amp_domain)
                .filter(AmpDomain.project_id == project.id).all()}

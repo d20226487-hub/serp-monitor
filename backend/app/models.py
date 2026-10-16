@@ -347,6 +347,10 @@ class AmpEndpoint(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     #: How many of the project's domains were asked about.
     sent: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: The last AMP config uploaded for this rotator, as a summary: when, the
+    #: file's name, how many past AMP domains it added, and per site what was
+    #: taken or why not. NULL until one is uploaded.
+    config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
 class AmpDomain(Base):
@@ -388,6 +392,12 @@ class AmpDomainSeen(Base):
     amp_domain: Mapped[str] = mapped_column(String(255))
     first_seen: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     last_seen: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    #: Where the pair is known from: "rotator" — a daily answer named it;
+    #: "config" — a rotator's AMP config listed it among the site's earlier AMP
+    #: domains (amp_rotator.import_config). A config row's dates are the day
+    #: the AMP domain that came after it was first named: it was the site's
+    #: AMP domain BEFORE then, nobody can say since when.
+    source: Mapped[str] = mapped_column(String(16), default="rotator")
 
 
 class RunUrlMetric(Base):

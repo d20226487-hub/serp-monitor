@@ -125,6 +125,9 @@ def _migrate_sqlite_columns() -> None:
         # When an uploaded run arrived (CSV uploads); NULL on every other run.
         ("job_runs", "uploaded_at", "DATETIME"),
         ("job_runs", "upload", "JSON"),
+        # Where a past AMP domain is known from, and a rotator's last config.
+        ("amp_domains_seen", "source", "VARCHAR(16) NOT NULL DEFAULT 'rotator'"),
+        ("amp_endpoints", "config", "JSON"),
         ("job_runs", "cost_source", "VARCHAR(16)"),
         # Analyzer mode. Existing jobs default to "serp" so behaviour is
         # unchanged for everything created before this.

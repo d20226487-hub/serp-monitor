@@ -7,7 +7,7 @@ import { RunAnalysisTable } from "@/components/run-analysis";
 import { buildBrowserUrl, variantLabel } from "@/lib/browser-urls";
 import { ExternalLink } from "lucide-react";
 import { useT } from "@/lib/i18n";
-import { Button, inputClass } from "@/components/ui";
+import { Button, inputClass, serverTime } from "@/components/ui";
 import { RunOverview } from "@/components/run-overview";
 import { RunCompare } from "@/components/run-compare";
 import { providerLabel } from "@/lib/providers";
@@ -255,7 +255,7 @@ export default function RunPage() {
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold">{t.run.title(run.id)}</h1>
         <span className="text-xs text-slate-600 dark:text-slate-400">
-          {new Date(run.started_at).toLocaleString()} · {statusLabels[run.status] ?? run.status} · {t.run.headerStats(run.queries_done, run.queries_total)}
+          {serverTime(run.started_at)?.toLocaleString()} · {statusLabels[run.status] ?? run.status} · {t.run.headerStats(run.queries_done, run.queries_total)}
           {run.queries_failed > 0 && <span className="text-red-600 dark:text-red-400"> · {t.run.failed(run.queries_failed)}</span>}
           {isCompare && <> · {run.providers!.map(providerLabel).join(" · ")}</>}
           {run.cost != null && (

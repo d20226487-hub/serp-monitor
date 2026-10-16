@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnalysisDomain, AnalysisRow, AnalysisUrl, JobRun, RunAnalysis } from "@/lib/api";
 import { Lang, messagesFor } from "@/lib/i18n";
-import { Button, inputClass } from "@/components/ui";
+import { Button, inputClass, serverTime } from "@/components/ui";
 import {
   Depth,
   bandCounts,
@@ -218,10 +218,10 @@ export function RunReport({
   const visibleDomains = (row: AnalysisRow): AnalysisDomain[] =>
     row.domains.filter(d => !hidden.has(d.domain));
 
-  const started = run?.started_at ? new Date(run.started_at).toLocaleDateString(
+  const started = serverTime(run?.started_at)?.toLocaleDateString(
     lang === "ru" ? "ru-RU" : "en-GB",
     { year: "numeric", month: "long", day: "numeric" },
-  ) : "";
+  ) ?? "";
   const market = (analysis.country ?? "").toUpperCase();
 
   // The three columns the reader has not met before. Built once so the printed

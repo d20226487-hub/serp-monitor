@@ -322,9 +322,16 @@ export function bytes(value: number | null | undefined): string {
   return `${(value / 1024 / 1024).toFixed(1)} MB`;
 }
 
+/** A time from the server. It stores UTC and writes it without saying so
+ *  ("2026-10-16T05:32:08"), which the browser would read as the reader's own
+ *  clock — five hours early in UTC+5. Read as UTC, then shown locally. */
+export function serverTime(iso: string | null | undefined): Date | null {
+  if (!iso) return null;
+  return new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso}Z`);
+}
+
 export function when(iso: string | null): string {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString();
+  return serverTime(iso)?.toLocaleString() ?? "—";
 }
 
 // --- The report look: cards, verdict pills, coloured edges ----------------------------

@@ -7,7 +7,7 @@ import {
 } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { variantLabel } from "@/lib/browser-urls";
-import { Empty as KitEmpty, Meter, positionTone, Tone, TONE_PILL } from "@/components/ui";
+import { Empty as KitEmpty, Meter, positionTone, serverTime, Tone, TONE_PILL } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { Tip } from "@/components/tip";
 
@@ -224,7 +224,7 @@ const AMP_TAG =
  *  2026-10-16: "Make the hover shorter … make bold the main domain"). */
 function AmpTag({ host, site, period }: { host: string; site: string; period: AmpPeriod | null }) {
   const { t } = useT();
-  const when = ampPeriodText(period, t.positions.ampSince);
+  const when = ampPeriodText(period, t.positions.ampSince, t.positions.ampBefore);
   return (
     <Tip
       text={<>{host} — {t.positions.ampOfSite} <strong>{site}</strong></>}
@@ -237,9 +237,11 @@ function AmpTag({ host, site, period }: { host: string; site: string; period: Am
 }
 
 /** The AMP hosts of an averaged line, each with its days: "amp-a.example (since 13.10)". */
-function hostsWithDays(hosts: AverageHit["amp_hosts"], since: (day: string) => string): string[] {
+function hostsWithDays(
+  hosts: AverageHit["amp_hosts"], since: (day: string) => string, before: (day: string) => string,
+): string[] {
   return hosts.map(a => {
-    const when = ampPeriodText(a, since);
+    const when = ampPeriodText(a, since, before);
     return when ? `${a.host} (${when})` : a.host;
   });
 }
@@ -384,7 +386,7 @@ function LatestRows({ serp, showRaw }: { serp: SerpGroup; showRaw: boolean }) {
               {/* The run this row's numbers came from, so a stale row in a
                   wide window is visible as stale rather than as current. */}
               <a href={`/runs/${r.run_id}`} className="hover:underline">
-                {new Date(r.checked_at).toLocaleString()}
+                {serverTime(r.checked_at)?.toLocaleString()}
               </a>
             </td>
           </tr>
@@ -533,8 +535,8 @@ function AverageKeyword({ row, first }: { row: AverageRow; first: boolean }) {
                 given a row that was present once. */}
             {h.amp && (
               <Tip
-                text={t.positions.ampAvgHint(h.domain, hostsWithDays(h.amp_hosts, t.positions.ampSince).join(", "))}
-                label={t.positions.ampAvgHint(h.domain, hostsWithDays(h.amp_hosts, t.positions.ampSince).join(", "))}
+                text={t.positions.ampAvgHint(h.domain, hostsWithDays(h.amp_hosts, t.positions.ampSince, t.positions.ampBefore).join(", "))}
+                label={t.positions.ampAvgHint(h.domain, hostsWithDays(h.amp_hosts, t.positions.ampSince, t.positions.ampBefore).join(", "))}
                 className={`ml-1 ${AMP_TAG}`}
               >
                 AMP
@@ -576,7 +578,7 @@ function AverageKeyword({ row, first }: { row: AverageRow; first: boolean }) {
             )}
             {h.amp && (
               <span className="mt-0.5 block text-[11px] text-slate-500 dark:text-slate-400">
-                {hostsWithDays(h.amp_hosts.slice(0, 2), t.positions.ampSince).join(", ")}
+                {hostsWithDays(h.amp_hosts.slice(0, 2), t.positions.ampSince, t.positions.ampBefore).join(", ")}
                 {h.amp_hosts.length > 2 && ` ${t.positions.ampMore(h.amp_hosts.length - 2)}`}
               </span>
             )}

@@ -122,6 +122,25 @@ export type AmpEndpoint = {
   /** Domains asked about, and how many of them the rotator named an AMP host for. */
   sent: number | null;
   amp_count: number;
+  /** The last AMP config uploaded for this rotator; null until one is. */
+  config: AmpConfigSummary | null;
+};
+/** What an uploaded AMP config added: the site's AMP domains listed before
+ *  the one SERP Monitor's daily checks named last. */
+export type AmpConfigSummary = {
+  uploaded_at: string;
+  file_name: string | null;
+  sites: number;
+  /** Past AMP domains added, and ones that were known already. */
+  added: number;
+  known: number;
+  report: {
+    site: string;
+    status: "ok" | "not_in_project" | "never_checked" | "current_not_listed";
+    current?: string;
+    past?: string[];
+  }[];
+  problems: string[];
 };
 /** Settings → Tools Connection. One login and password for every rotator —
  *  the password itself never comes back, only whether one is saved.
@@ -939,6 +958,16 @@ export const api = {
   ) => req<AmpRotatorState>(`/settings/tools/amp-rotator/endpoints/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   deleteAmpEndpoint: (id: number) =>
     req<AmpRotatorState>(`/settings/tools/amp-rotator/endpoints/${id}`, { method: "DELETE" }),
+  uploadAmpConfig: async (id: number, file: File): Promise<AmpRotatorState & { imported: AmpConfigSummary }> => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${BASE}/settings/tools/amp-rotator/endpoints/${id}/config`, {
+      method: "POST", body: form, cache: "no-store",
+    });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(typeof body?.detail === "string" ? body.detail : `HTTP ${res.status}`);
+    return body;
+  },
   fetchAmpEndpoint: (id: number) =>
     req<AmpRotatorState>(`/settings/tools/amp-rotator/endpoints/${id}/fetch`, { method: "POST" }),
   getProjectAmpDomains: (id: number) => req<ProjectAmpDomains>(`/projects/${id}/amp-domains`),

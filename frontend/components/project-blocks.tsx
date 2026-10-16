@@ -81,14 +81,20 @@ function AmpLine({ r }: { r: BlockRow }) {
   const { t } = useT();
   const x = t.tools.blocks;
   if (!r.main_domain) return null;
-  const when = ampPeriodText(r.amp_period, t.positions.ampSince);
+  const when = ampPeriodText(r.amp_period, t.positions.ampSince, t.positions.ampBefore);
+  const fromConfig = r.amp_period?.source === "config";
   return (
     <div className={`mt-0.5 break-all ${HINT}`}>
       {x.ampOf(r.main_domain)}
       {when && (
         <>
           {" · "}
-          <Tip text={t.positions.ampPeriodHint(r.main_domain, when)} className="whitespace-nowrap">{when}</Tip>
+          <Tip
+            text={fromConfig ? t.positions.ampConfigHint(r.main_domain, when) : t.positions.ampPeriodHint(r.main_domain, when)}
+            className="whitespace-nowrap"
+          >
+            {when}
+          </Tip>
         </>
       )}
       {r.own_standing && <>{" · "}{x.ampInSerps}</>}

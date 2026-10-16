@@ -532,6 +532,9 @@ melbet	kz	34	20,000	0.45`,
       `Results on the AMP domains of ${site}, as one line: the AMP domain changes daily. In this range they were on: ${hosts}.`,
     ampMore: (n: number) => `+${n} more`,
     ampSince: (day: string) => `since ${day}`,
+    ampBefore: (day: string) => `before ${day}`,
+    ampConfigHint: (site: string, period: string) =>
+      `From the rotator's AMP config: an earlier AMP domain of ${site}, in use ${period} — before SERP Monitor started checking. Its exact dates are not known.`,
     ampPeriodHint: (site: string, period: string) =>
       `The AMP domain of ${site}: ${period}. These are the days the AMP Rotator named it in its answers to SERP Monitor. The rotator says which AMP domain is current, not since when, so it may have been one before the first of them.`,
 
@@ -1042,6 +1045,19 @@ melbet	kz	34	20,000	0.45`,
       formHint:
         "Every endpoint has its own request time; the login and password above are shared. There is no separate test: press “Fetch now” after adding and look at the result in the row.",
       added: "Added. Press “Fetch now” to try it.",
+      config: {
+        button: "AMP config",
+        hint: "Upload this rotator's AMP config (JSON) to learn the site's earlier AMP domains.",
+        help: "\u201cAMP config\u201d: upload a rotator's config file (JSON — a list of sites with their \u201camps\u201d). For each site of the project, the AMP domains listed before the one the daily check saw last are its earlier AMP domains, from before SERP Monitor was checking: they count as the project's on the Positions tab and go to the Proxy Checker when a SERP shows them. The ones after it in the list are not used yet and are left out. Uploading again adds what is new.",
+        last: (when: string, added: number) => `AMP config ${when} \u00b7 earlier AMP domains: ${added}`,
+        resultTitle: (project: string, added: number, sites: number) =>
+          `AMP config of ${project}: ${added} earlier AMP ${added === 1 ? "domain" : "domains"} added, ${sites} ${sites === 1 ? "site" : "sites"} in the file`,
+        known: (n: number) => `Already known: ${n}.`,
+        siteOk: (n: number, current: string) => `${n} earlier AMP ${n === 1 ? "domain" : "domains"} (listed before ${current}, the one the daily check saw last)`,
+        siteNotInProject: "not among the project's domains — left out",
+        siteNeverChecked: "the daily check has not seen its AMP domain yet, so which ones came before is not known — left out",
+        siteCurrentNotListed: (current: string) => `its current AMP domain ${current} is not in the list, so which ones came before is not known — left out`,
+      },
       deleteConfirm: (project: string) => `Remove this endpoint of ${project}, and the AMP domains fetched from it?`,
       fetchNow: "Fetch now",
       fetching: "Fetching…",
@@ -1951,6 +1967,9 @@ melbet	kz	34	20 000	0,45`,
       `Результаты на AMP-доменах сайта ${site} — одной строкой, потому что AMP-домен меняется каждый день. За период они были на: ${hosts}.`,
     ampMore: (n: number) => `и ещё ${n}`,
     ampSince: (day: string) => `с ${day}`,
+    ampBefore: (day: string) => `до ${day}`,
+    ampConfigHint: (site: string, period: string) =>
+      `Из AMP-конфига ротатора: прежний AMP-домен сайта ${site}, был в работе ${period} — до того, как SERP Monitor начал проверку. Точные даты неизвестны.`,
     ampPeriodHint: (site: string, period: string) =>
       `AMP-домен сайта ${site}: ${period}. Это дни, когда AMP Rotator называл его в ответах SERP Monitor. Ротатор сообщает, какой AMP-домен текущий, но не с какого времени, — поэтому AMP-доменом он мог быть и раньше первого из этих дней.`,
 
@@ -2471,6 +2490,19 @@ melbet	kz	34	20 000	0,45`,
       formHint:
         "Время запроса у каждого эндпоинта своё; логин и пароль выше — общие. Отдельной проверки нет: после добавления нажмите «Получить сейчас» и посмотрите результат в строке.",
       added: "Добавлено. Нажмите «Получить сейчас», чтобы проверить.",
+      config: {
+        button: "AMP-конфиг",
+        hint: "Загрузите AMP-конфиг этого ротатора (JSON), чтобы узнать прежние AMP-домены сайтов.",
+        help: "«AMP-конфиг»: загрузите файл конфигурации ротатора (JSON — список сайтов с их «amps»). Для каждого сайта проекта AMP-домены, которые стоят в списке перед тем, что ежедневная проверка видела последним, — его прежние AMP-домены, из времени до проверок SERP Monitor: они считаются доменами проекта на вкладке «Позиции» и уходят в Proxy Checker, если попадутся в выдаче. Те, что стоят в списке после, ещё не использовались и не берутся. Повторная загрузка добавляет только новое.",
+        last: (when: string, added: number) => `AMP-конфиг ${when} · прежних AMP-доменов: ${added}`,
+        resultTitle: (project: string, added: number, sites: number) =>
+          `AMP-конфиг проекта ${project}: добавлено прежних AMP-доменов — ${added}, сайтов в файле — ${sites}`,
+        known: (n: number) => `Уже были известны: ${n}.`,
+        siteOk: (n: number, current: string) => `прежних AMP-доменов: ${n} (стоят в списке перед ${current} — тем, что ежедневная проверка видела последним)`,
+        siteNotInProject: "нет среди доменов проекта — пропущен",
+        siteNeverChecked: "ежедневная проверка ещё не видела его AMP-домена, поэтому непонятно, какие были раньше, — пропущен",
+        siteCurrentNotListed: (current: string) => `его текущего AMP-домена ${current} нет в списке, поэтому непонятно, какие были раньше, — пропущен`,
+      },
       deleteConfirm: (project: string) => `Удалить этот эндпоинт проекта ${project} и полученные с него AMP-домены?`,
       fetchNow: "Получить сейчас",
       fetching: "Запрашиваю…",

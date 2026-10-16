@@ -390,8 +390,8 @@ class TestWhenItWasTheAmpDomain:
         got = periods(seen, [SITE], current={(SITE, "amp-wed.example")})
         assert got == {"amp-mon.example": AmpPeriod(SITE, MON, TUE, False),
                        "amp-wed.example": AmpPeriod(SITE, WED, WED, True)}
-        assert as_dates(got["amp-mon.example"]) == {"from": MON, "to": TUE}
-        assert as_dates(got["amp-wed.example"]) == {"from": WED, "to": None}     # still is
+        assert as_dates(got["amp-mon.example"]) == {"from": MON, "to": TUE, "source": "rotator"}
+        assert as_dates(got["amp-wed.example"]) == {"from": WED, "to": None, "source": "rotator"}     # still is
         assert as_dates(None) is None
 
     def test_a_host_named_for_two_sites_takes_the_dates_of_the_later_one(self):
@@ -417,7 +417,7 @@ class TestWhenItWasTheAmpDomain:
         run(db, job, TUE, [("query", 1, "amp-mon.example"), ("query", 2, SITE)])
         hits = rows_of(pp.project_positions(p.id, None, None, db))["query"]["hits"]
         assert [(h["domain"], h["amp_period"]) for h in hits] == [
-            ("amp-mon.example", {"from": MON, "to": TUE}), (SITE, None)]
+            ("amp-mon.example", {"from": MON, "to": TUE, "source": "rotator"}), (SITE, None)]
         avg = rows_of(pp.project_position_averages(p.id, None, None, db))["query"]["hits"]
         amp = next(h for h in avg if h["amp"])
-        assert amp["amp_hosts"] == [{"host": "amp-mon.example", "from": MON, "to": TUE}]
+        assert amp["amp_hosts"] == [{"host": "amp-mon.example", "from": MON, "to": TUE, "source": "rotator"}]

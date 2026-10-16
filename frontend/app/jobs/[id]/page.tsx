@@ -7,6 +7,7 @@ import { JobForm } from "@/components/job-form";
 import { providerLabel } from "@/lib/providers";
 import { useT } from "@/lib/i18n";
 import { formatUsd, sumCost, hasAnyCost } from "@/lib/cost";
+import { serverTime } from "@/components/ui";
 
 export default function JobPage() {
   const { t } = useT();
@@ -108,7 +109,7 @@ export default function JobPage() {
             <StatusBadge status={r.status} />
             <Link href={`/runs/${r.id}`} className="font-medium hover:underline">{t.jobs.runEntry.runLabel(r.id)}</Link>
             <div className="text-xs text-slate-600 dark:text-slate-400 flex-1 min-w-0 truncate">
-              {new Date(r.started_at).toLocaleString()} ·
+              {serverTime(r.started_at)?.toLocaleString()} ·
               {" "}{t.jobs.runEntry.progress(r.queries_done, r.queries_total)}
               {r.queries_failed > 0 && <span className="text-red-600 dark:text-red-400"> · {t.jobs.runEntry.failed(r.queries_failed)}</span>}
               {" · "}{r.triggered_by}

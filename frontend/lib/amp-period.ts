@@ -12,6 +12,9 @@ export type AmpPeriod = {
   from: string | null;
   /** The last time; null while the latest answer still names it. */
   to: string | null;
+  /** "config": known from an uploaded AMP config, which listed it before the
+   *  AMP domain then current — `to` is then only "before this day". */
+  source?: string;
 };
 
 /** Server times are UTC without saying so; read as local they are hours off. */
@@ -21,12 +24,15 @@ export function ampDay(iso: string): string {
 }
 
 /** "since 13.10" while it still is; "12.10–13.10" once the rotator has moved
- *  on; "13.10" for a single day. null when nothing is known. */
+ *  on; "13.10" for a single day; "before 13.10" for one known from an AMP
+ *  config. null when nothing is known. */
 export function ampPeriodText(
   period: AmpPeriod | null | undefined,
   since: (day: string) => string,
+  before: (day: string) => string = since,
 ): string | null {
   if (!period?.from) return null;
+  if (period.source === "config") return before(ampDay(period.to ?? period.from));
   const from = ampDay(period.from);
   if (period.to === null) return since(from);
   const to = ampDay(period.to);

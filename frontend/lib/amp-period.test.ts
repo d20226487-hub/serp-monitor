@@ -19,6 +19,12 @@ describe("ampPeriodText", () => {
     );
   });
 
+  it("says before when for one known from an AMP config", () => {
+    const before = (day: string) => `before ${day}`;
+    const config = { from: "2026-10-13T02:00:00", to: "2026-10-13T02:00:00", source: "config" };
+    expect(ampPeriodText(config, since, before)).toBe(`before ${ampDay("2026-10-13T02:00:00")}`);
+  });
+
   it("says nothing when nothing is known", () => {
     expect(ampPeriodText(null, since)).toBeNull();
     expect(ampPeriodText(undefined, since)).toBeNull();

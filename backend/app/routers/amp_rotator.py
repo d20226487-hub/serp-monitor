@@ -3,7 +3,9 @@ and what the rotators said (each project's page). See ../amp_rotator.py for
 the API and the rules."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+import json
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -61,6 +63,8 @@ def _endpoint(e: AmpEndpoint, names: dict[int, str], counts: dict[int, int]) -> 
         "fetched_at": e.fetched_at, "ok": e.ok, "status_code": e.status_code, "error": e.error,
         # How many domains were asked about, and how many the rotator named an AMP host for.
         "sent": e.sent, "amp_count": counts.get(e.id, 0),
+        # The last AMP config uploaded for it, summarised.
+        "config": e.config,
     }
 
 
@@ -149,6 +153,7 @@ def edit_endpoint(endpoint_id: int, payload: EndpointPatch, db: Session = Depend
         # is no longer this endpoint's answer.
         db.query(AmpDomain).filter(AmpDomain.endpoint_id == endpoint.id).delete(synchronize_session=False)
         endpoint.fetched_at = endpoint.ok = endpoint.status_code = endpoint.error = endpoint.sent = None
+        endpoint.config = None
     db.commit()
     upsert_amp_rotator_schedule(endpoint.id, amp.endpoint_time(endpoint))
     return _state(db)
@@ -160,6 +165,25 @@ def delete_endpoint(endpoint_id: int, db: Session = Depends(get_db)):
     db.commit()
     remove_amp_rotator_schedule(endpoint_id)
     return _state(db)
+
+
+@router.post("/settings/tools/amp-rotator/endpoints/{endpoint_id}/config")
+def upload_endpoint_config(endpoint_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """A rotator's AMP config: the past AMP domains SERP Monitor missed (user,
+    2026-10-16). See amp_rotator.import_config for the rule."""
+    endpoint = _get_endpoint(db, endpoint_id)
+    raw = file.file.read(5 * 1024 * 1024 + 1)
+    if len(raw) > 5 * 1024 * 1024:
+        raise HTTPException(413, "The file is larger than 5 MB.")
+    try:
+        data = json.loads(raw.decode("utf-8-sig"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as e:
+        raise HTTPException(400, f"The file is not valid JSON: {e}")
+    try:
+        imported = amp.import_config(db, endpoint, data, file.filename)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {**_state(db), "imported": imported}
 
 
 @router.post("/settings/tools/amp-rotator/endpoints/{endpoint_id}/fetch")

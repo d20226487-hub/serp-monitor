@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { api, AmpEndpoint, AmpRotatorState, Project, ProjectAmpDomains } from "@/lib/api";
+import { api, AmpConfigSummary, AmpEndpoint, AmpRotatorState, Project, ProjectAmpDomains } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { Button, Callout, Card, Empty, Pill, SectionTitle, inputClass } from "@/components/ui";
 import { Icon } from "@/components/icons";
@@ -59,6 +59,29 @@ function FetchResult({ e }: { e: AmpEndpoint }) {
   );
 }
 
+/** What an AMP config upload did, site by site (user, 2026-10-16). */
+function ConfigReport({ c }: { c: AmpConfigSummary }) {
+  const { t } = useT();
+  const x = t.tools.ampRotator.config;
+  return (
+    <ul className="list-disc space-y-0.5 pl-5 text-sm">
+      {c.report.map(r => (
+        <li key={r.site}>
+          <span className="font-mono text-xs">{r.site}</span>{" — "}
+          {r.status === "ok"
+            ? <>{x.siteOk(r.past?.length ?? 0, r.current ?? "")}{(r.past?.length ?? 0) > 0 && (
+                <span className="block break-all font-mono text-xs text-slate-500 dark:text-slate-400">{r.past!.join(", ")}</span>
+              )}</>
+            : r.status === "not_in_project" ? x.siteNotInProject
+            : r.status === "never_checked" ? x.siteNeverChecked
+            : x.siteCurrentNotListed(r.current ?? "")}
+        </li>
+      ))}
+      {c.problems.map(p => <li key={p} className="text-amber-700 dark:text-amber-400">{p}</li>)}
+    </ul>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Settings → Tools Connection                                          */
 /* ------------------------------------------------------------------ */
@@ -83,6 +106,19 @@ export function AmpRotatorSettings({ onError }: { onError: (msg: string | null) 
   const [busy, setBusy] = useState(false);
   const [fetching, setFetching] = useState<number | null>(null);
   const [msg, setMsg] = useState<{ where: "access" | "endpoint"; text: string } | null>(null);
+  // The last AMP config uploaded here, with what it did.
+  const [imported, setImported] = useState<{ endpoint: number; project: string; summary: AmpConfigSummary } | null>(null);
+
+  async function uploadConfig(e: AmpEndpoint, file: File | undefined) {
+    if (!file) return;
+    setFetching(null);
+    const next = await run(async () => {
+      const r = await api.uploadAmpConfig(e.id, file);
+      setImported({ endpoint: e.id, project: e.project_name ?? `#${e.project_id}`, summary: r.imported });
+      return r;
+    });
+    if (!next) setImported(null);
+  }
 
   useEffect(() => {
     api.getAmpRotator()
@@ -220,7 +256,14 @@ export function AmpRotatorSettings({ onError }: { onError: (msg: string | null) 
                       <div className="font-semibold tabular-nums">{utcToLocalTime(e.time) || "—"}</div>
                       {serverTime(e.next_run) && <div className={`mt-0.5 ${HINT}`}>{x.nextRun(shortTime(e.next_run))}</div>}
                     </td>
-                    <td className={TD}><FetchResult e={e} /></td>
+                    <td className={TD}>
+                      <FetchResult e={e} />
+                      {e.config && (
+                        <div className={`mt-1 ${HINT}`} title={e.config.file_name ?? undefined}>
+                          {x.config.last(shortTime(e.config.uploaded_at), e.config.added)}
+                        </div>
+                      )}
+                    </td>
                     <td className={`${TD} whitespace-nowrap text-right`}>
                       <div className="flex flex-wrap justify-end gap-1.5">
                         <Button
@@ -232,6 +275,21 @@ export function AmpRotatorSettings({ onError }: { onError: (msg: string | null) 
                           <Icon name="refresh" className={`h-3.5 w-3.5 ${fetching === e.id ? "animate-spin" : ""}`} />
                           {fetching === e.id ? x.fetching : x.fetchNow}
                         </Button>
+                        {/* The rotator's AMP config: the past AMP domains SERP
+                            Monitor missed (user, 2026-10-16). */}
+                        <label
+                          title={x.config.hint}
+                          className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800 ${busy ? "pointer-events-none opacity-50" : ""}`}
+                        >
+                          <Icon name="upload" className="h-3.5 w-3.5" />
+                          {x.config.button}
+                          <input
+                            type="file"
+                            accept=".json,application/json"
+                            className="sr-only"
+                            onChange={ev => { uploadConfig(e, ev.target.files?.[0]); ev.target.value = ""; }}
+                          />
+                        </label>
                         <Button
                           size="sm"
                           disabled={busy}
@@ -262,6 +320,16 @@ export function AmpRotatorSettings({ onError }: { onError: (msg: string | null) 
             </table>
           </div>
         )}
+
+        {imported && (
+          <Callout tone={imported.summary.added > 0 ? "good" : "info"} icon={imported.summary.added > 0 ? "check" : "info"}
+            title={x.config.resultTitle(imported.project, imported.summary.added, imported.summary.sites)}>
+            {imported.summary.known > 0 && <p>{x.config.known(imported.summary.known)}</p>}
+            <ConfigReport c={imported.summary} />
+            <Button size="sm" onClick={() => setImported(null)}>{t.serpCsv.dismiss}</Button>
+          </Callout>
+        )}
+        {data.endpoints.length > 0 && <p className={HINT}>{x.config.help}</p>}
 
         {/* The form the user asked for: choose the project, then say where its
             rotator is and when to ask it. The same form edits a row. */}
