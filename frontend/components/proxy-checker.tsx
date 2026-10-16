@@ -20,7 +20,12 @@ import { Icon } from "@/components/icons";
  * backend/app/proxy_checker.py.
  */
 
-const MODES: ProxyCheckerMode[] = ["inherit", "off", "after_run", "daily"];
+/** The choices on a project's card. "After every run / CSV upload" is not
+ *  among them: the switch in Settings does that for every project on "As in
+ *  Settings" (user, 2026-10-16: the button "can be removed"). A project
+ *  already set to it keeps it, and sees it, until switched to another. */
+const MODES: ProxyCheckerMode[] = ["inherit", "off", "daily"];
+const MODES_WITH_AFTER_RUN: ProxyCheckerMode[] = ["inherit", "off", "after_run", "daily"];
 const pad = (n: number) => String(n).padStart(2, "0");
 
 /** The server keeps the daily time in UTC; people think in their own clock. */
@@ -490,7 +495,7 @@ export function ProjectProxyCheckerCard({ projectId, reloadKey = 0, onChanged }:
               aria-label={p.when}
               className="inline-flex overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700"
             >
-              {MODES.map(m => (
+              {(data.mode === "after_run" ? MODES_WITH_AFTER_RUN : MODES).map(m => (
                 <button
                   key={m}
                   type="button"

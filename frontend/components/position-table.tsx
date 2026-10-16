@@ -220,13 +220,17 @@ const AMP_TAG =
 
 /** "AMP · since 13.10": an AMP domain, and when the rotator named it as its
  *  site's (user, 2026-10-14: "give the date when the domain was AMP for the
- *  main domain"). */
+ *  main domain"). The tooltip is one line naming the site, in bold (user,
+ *  2026-10-16: "Make the hover shorter … make bold the main domain"). */
 function AmpTag({ host, site, period }: { host: string; site: string; period: AmpPeriod | null }) {
   const { t } = useT();
   const when = ampPeriodText(period, t.positions.ampSince);
-  const hint = t.positions.ampHint(host, site) + (when ? `\n\n${t.positions.ampPeriodHint(site, when)}` : "");
   return (
-    <Tip text={hint} label={hint} className={AMP_TAG}>
+    <Tip
+      text={<>{host} — {t.positions.ampOfSite} <strong>{site}</strong></>}
+      label={`${host} — ${t.positions.ampOfSite} ${site}`}
+      className={AMP_TAG}
+    >
       AMP{when && <span className="font-normal">{" · "}{when}</span>}
     </Tip>
   );
