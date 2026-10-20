@@ -9,6 +9,7 @@ import { ProjectProxyCheckerCard } from "@/components/proxy-checker";
 import { ProjectBlocksCard, ProjectNotPassingCard } from "@/components/project-blocks";
 import { ProjectAmpCard } from "@/components/amp-rotator";
 import { ProjectCsvUploadsCard, SerpCsvUploadBar, SerpCsvUploadCard } from "@/components/serp-csv-upload";
+import { ProjectKeywordsCard } from "@/components/project-keywords";
 import type { SerpCsvUpload } from "@/lib/api";
 import { ProjectGeosCard } from "@/components/project-geos";
 import { Button, Card, Empty, ErrorNote, SectionTitle, StatTile } from "@/components/ui";
@@ -119,6 +120,8 @@ export default function ProjectPage() {
   const [lastUpload, setLastUpload] = useState<SerpCsvUpload | null>(null);
   // How many uploads the log holds, for its tab's label.
   const [uploadsCount, setUploadsCount] = useState<number | null>(null);
+  // Bumped when the project's keywords were edited: the jobs hold them.
+  const [jobsVersion, setJobsVersion] = useState(0);
   const [uploadsVersion, setUploadsVersion] = useState(0);
   // What the CSV export lists per query: the whole page (who holds the other
   // spots too) or only the project's own sites, as the tables do.
@@ -163,7 +166,7 @@ export default function ProjectPage() {
     // limit covers every job a project realistically holds; the jobs list page
     // is the place for paging through hundreds.
     api.listJobs({ projectId: id, limit: 200 }).then(p => setJobs(p.items)).catch(() => {});
-  }, [id, uploadsVersion]);
+  }, [id, uploadsVersion, jobsVersion]);
 
   // Every keyword the project's jobs watch, deduplicated case-insensitively —
   // the same term entered in two jobs is one thing being tracked, not two.
@@ -398,23 +401,8 @@ export default function ProjectPage() {
           </section>
         )}
 
-        <section className="space-y-2">
-          <SectionTitle icon="keywords" count={keywords.length}>{t.positions.keywords}</SectionTitle>
-          {keywords.length === 0 ? (
-            <Empty>{t.positions.noKeywords}</Empty>
-          ) : (
-            <div className="flex min-w-0 flex-wrap gap-1.5 rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              {keywords.map(k => (
-                <span
-                  key={k}
-                  className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300"
-                >
-                  {k}
-                </span>
-              ))}
-            </div>
-          )}
-        </section>
+        {/* Editable one by one, with "clear all" (user, 2026-10-20). */}
+        <ProjectKeywordsCard projectId={id} jobs={jobs} onSaved={() => setJobsVersion(v => v + 1)} />
 
         {/* Today's AMP domain of each of the project's domains, from its AMP
             Rotator. Renders nothing for a project that has none. */}

@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import NamedTuple
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -190,3 +191,94 @@ def delete_project(project_id: int, db: Session = Depends(get_db)):
     for endpoint_id in amp_endpoint_ids:
         remove_amp_rotator_schedule(endpoint_id)
     return {"ok": True, "jobs_ungrouped": freed}
+
+
+# --- the project's keywords --------------------------------------------------
+#
+# A project's keywords are its jobs' keywords: nothing else decides what is
+# measured. So the project page edits them there (user, 2026-10-20: "remove/add
+# keywords from/to the project one by one like GEOs + clear all button" — for
+# when the wrong CSV was uploaded and another project's keywords came in with
+# it). Removing takes a keyword out of every job of the project, compared
+# without regard to case or surrounding spaces, as the page lists them once.
+# Adding puts new ones into the project's own list — the job its CSV uploads
+# are filed under, made if it has none — so a keyword typed on the project
+# page never changes what a scraping job checks (user: "the purpose of this
+# box is just to show what keywords are tracked"). Positions already read for
+# a removed keyword stay: deleting an upload removes those.
+
+#: The most keywords one job takes — the job form's limit too.
+MAX_KEYWORDS_PER_JOB = 1000
+
+
+def _key(keyword: str) -> str:
+    return keyword.strip().lower()
+
+
+def drop_keywords(have: list[str], drop: set[str]) -> list[str]:
+    """`have` without the keywords whose key is in `drop`."""
+    return [k for k in have if _key(k) not in drop]
+
+
+def add_keywords(have: list[str], new: list[str]) -> tuple[list[str], list[str]]:
+    """(the job's keywords with the new ones after them, the ones that were
+    new). Blank lines and keywords the job already has are left out."""
+    seen = {_key(k) for k in have}
+    added: list[str] = []
+    for k in new:
+        k = k.strip()
+        if k and _key(k) not in seen:
+            added.append(k)
+            seen.add(_key(k))
+    return list(have) + added, added
+
+
+class KeywordsRemoveIn(BaseModel):
+    keywords: list[str] = []
+    #: Every keyword of every job of the project.
+    all: bool = False
+
+
+class KeywordsAddIn(BaseModel):
+    keywords: list[str]
+    #: Into this job of the project. Omitted = the project's own list (the job
+    #: its CSV uploads are filed under).
+    job_id: int | None = None
+
+
+@router.post("/{project_id}/keywords/remove")
+def remove_project_keywords(project_id: int, payload: KeywordsRemoveIn, db: Session = Depends(get_db)):
+    if db.get(Project, project_id) is None:
+        raise HTTPException(404)
+    drop = {_key(k) for k in payload.keywords if k.strip()}
+    jobs_changed = removed = 0
+    for job in db.query(Job).filter(Job.project_id == project_id).all():
+        before = list(job.keywords or [])
+        after = [] if payload.all else drop_keywords(before, drop)
+        if len(after) != len(before):
+            job.keywords = after
+            jobs_changed += 1
+            removed += len(before) - len(after)
+    db.commit()
+    return {"jobs_changed": jobs_changed, "removed": removed}
+
+
+@router.post("/{project_id}/keywords/add")
+def add_project_keywords(project_id: int, payload: KeywordsAddIn, db: Session = Depends(get_db)):
+    if payload.job_id is None:
+        project = db.get(Project, project_id)
+        if project is None:
+            raise HTTPException(404)
+        from .serp_upload import _job as own_list
+        job = own_list(db, project)
+    else:
+        job = db.get(Job, payload.job_id)
+    if job is None or job.project_id != project_id:
+        raise HTTPException(404, "That job is not in this project.")
+    keywords, added = add_keywords(list(job.keywords or []), payload.keywords)
+    if len(keywords) > MAX_KEYWORDS_PER_JOB:
+        raise HTTPException(
+            400, f"A job holds at most {MAX_KEYWORDS_PER_JOB} keywords; {job.name!r} would have {len(keywords)}.")
+    job.keywords = keywords
+    db.commit()
+    return {"added": len(added), "job_id": job.id}

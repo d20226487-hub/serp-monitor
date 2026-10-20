@@ -849,6 +849,16 @@ export const api = {
   resetVisibility: () =>
     req<VisibilityWeights>("/settings/visibility", { method: "DELETE" }),
   getProject: (id: number) => req<Project>(`/projects/${id}`),
+  /** Take keywords out of every job of the project; `all` empties them all. */
+  removeProjectKeywords: (id: number, body: { keywords?: string[]; all?: boolean }) =>
+    req<{ jobs_changed: number; removed: number }>(`/projects/${id}/keywords/remove`, {
+      method: "POST", body: JSON.stringify(body),
+    }),
+  /** Add keywords to the project's own list (or to one job of it). */
+  addProjectKeywords: (id: number, keywords: string[], jobId?: number) =>
+    req<{ added: number; job_id: number }>(`/projects/${id}/keywords/add`, {
+      method: "POST", body: JSON.stringify({ keywords, ...(jobId !== undefined ? { job_id: jobId } : {}) }),
+    }),
   createProject: (body: { name: string; domains: string[]; notes?: string | null }) =>
     req<Project>("/projects", { method: "POST", body: JSON.stringify(body) }),
   updateProject: (
