@@ -5,7 +5,8 @@ in the SERPs during checks) to the Proxy Checker … GEO is taken from the job's
 GEO, domains are taken from the SERPs", and on WHEN: "let the user specify this
 on the project page".
 
-One request per country:
+One request per country — or, for a country with more than
+DOMAINS_PER_REQUEST domains, several, one after another:
 
     POST <url>                      Authorization: Bearer <token>
     {"DailyCheck": {"geo": "KG", "domains": ["lucky-zazino.pro", …]}}
@@ -110,6 +111,7 @@ import itertools
 import json
 import logging
 import threading
+import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Iterator, NamedTuple
@@ -154,6 +156,14 @@ TIMEOUT_MINUTES_MIN, TIMEOUT_MINUTES_MAX = 1, 60
 #: Merely connecting has a short limit of its own, so an unreachable server is
 #: still reported quickly however long an answer may take.
 CONNECT_SECONDS = 15.0
+#: At most this many domains in one request (user, 2026-10-26: "make the
+#: request contain 3 domains per GEO. The timeout example had 8 domains in
+#: it"). The Proxy Checker checks every domain through every proxy of the
+#: country before it answers, and the proxy in front of it (Cloudflare) gives
+#: up after 120 seconds with its own 524 — however long KEY_TIMEOUT would
+#: wait. So a country's domains go out in requests this small, one after
+#: another; each request's duration is kept to show how close they come.
+DOMAINS_PER_REQUEST = 3
 #: How much of an answer's body is kept. A JSON reply or a firewall's error
 #: page fits many times over; one that does not is cut, and says so.
 RAW_BODY_LIMIT = 20_000
@@ -316,6 +326,11 @@ def add_amp(by_geo: dict[str, list[str]], amp: dict[str, list[str]]) -> dict[str
                     extra.append(host)
         out[geo] = list(domains) + extra
     return out
+
+
+def batches(domains: list[str], size: int = DOMAINS_PER_REQUEST) -> list[list[str]]:
+    """The domains of one country, in requests of at most `size`, in order."""
+    return [list(domains[i:i + size]) for i in range(0, len(domains), size)]
 
 
 def build_payload(geo: str, domains: list[str]) -> dict:
@@ -489,6 +504,7 @@ class Sent(NamedTuple):
     request: dict                # as it went out, the token replaced by TOKEN_MARK
     raw: str                     # the answer as received, or the transport's error
     data: object = None          # the answer's JSON, when it was JSON
+    seconds: float | None = None  # how long it took, to the answer or the failure
 
 
 def read_answer(data: object, sent: list[str]) -> dict[str, dict[str, str]]:
@@ -551,6 +567,7 @@ def send_one(url: str, token: str, geo: str, domains: list[str],
                "headers": [list(h) for h in request_headers(TOKEN_MARK)]}
     own = client is None
     client = client or httpx.Client(timeout=request_timeout(wait_minutes))
+    started = time.monotonic()
     try:
         r = client.post(url, content=body.encode("utf-8"), headers=dict(headers))
         try:
@@ -558,15 +575,16 @@ def send_one(url: str, token: str, geo: str, domains: list[str],
         except ValueError:
             data = None
         return Sent(200 <= r.status_code < 300, r.status_code,
-                    _mask(redact(r.text or ""), token)[:300], request, raw_response(r, token), data)
+                    _mask(redact(r.text or ""), token)[:300], request, raw_response(r, token), data,
+                    time.monotonic() - started)
     except httpx.ReadTimeout as e:
         # Connected, asked, and no answer came in time: say how long that was,
         # since it is a setting and the likely thing to change.
         error = _mask(redact(f"no answer within {wait_minutes} min (ReadTimeout: {e})"), token)
-        return Sent(False, None, error[:300], request, error[:RAW_BODY_LIMIT])
+        return Sent(False, None, error[:300], request, error[:RAW_BODY_LIMIT], None, time.monotonic() - started)
     except (httpx.HTTPError, httpx.InvalidURL) as e:
         error = _mask(redact(f"{type(e).__name__}: {e}"), token)
-        return Sent(False, None, error[:300], request, error[:RAW_BODY_LIMIT])
+        return Sent(False, None, error[:300], request, error[:RAW_BODY_LIMIT], None, time.monotonic() - started)
     finally:
         if own:
             client.close()
@@ -577,21 +595,24 @@ class Busy(Exception):
 
 
 #: The sends running now, by a number of their own: {"project_id", "trigger",
-#: "started_at" (naive UTC), "geos", "done"}.
+#: "started_at" (naive UTC), "geos", "requests", "done"}.
 _RUNNING: dict[int, dict] = {}
 _RUNNING_LOCK = threading.Lock()
 _NUMBERS = itertools.count(1)
 
 
 @contextmanager
-def _sending(project_id: int, trigger: str, geos: list[str], *, exclusive: bool) -> Iterator[dict]:
-    """Mark a send of the project as running for as long as it runs.
+def _sending(project_id: int, trigger: str, geos: list[str], *, exclusive: bool,
+             requests: int | None = None) -> Iterator[dict]:
+    """Mark a send of the project as running for as long as it runs: to
+    `geos`, in `requests` requests (default one per GEO).
     `exclusive`: refuse (Busy) if one of the project's is running already."""
     with _RUNNING_LOCK:
         if exclusive and any(e["project_id"] == project_id for e in _RUNNING.values()):
             raise Busy(project_id)
         number = next(_NUMBERS)
         entry = {"project_id": project_id, "trigger": trigger, "geos": list(geos), "done": 0,
+                 "requests": len(geos) if requests is None else requests,
                  "started_at": datetime.now(timezone.utc).replace(tzinfo=None)}
         _RUNNING[number] = entry
     try:
@@ -603,18 +624,20 @@ def _sending(project_id: int, trigger: str, geos: list[str], *, exclusive: bool)
 
 def in_progress(project_id: int) -> list[dict]:
     """The project's sends running now, oldest first: {"trigger", "started_at",
-    "geos", "done"} — `done` = how many of those countries are finished."""
+    "geos", "requests", "done"} — `done` = how many of the requests are
+    finished (and saved)."""
     with _RUNNING_LOCK:
         entries = [dict(e) for _, e in sorted(_RUNNING.items()) if e["project_id"] == project_id]
-    return [{k: e[k] for k in ("trigger", "started_at", "geos", "done")} for e in entries]
+    return [{k: e[k] for k in ("trigger", "started_at", "geos", "requests", "done")} for e in entries]
 
 
 def deliver(db: Session, project: Project, by_geo: dict[str, list[str]], *, trigger: str,
             run_id: int | None = None, client: httpx.Client | None = None,
             exclusive: bool = False) -> list[ToolDelivery]:
-    """One request per country, each recorded — and saved — as soon as its
-    answer is in. Nothing is sent, and nothing recorded, when the connection
-    is incomplete (no address or no token) or nothing was found.
+    """Each country's domains in requests of at most DOMAINS_PER_REQUEST, one
+    after another, each recorded — and saved — as soon as its answer is in.
+    Nothing is sent, and nothing recorded, when the connection is incomplete
+    (no address or no token) or nothing was found.
     `exclusive`: refuse (Busy) while another send of the project is running —
     a press of a button; the automatic sends are never refused."""
     conn = connection()
@@ -625,12 +648,14 @@ def deliver(db: Session, project: Project, by_geo: dict[str, list[str]], *, trig
     parents = amp_parents(db, project)
     wait = timeout_minutes()
     out = []
-    with _sending(project.id, trigger, list(by_geo), exclusive=exclusive) as progress:
-        for geo, domains in by_geo.items():
+    requests = [(geo, part) for geo, domains in by_geo.items() for part in batches(domains)]
+    with _sending(project.id, trigger, list(by_geo), requests=len(requests), exclusive=exclusive) as progress:
+        for geo, domains in requests:
             sent = send_one(conn["url"], conn["token"], geo, domains, client, wait_minutes=wait)
             row = ToolDelivery(tool=TOOL, project_id=project.id, run_id=run_id, trigger=trigger, geo=geo,
                                domains=domains, ok=sent.ok, status_code=sent.status_code, response=sent.excerpt,
-                               request=sent.request, response_raw=sent.raw)
+                               request=sent.request, response_raw=sent.raw,
+                               duration_ms=None if sent.seconds is None else round(sent.seconds * 1000))
             db.add(row)
             out.append(row)
             if sent.ok and sent.data is not None:
@@ -640,7 +665,7 @@ def deliver(db: Session, project: Project, by_geo: dict[str, list[str]], *, trig
             if not sent.ok:
                 log.warning("proxy checker refused %s for project %s: %s %s",
                             geo, project.id, sent.status_code, sent.excerpt[:120])
-            # This country is done: saved now, not when the last one is.
+            # This request is done: saved now, not when the last one is.
             db.commit()
             progress["done"] += 1
     return out

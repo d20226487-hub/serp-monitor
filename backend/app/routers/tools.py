@@ -36,6 +36,8 @@ def _delivery(d: ToolDelivery, names: dict[int, str] | None = None) -> dict:
         # The request as a curl command and the answer as received; null on
         # sends made before they were kept.
         "curl": pc.curl_command(d.request), "response_raw": d.response_raw,
+        # How long it took; null on sends made before that was kept.
+        "duration_ms": d.duration_ms,
     }
 
 

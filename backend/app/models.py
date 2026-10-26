@@ -307,6 +307,9 @@ class ToolDelivery(Base):
     #: no HTTP answer, the transport's error. Both NULL on rows from before
     #: they were kept.
     response_raw: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: How long the request took, from connecting to the end of the answer —
+    #: or to the failure. NULL on rows from before it was kept.
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     sent_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 

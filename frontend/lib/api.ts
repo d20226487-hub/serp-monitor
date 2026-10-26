@@ -44,6 +44,9 @@ export type ToolDelivery = {
   curl: string | null;
   response_raw: string | null;
   sent_at: string;
+  /** How long the request took, to the answer or the failure; null on sends
+   *  made before that was kept. */
+  duration_ms?: number | null;
 };
 
 /** "inherit" follows the global switch in Settings → Tools Connection. */
@@ -265,7 +268,9 @@ export type SendInProgress = {
   trigger: string;
   started_at: string;
   geos: string[];
-  /** How many of `geos` are finished — and already saved. */
+  /** The requests it makes: a GEO's domains go 3 to a request. */
+  requests: number;
+  /** How many of them are finished — and already saved. */
   done: number;
 };
 

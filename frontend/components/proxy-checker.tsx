@@ -153,6 +153,11 @@ function DeliveriesTable({ rows, showProject }: { rows: ToolDelivery[]; showProj
                 ) : (
                   <Pill tone="bad" icon="cross" title={r.response ?? undefined}>{s.refused(r.status_code)}</Pill>
                 )}
+                {r.duration_ms != null && (
+                  <span className="ml-1.5 whitespace-nowrap text-xs tabular-nums text-slate-500 dark:text-slate-400" title={s.tookHint}>
+                    {s.took(Math.round(r.duration_ms / 1000))}
+                  </span>
+                )}
                 {!r.ok && r.response && (
                   <div className="mt-1 max-w-xs truncate text-xs text-slate-500 dark:text-slate-400" title={r.response}>
                     {r.response}
@@ -400,7 +405,7 @@ export function useWhileSending(
   }, [sending]);
 }
 
-/** "Sending now: 1 of 2 GEOs done · started 12:03", one line per running send. */
+/** "Sending now (KG, KZ): 1 of 4 requests done · started 12:03", one line per running send. */
 export function SendingNote({ sending }: { sending: SendInProgress[] }) {
   const { t } = useT();
   const s = t.tools.proxyChecker;
@@ -410,7 +415,7 @@ export function SendingNote({ sending }: { sending: SendInProgress[] }) {
       {sending.map((x, i) => (
         <p key={i}>
           {s.sendingNow(
-            s.trigger[x.trigger] ?? x.trigger, x.done, x.geos.length,
+            s.trigger[x.trigger] ?? x.trigger, x.geos.join(", "), x.done, x.requests,
             serverTime(x.started_at)?.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) ?? "",
           )}
         </p>

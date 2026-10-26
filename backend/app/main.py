@@ -126,6 +126,7 @@ def _migrate_sqlite_columns() -> None:
         # before they were kept; the log says so for those rows.
         ("tool_deliveries", "request", "JSON"),
         ("tool_deliveries", "response_raw", "TEXT"),
+        ("tool_deliveries", "duration_ms", "INTEGER"),
         ("jobs", "provider", "VARCHAR(20) NOT NULL DEFAULT 'serpapi'"),
         # Per-run spend. NULL on runs that predate cost tracking — the UI shows
         # "—" for those rather than pretending they were free.

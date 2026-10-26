@@ -167,3 +167,52 @@ class TestTheButtons:
             for state in (tools._project_state(db, project), tools._direct_state(db, project)):
                 assert [(s["trigger"], s["geos"], s["done"]) for s in state["sending"]] == [("daily", ["KG", "KZ"], 0)]
         assert tools._direct_state(db, project)["sending"] == []
+
+
+class TestInRequestsOfThree:
+    """User, 2026-10-26: "make the request contain 3 domains per GEO. The
+    timeout example had 8 domains in it" — Cloudflare in front of the Proxy
+    Checker gives up after 120 seconds."""
+
+    EIGHT = [f"site-{n}.example" for n in range(1, 9)]
+
+    def test_a_country_in_requests_of_three_at_most(self):
+        assert pc.batches(self.EIGHT) == [self.EIGHT[0:3], self.EIGHT[3:6], self.EIGHT[6:8]]
+        assert pc.batches(self.EIGHT[:3]) == [self.EIGHT[:3]] and pc.batches([]) == []
+        assert pc.DOMAINS_PER_REQUEST == 3
+
+    def test_one_after_another_each_saved_and_counted(self, Session, connected, monkeypatch):
+        project_id = make_project(Session)
+        asked = []
+
+        def send_one(url, token, geo, domains, client=None, **kw):
+            with Session() as other:
+                saved = other.query(ToolDelivery).count()
+            done = [(s["requests"], s["done"]) for s in pc.in_progress(project_id)]
+            asked.append((geo, list(domains), saved, done))
+            return pc.Sent(True, 200, "", {}, "", {d: {f"{geo} - Provider A": "PASS"} for d in domains}, 2.5)
+
+        monkeypatch.setattr(pc, "send_one", send_one)
+        with Session() as db:
+            rows = pc.deliver(db, db.get(Project, project_id),
+                              {"KG": self.EIGHT, "KZ": self.EIGHT[:2]}, trigger="manual")
+            assert [(r.geo, r.domains, r.duration_ms) for r in rows] == [
+                ("KG", self.EIGHT[0:3], 2500), ("KG", self.EIGHT[3:6], 2500),
+                ("KG", self.EIGHT[6:8], 2500), ("KZ", self.EIGHT[0:2], 2500)]
+            # Every domain's answer is kept, under the request it was asked in.
+            assert db.query(DomainProxyCheckLog).count() == 10
+        assert asked == [
+            ("KG", self.EIGHT[0:3], 0, [(4, 0)]), ("KG", self.EIGHT[3:6], 1, [(4, 1)]),
+            ("KG", self.EIGHT[6:8], 2, [(4, 2)]), ("KZ", self.EIGHT[0:2], 3, [(4, 3)])]
+
+    def test_how_long_a_request_took_is_measured_answer_or_not(self):
+        import httpx
+        ok = httpx.MockTransport(lambda request: httpx.Response(200, json={}))
+        with httpx.Client(transport=ok) as client:
+            assert pc.send_one("https://checker.invalid/api", "t" * 12, "KG", ["a.example"], client).seconds >= 0
+
+        def cloudflare_gives_up(request):
+            raise httpx.ReadTimeout("timed out", request=request)
+        with httpx.Client(transport=httpx.MockTransport(cloudflare_gives_up)) as client:
+            sent = pc.send_one("https://checker.invalid/api", "t" * 12, "KG", ["a.example"], client)
+        assert sent.ok is False and sent.seconds is not None
