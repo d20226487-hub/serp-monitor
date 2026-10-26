@@ -28,6 +28,11 @@ domain ranks is read a week further back (STANDING_DAYS): a domain is sent to
 the Proxy Checker because a SERP showed it, and that SERP may have been read
 the evening before.
 
+A domain can also be checked without any SERP showing it — chosen on the
+Blocks tab and sent on a timer (proxy_checker.direct_to_send). Its answers are
+rows like any other, with `direct` set and, where no SERP shows it, its
+standing empty.
+
 Nothing here turns those statuses into a verdict of ours. The one thing read
 into them is whether every proxy said PASS — the only status seen so far — and
 that is used for the ORDER of the rows and for a filter, never as a label.
@@ -136,7 +141,8 @@ def period_rows(standing: list[dict], checks: list[dict],
     yet, which for a past period nobody knows.
 
     A checked domain that no SERP on record around the period shows is still
-    a row — it was sent because a SERP showed it — with its standing empty.
+    a row — sent because a SERP showed it, or checked without one (`direct`
+    on its check) — with its standing empty.
 
     An AMP row says whose standing it carries: its own (`own_standing`), when
     a SERP shows the AMP domain itself, or else its main domain's.
@@ -154,7 +160,7 @@ def period_rows(standing: list[dict], checks: list[dict],
     def with_check(row: dict, check: dict | None) -> dict:
         proxies = dict(check["statuses"] or {}) if check else None
         return {**row, "proxies": proxies or None, "checked_at": check["checked_at"] if check else None,
-                "kind": kind_of(proxies)}
+                "kind": kind_of(proxies), "direct": bool(check and check.get("direct"))}
 
     main = [with_check(r, main_checks.get((r["geo"], r["domain"]))) for r in sites]
     main += [with_check(empty(*key), c) for key, c in main_checks.items() if key not in by_key]
@@ -211,6 +217,7 @@ def not_passing(checks: list[dict], standing: dict[tuple[str, str], dict]) -> tu
             "best_position": where.get("best_position"), "best_keyword": where.get("best_keyword"),
             "best_engine": where.get("best_engine"), "last_seen": where.get("last_seen"),
             "proxies": proxies, "checked_at": check["checked_at"], "kind": NOT_PASS,
+            "direct": bool(check.get("direct")),
         }
         if site:
             amp.append({**row, "main_domain": site, "own_standing": own is not None})

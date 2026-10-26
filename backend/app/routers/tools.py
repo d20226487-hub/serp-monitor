@@ -18,7 +18,10 @@ from .. import proxy_checker as pc
 from ..amp_rotator import amp_periods, as_dates
 from ..db import get_db
 from ..models import DomainProxyCheckLog, Project, ToolDelivery
-from ..scheduler import proxy_checker_next_run, upsert_proxy_checker_schedule
+from ..scheduler import (
+    direct_check_next_run, proxy_checker_next_run, upsert_direct_check_schedule,
+    upsert_proxy_checker_schedule,
+)
 from .project_positions import _parse_stamp, project_positions
 
 router = APIRouter(tags=["tools"])
@@ -241,6 +244,120 @@ async def send_project_now(project_id: int, db: Session = Depends(get_db)):
     return {"sent": [_delivery(d) for d in sent], **_project_state(db, project)}
 
 
+# --- checking chosen domains without a SERP ----------------------------------
+
+class DirectCheckIn(BaseModel):
+    enabled: bool
+    #: Every how many hours: one of proxy_checker.DIRECT_HOURS.
+    hours: int
+    #: Which of the project's domains. Omitted = unchanged; null = all of them
+    #: (also ones added later); a list = only those.
+    domains: list[str] | None = None
+    #: Which of the project's GEOs, likewise.
+    geos: list[str] | None = None
+
+
+def _direct_state(db: Session, project: Project) -> dict:
+    project_domains = [d for d in (project.domains or []) if d]
+    chosen = project.direct_check_domains
+    project_geos = pc.project_geos(db, project)
+    last = (db.query(ToolDelivery.sent_at)
+            .filter(ToolDelivery.tool == pc.TOOL, ToolDelivery.project_id == project.id,
+                    ToolDelivery.trigger.in_(pc.DIRECT_TRIGGERS))
+            .order_by(ToolDelivery.sent_at.desc()).first())
+    amp = pc.amp_of(db, project.id)
+    return {
+        "enabled": bool(project.direct_check_enabled),
+        "hours": project.direct_check_hours or pc.DEFAULT_DIRECT_HOURS,
+        "hours_choices": list(pc.DIRECT_HOURS),
+        "project_domains": project_domains,
+        # null = all of them; a list = only those, as still in the project.
+        "domains": None if chosen is None else pc.direct_domains(project_domains, chosen),
+        # The project's GEOs, whether they were set on the project page or are
+        # the jobs' countries standing in, and which are checked: null = all.
+        "project_geos": project_geos,
+        "geos_set": project.geos is not None,
+        "geos": None if project.direct_check_geos is None
+        else pc.geos_to_send(project_geos, project.direct_check_geos),
+        # Domain → its AMP domain(s) of the day, which ride along.
+        "amp": {d: amp[d] for d in project_domains if d in amp},
+        "next_run": direct_check_next_run(project.id) if project.direct_check_enabled else None,
+        "last_at": last[0] if last else None,
+        "connected": pc.connection_status()["connected"],
+    }
+
+
+def _unknown_domains(project: Project, domains: list[str]) -> None:
+    known = {d.lower() for d in project.domains or []}
+    unknown = [d for d in domains if str(d or "").strip().lower() not in known]
+    if unknown:
+        raise HTTPException(400, f"Not a domain of this project: {', '.join(unknown[:5])}")
+
+
+def _known_geos(db: Session, project: Project, geos: list[str]) -> list[str]:
+    """The GEOs as stored; any that is not one of the project's is refused."""
+    known = set(pc.project_geos(db, project))
+    unknown = [g for g in geos if str(g or "").strip().upper() not in known]
+    if unknown:
+        raise HTTPException(400, f"Not a GEO of this project: {', '.join(map(str, unknown[:5]))}")
+    return pc.clean_geos(geos)
+
+
+@router.get("/projects/{project_id}/direct-check")
+def get_direct_check(project_id: int, db: Session = Depends(get_db)):
+    return _direct_state(db, _project(db, project_id))
+
+
+@router.put("/projects/{project_id}/direct-check")
+def update_direct_check(project_id: int, payload: DirectCheckIn, db: Session = Depends(get_db)):
+    project = _project(db, project_id)
+    if payload.hours not in pc.DIRECT_HOURS:
+        raise HTTPException(400, f"hours must be one of {', '.join(map(str, pc.DIRECT_HOURS))}")
+    if "domains" in payload.model_fields_set and payload.domains is not None:
+        _unknown_domains(project, payload.domains)
+        project.direct_check_domains = pc.direct_domains(project.domains or [], payload.domains)
+    elif "domains" in payload.model_fields_set:
+        project.direct_check_domains = None
+    if "geos" in payload.model_fields_set:
+        project.direct_check_geos = None if payload.geos is None else _known_geos(db, project, payload.geos)
+    # The timer counts from when it was switched on or its interval changed;
+    # choosing other domains or GEOs leaves it where it is.
+    if payload.enabled and (not project.direct_check_enabled or payload.hours != project.direct_check_hours
+                            or project.direct_check_since is None):
+        project.direct_check_since = datetime.now(timezone.utc).replace(tzinfo=None)
+    project.direct_check_enabled = payload.enabled
+    project.direct_check_hours = payload.hours
+    db.commit()
+    db.refresh(project)
+    upsert_direct_check_schedule(project)
+    return _direct_state(db, project)
+
+
+class DirectCheckRunIn(BaseModel):
+    #: The domains and GEOs picked on the page, saved or not. null = all.
+    domains: list[str] | None = None
+    geos: list[str] | None = None
+
+
+@router.post("/projects/{project_id}/direct-check/run")
+async def run_direct_check(project_id: int, payload: DirectCheckRunIn | None = None, db: Session = Depends(get_db)):
+    """"Check now": once, whether or not the timer is on — the domains and
+    GEOs picked on the page (no body: the timer's choice)."""
+    project = _project(db, project_id)
+    if not pc.connection_status()["connected"]:
+        raise HTTPException(
+            409, "The Proxy Checker is not connected: add its address and token in Settings → Tools Connection.")
+    domains = project.direct_check_domains if payload is None else payload.domains
+    geos = project.direct_check_geos if payload is None else payload.geos
+    if domains is not None:
+        _unknown_domains(project, domains)
+    if geos is not None:
+        geos = _known_geos(db, project, geos)
+    sent = await run_in_threadpool(pc.direct_check, project.id, "direct_manual", domains, geos)
+    db.expire_all()
+    return {"sent": [_delivery(d) for d in sent], **_direct_state(db, project)}
+
+
 # --- which domains are in the SERPs, and what each proxy says of them --------
 
 def _period(db: Session, project: Project, start: str | None, end: str | None) -> tuple[list[dict], list[dict], bool]:
@@ -259,8 +376,16 @@ def _period(db: Session, project: Project, start: str | None, end: str | None) -
     newest: dict[tuple[str, str], DomainProxyCheckLog] = {}
     for c in query.order_by(DomainProxyCheckLog.checked_at.desc(), DomainProxyCheckLog.id.desc()).all():
         newest.setdefault((c.geo, c.domain), c)
+    # Which of those answers came from a check without a SERP: such a domain
+    # may stand nowhere, and the page says why it is listed all the same.
+    sent_ids = list({c.delivery_id for c in newest.values() if c.delivery_id is not None})
+    direct_ids: set[int] = set()
+    for i in range(0, len(sent_ids), 400):
+        direct_ids |= {d for (d,) in db.query(ToolDelivery.id).filter(
+            ToolDelivery.id.in_(sent_ids[i:i + 400]), ToolDelivery.trigger.in_(pc.DIRECT_TRIGGERS)).all()}
     checks = [
-        {"geo": c.geo, "domain": c.domain, "main_domain": c.main_domain, "statuses": c.statuses, "checked_at": c.checked_at}
+        {"geo": c.geo, "domain": c.domain, "main_domain": c.main_domain, "statuses": c.statuses,
+         "checked_at": c.checked_at, "direct": c.delivery_id in direct_ids}
         for c in newest.values()
     ]
 

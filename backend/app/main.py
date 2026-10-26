@@ -17,7 +17,8 @@ from .routers import (
     projects, runs, serp_upload, settings as settings_router, tools,
 )
 from .scheduler import (
-    get_scheduler, prune_amp_rotator_schedules, reload_all_schedules, reload_tool_schedules,
+    get_scheduler, prune_amp_rotator_schedules, prune_project_schedules, reload_all_schedules,
+    reload_tool_schedules,
 )
 from .tasks import mark_orphaned_runs_failed
 
@@ -114,6 +115,13 @@ def _migrate_sqlite_columns() -> None:
         ("projects", "proxy_checker_time", "VARCHAR(5)"),
         ("projects", "geos", "JSON"),
         ("projects", "proxy_checker_geos", "JSON"),
+        # Checking chosen domains on a timer, without a SERP. Off for every
+        # project until switched on.
+        ("projects", "direct_check_enabled", "BOOLEAN NOT NULL DEFAULT 0"),
+        ("projects", "direct_check_hours", "INTEGER NOT NULL DEFAULT 24"),
+        ("projects", "direct_check_domains", "JSON"),
+        ("projects", "direct_check_geos", "JSON"),
+        ("projects", "direct_check_since", "DATETIME"),
         # The request as sent and the answer as received. NULL on sends made
         # before they were kept; the log says so for those rows.
         ("tool_deliveries", "request", "JSON"),
@@ -239,6 +247,7 @@ async def lifespan(_: FastAPI):
     db = SessionLocal()
     try:
         prune_amp_rotator_schedules(db)
+        prune_project_schedules(db)
     finally:
         db.close()
     # DataForSEO's location list and the saved locations' Google IDs, fetched

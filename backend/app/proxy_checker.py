@@ -77,6 +77,19 @@ An AMP domain neither shown nor riding with a shown domain is not sent for
 that country. Nothing has to be switched on: a project without a rotator
 simply has no AMP domains.
 
+Checking without a SERP (user, 2026-10-26: "check the domains for blocks even
+when the SERP was not checked … let the user select which domains to check in
+a specified interval (they can select or choose all). The GEOs will be taken
+from the Project GEOs if specified"). Apart from everything above, a project
+can send chosen domains of its own — or all of them — every N hours, for the
+chosen GEOs of the project — or all of them (project_geos: the list set on its
+page, the jobs' countries until it is; user, 2026-10-26: "Let the user choose
+GEOs as well") — whether or not any SERP showed them. Each domain's AMP domain of
+the day rides along, as it does with a found one. See direct_to_send; the
+timer is the project's own (scheduler.upsert_direct_check_schedule). "Check now"
+on the same card sends the domains picked there once, timer or not (user,
+2026-10-26, on a one-time check: "I meant check now").
+
 The connection (URL, token) is global: Settings → Tools Connection. The token
 is stored like the SERP providers' and never returned to the browser. No
 address is built in: the Proxy Checker is somebody's own service, so both are
@@ -620,3 +633,80 @@ def daily_send(project_id: int) -> None:
         send_recent(project_id, "daily")
     except Exception:  # noqa: BLE001
         log.exception("proxy checker: daily send for project %s failed", project_id)
+
+
+# --------------------------------------------------------------------------
+# Checking without a SERP
+# --------------------------------------------------------------------------
+
+#: Every how many hours a project's chosen domains can be checked.
+DIRECT_HOURS = (1, 2, 3, 4, 6, 8, 12, 24, 48, 72, 168)
+DEFAULT_DIRECT_HOURS = 24
+#: How these sends are marked in tool_deliveries: by the timer, or by hand.
+DIRECT_TRIGGERS = ("direct", "direct_manual")
+
+
+def direct_domains(project_domains: list[str], chosen: list[str] | None) -> list[str]:
+    """The domains checked without a SERP, in the project's order. `None` = no
+    choice was made: all of them, also ones added later. A chosen domain the
+    project no longer has is not checked."""
+    domains = [d for d in project_domains or [] if d]
+    if chosen is None:
+        return domains
+    wanted = {str(c or "").strip().lower() for c in chosen}
+    return [d for d in domains if d.lower() in wanted]
+
+
+def direct_by_geo(domains: list[str], geos: list[str], amp: dict[str, list[str]]) -> dict[str, list[str]]:
+    """Each GEO gets every domain, followed by their AMP domains of the day —
+    the same order a SERP-based send has. Nothing to send without both."""
+    if not domains:
+        return {}
+    return add_amp({geo: list(domains) for geo in geos}, amp)
+
+
+def direct_to_send(db: Session, project: Project, domains: list[str] | None = ...,
+                   geos: list[str] | None = ...) -> dict[str, list[str]]:
+    """What a check without a SERP carries, by country: the domains and GEOs
+    chosen for the timer, or — given — these (`None` = all of them)."""
+    if domains is ...:
+        domains = project.direct_check_domains
+    if geos is ...:
+        geos = project.direct_check_geos
+    return direct_by_geo(direct_domains(project.domains or [], domains),
+                         geos_to_send(project_geos(db, project), geos), amp_of(db, project.id))
+
+
+def direct_check(project_id: int, trigger: str = "direct", domains: list[str] | None = ...,
+                 geos: list[str] | None = ...) -> list[ToolDelivery]:
+    """Send the project's chosen domains for its chosen GEOs now — the timer's
+    choice, or the ones given ("Check now" sends what the page shows)."""
+    db = SessionLocal()
+    try:
+        project = db.get(Project, project_id)
+        if project is None:
+            return []
+        rows = deliver(db, project, direct_to_send(db, project, domains, geos), trigger=trigger)
+        for r in rows:
+            db.refresh(r)
+            db.expunge(r)
+        return rows
+    finally:
+        db.close()
+
+
+def direct_check_tick(project_id: int) -> None:
+    """The timer's callable (top-level, so the job store can pickle it). A
+    project switched off since its timer was set sends nothing."""
+    db = SessionLocal()
+    try:
+        project = db.get(Project, project_id)
+        on = project is not None and bool(project.direct_check_enabled)
+    finally:
+        db.close()
+    if not on:
+        return
+    try:
+        direct_check(project_id, "direct")
+    except Exception:  # noqa: BLE001
+        log.exception("proxy checker: check without a SERP for project %s failed", project_id)

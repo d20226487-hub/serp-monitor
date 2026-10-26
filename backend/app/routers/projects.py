@@ -23,7 +23,7 @@ from ..amp_rotator import remove_project as remove_amp_endpoints
 from ..db import get_db
 from ..models import Job, Project
 from ..providers.domain_paste import clean_domain_list
-from ..scheduler import remove_amp_rotator_schedule
+from ..scheduler import remove_amp_rotator_schedule, remove_project_schedules
 from ..schemas import ProjectCreate, ProjectOut, ProjectUpdate
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -190,6 +190,8 @@ def delete_project(project_id: int, db: Session = Depends(get_db)):
     db.commit()
     for endpoint_id in amp_endpoint_ids:
         remove_amp_rotator_schedule(endpoint_id)
+    # Its daily send and its checks without a SERP would tick for nothing.
+    remove_project_schedules(project_id)
     return {"ok": True, "jobs_ungrouped": freed}
 
 

@@ -6,14 +6,17 @@ import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+from datetime import datetime, timezone
+
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.orm import Session
 
 from .config import settings
 from .crontab import to_apscheduler
 from .db import SessionLocal
 from .models import AmpEndpoint, Job, JobRun, Project
-from .proxy_checker import daily_send, valid_time
+from .proxy_checker import DIRECT_HOURS, daily_send, direct_check_tick, valid_time
 from .amp_rotator import daily_refresh as amp_daily_refresh
 from .amp_rotator import endpoint_time as amp_endpoint_time
 from .tasks import create_run, run_job_sync
@@ -141,6 +144,72 @@ def proxy_checker_next_run(project_id: int) -> str | None:
     return ap.next_run_time.isoformat() if ap and ap.next_run_time else None
 
 
+def _direct_ap_id(project_id: int) -> str:
+    return f"direct-check-{project_id}"
+
+
+def direct_check_trigger(hours: int, since: datetime) -> IntervalTrigger:
+    """Every `hours`, at `since` (naive UTC) plus whole intervals."""
+    return IntervalTrigger(hours=hours, start_date=since.replace(tzinfo=timezone.utc), timezone="UTC")
+
+
+def upsert_direct_check_schedule(project: Project) -> None:
+    """A project checking its domains without a SERP gets a tick every
+    `direct_check_hours`, counted from when that was set — the same moments
+    after every restart, which re-adds the tick. Otherwise it has none."""
+    sched = get_scheduler()
+    ap_id = _direct_ap_id(project.id)
+    if not project.direct_check_enabled or project.direct_check_hours not in DIRECT_HOURS:
+        try:
+            sched.remove_job(ap_id)
+        except Exception:
+            pass
+        return
+    since = project.direct_check_since or datetime.now(timezone.utc).replace(tzinfo=None)
+    sched.add_job(
+        direct_check_tick,
+        trigger=direct_check_trigger(project.direct_check_hours, since),
+        id=ap_id,
+        name=f"direct-check-{project.id}-{project.name}",
+        args=[project.id],
+        replace_existing=True,
+        # A check missed while the host slept still goes out when it wakes, once.
+        misfire_grace_time=None,
+        coalesce=True,
+        max_instances=1,
+    )
+
+
+def direct_check_next_run(project_id: int) -> str | None:
+    ap = get_scheduler().get_job(_direct_ap_id(project_id))
+    return ap.next_run_time.isoformat() if ap and ap.next_run_time else None
+
+
+def remove_project_schedules(project_id: int) -> None:
+    """A deleted project's ticks: its daily send and its checks without a SERP."""
+    for ap_id in (_tool_ap_id(project_id), _direct_ap_id(project_id)):
+        try:
+            get_scheduler().remove_job(ap_id)
+        except Exception:
+            pass
+
+
+def prune_project_schedules(db: Session) -> int:
+    """Take off the scheduler every project tick whose project is gone (the
+    job store is the database, so one left behind outlives a restart). Call
+    AFTER the scheduler has started, like prune_amp_rotator_schedules."""
+    ids = [p for (p,) in db.query(Project.id).all()]
+    keep = {_tool_ap_id(p) for p in ids} | {_direct_ap_id(p) for p in ids}
+    gone = [j.id for j in get_scheduler().get_jobs()
+            if j.id.startswith(("proxy-checker-", "direct-check-")) and j.id not in keep]
+    for ap_id in gone:
+        try:
+            get_scheduler().remove_job(ap_id)
+        except Exception:
+            pass
+    return len(gone)
+
+
 def _amp_ap_id(endpoint_id: int) -> str:
     return f"amp-rotator-{endpoint_id}"
 
@@ -178,6 +247,7 @@ def amp_rotator_next_run(endpoint_id: int) -> str | None:
 def reload_tool_schedules(db: Session) -> None:
     for project in db.query(Project).all():
         upsert_proxy_checker_schedule(project)
+        upsert_direct_check_schedule(project)
     for endpoint in db.query(AmpEndpoint).all():
         upsert_amp_rotator_schedule(endpoint.id, amp_endpoint_time(endpoint))
 

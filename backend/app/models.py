@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from sqlalchemy import (
     JSON,
+    Boolean,
     DateTime,
     Float,
     ForeignKey,
@@ -59,6 +60,19 @@ class Project(Base):
     proxy_checker_mode: Mapped[str] = mapped_column(String(16), default="inherit")
     #: For "daily": HH:MM in UTC (the scheduler's clock).
     proxy_checker_time: Mapped[str | None] = mapped_column(String(5), nullable=True)
+    # Chosen domains sent to the Proxy Checker on a timer, whether or not any
+    # SERP showed them (see proxy_checker.direct_to_send). Off until switched
+    # on, on the project's Blocks tab.
+    direct_check_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    #: Every how many hours (one of proxy_checker.DIRECT_HOURS).
+    direct_check_hours: Mapped[int] = mapped_column(Integer, default=24)
+    #: Which of the project's domains. NULL = all of them, also ones added later.
+    direct_check_domains: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    #: Which of the project's GEOs. NULL = all of them, also ones added later.
+    direct_check_geos: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    #: When the timer was set (naive UTC): the checks fall at this moment plus
+    #: whole intervals, so a restart of the app does not move them.
+    direct_check_since: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 

@@ -232,7 +232,10 @@ export function ProjectBlocksCard({ projectId, reloadKey = 0 }: {
 
   /** Under the domain: when the proxies reported, or why none has. */
   function note(r: BlockRow): string {
-    if (r.proxies && Object.keys(r.proxies).length > 0) return x.checked(shortTime(r.checked_at));
+    if (r.proxies && Object.keys(r.proxies).length > 0) {
+      // Checked without a SERP: say so, since such a domain may rank nowhere.
+      return r.direct ? `${x.checked(shortTime(r.checked_at))} · ${x.direct}` : x.checked(shortTime(r.checked_at));
+    }
     if (data!.demo) return x.unchecked;
     const why = !r.sending
       ? x.reason.geoOff

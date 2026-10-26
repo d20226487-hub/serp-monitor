@@ -6,6 +6,7 @@ import { api, Job, Project, ProjectAverages, ProjectPositions } from "@/lib/api"
 import { useT } from "@/lib/i18n";
 import { AveragePositionTable, PositionTable } from "@/components/position-table";
 import { ProjectProxyCheckerCard } from "@/components/proxy-checker";
+import { DirectCheckCard } from "@/components/direct-check";
 import { ProjectBlocksCard, ProjectNotPassingCard } from "@/components/project-blocks";
 import { ProjectAmpCard } from "@/components/amp-rotator";
 import { ProjectCsvUploadsCard, SerpCsvUploadBar, SerpCsvUploadCard } from "@/components/serp-csv-upload";
@@ -113,6 +114,9 @@ export default function ProjectPage() {
   // Bumped when the Proxy Checker card saved or sent something, so the blocks
   // table above it is read again.
   const [sendsVersion, setSendsVersion] = useState(0);
+  // Bumped when a check without a SERP was sent, so the Proxy Checker card's
+  // log below it shows it.
+  const [directVersion, setDirectVersion] = useState(0);
   // The upload form for a SERP export, and a count of uploads made: an upload
   // is a run, so the jobs, the positions and the blocks are all read again.
   const [showUpload, setShowUpload] = useState(false);
@@ -583,7 +587,11 @@ export default function ProjectPage() {
       >
         {/* What the tab is opened for comes first: which of the domains in the
             SERPs are blocked. */}
-        <ProjectBlocksCard projectId={id} reloadKey={geosVersion + sendsVersion + uploadsVersion} />
+        <ProjectBlocksCard projectId={id} reloadKey={geosVersion + sendsVersion + uploadsVersion + directVersion} />
+
+        {/* Chosen domains checked on a timer, whether or not a SERP was read
+            (user, 2026-10-26: "In the Blocks tab, add the setting for it"). */}
+        <DirectCheckCard projectId={id} reloadKey={geosVersion} onChanged={() => setDirectVersion(v => v + 1)} />
 
         {/* Where this project's own domains, found in the SERPs, are handed on
             to be checked for blocking, and WHEN — a project setting, so it
@@ -592,7 +600,7 @@ export default function ProjectPage() {
         <section id="proxy-checker" className="scroll-mt-4">
           <ProjectProxyCheckerCard
             projectId={id}
-            reloadKey={geosVersion + uploadsVersion}
+            reloadKey={geosVersion + uploadsVersion + directVersion}
             onChanged={() => setSendsVersion(v => v + 1)}
           />
         </section>

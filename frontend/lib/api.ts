@@ -200,6 +200,9 @@ export type BlockRow = {
   sending?: boolean;
   /** The last time it was sent for this country, and how that went. */
   last_send?: { at: string; ok: boolean; status_code: number | null } | null;
+  /** Its statuses come from a check without a SERP (the Blocks tab's timer
+   *  or its "Check now"), so it may stand nowhere. */
+  direct?: boolean;
 };
 /** The Overview: what did not pass in a chosen period — each domain by its
  *  newest check inside that period. The period is about when the proxies
@@ -280,6 +283,28 @@ export type ProjectProxyChecker = {
   /** Country → how many of those the SERPs showed; the rest ride along. */
   preview_found: Record<string, number>;
   deliveries: ToolDelivery[];
+};
+
+/** Checking chosen domains for blocks every `hours`, without a SERP. */
+export type DirectCheck = {
+  enabled: boolean;
+  hours: number;
+  /** The intervals offered, in hours. */
+  hours_choices: number[];
+  project_domains: string[];
+  /** Which are checked. null = all of them, also ones added later. */
+  domains: string[] | null;
+  /** The project's GEOs, or — `geos_set` false — the countries its jobs
+   *  check, standing in until they are set. */
+  project_geos: string[];
+  geos_set: boolean;
+  /** Which of them are checked. null = all, also ones added later. */
+  geos: string[] | null;
+  /** Domain → its AMP domain(s) of the day, which go with it. */
+  amp: Record<string, string[]>;
+  next_run: string | null;
+  last_at: string | null;
+  connected: boolean;
 };
 
 /** The project's GEOs: ISO country codes. */
@@ -1021,6 +1046,16 @@ export const api = {
     req<ProjectProxyChecker>(`/projects/${id}/proxy-checker`, { method: "PUT", body: JSON.stringify(body) }),
   sendProjectProxyChecker: (id: number) =>
     req<ProjectProxyChecker & { sent: ToolDelivery[] }>(`/projects/${id}/proxy-checker/send`, { method: "POST" }),
+  getDirectCheck: (id: number) => req<DirectCheck>(`/projects/${id}/direct-check`),
+  saveDirectCheck: (
+    id: number, body: { enabled: boolean; hours: number; domains: string[] | null; geos: string[] | null },
+  ) =>
+    req<DirectCheck>(`/projects/${id}/direct-check`, { method: "PUT", body: JSON.stringify(body) }),
+  /** Check these domains in these GEOs once, now (null = all), whatever the timer. */
+  runDirectCheck: (id: number, domains: string[] | null, geos: string[] | null) =>
+    req<DirectCheck & { sent: ToolDelivery[] }>(`/projects/${id}/direct-check/run`, {
+      method: "POST", body: JSON.stringify({ domains, geos }),
+    }),
   checkLocations: (providers: string[], locations: LocationRef[]) =>
     req<LocationCheck[]>("/lookup/locations/check", {
       method: "POST", body: JSON.stringify({ providers, locations }),
