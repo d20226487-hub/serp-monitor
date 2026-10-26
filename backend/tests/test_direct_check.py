@@ -201,7 +201,7 @@ class TestCheckNow:
         calls = []
         monkeypatch.setattr(tools, "direct_check_next_run", lambda project_id: None)
         monkeypatch.setattr(pc, "connection", lambda: {"url": "https://checker.invalid/api", "token": "t" * 12})
-        monkeypatch.setattr(pc, "direct_check", lambda project_id, trigger, domains, geos:
+        monkeypatch.setattr(pc, "direct_check", lambda project_id, trigger, domains, geos, exclusive=False:
                             calls.append((trigger, domains, geos)) or [])
         return calls
 

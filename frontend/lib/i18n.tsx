@@ -940,6 +940,10 @@ melbet	kz	34	20,000	0.45`,
         direct: "on the timer, without a SERP", direct_manual: "by hand, without a SERP",
       } as Record<string, string>,
       accepted: "accepted",
+      sendingNow: (trigger: string, done: number, total: number, when: string) =>
+        `Sending to the Proxy Checker now (${trigger}): ${done} of ${total} GEOs done \u00b7 started ${when}. It goes on even if this page is closed or refreshed; each GEO\u2019s answer is saved as soon as it arrives.`,
+      sendingBusy: "Wait for the send that is running to finish.",
+      sendingDone: "The send has finished.",
       refused: (code: number | null) => (code ? `refused \u00b7 HTTP ${code}` : "no answer"),
       exchange: {
         show: "curl and raw answer",
@@ -2446,6 +2450,10 @@ melbet	kz	34	20 000	0,45`,
         copied: "Скопировано",
       },
       accepted: "принято",
+      sendingNow: (trigger: string, done: number, total: number, when: string) =>
+        `Идёт отправка в Proxy Checker (${trigger}): готово ${done} из ${total} GEO · начата в ${when}. Она продолжится, даже если закрыть или обновить страницу; ответ по каждому GEO сохраняется сразу, как пришёл.`,
+      sendingBusy: "Дождитесь окончания идущей отправки.",
+      sendingDone: "Отправка завершена.",
       refused: (code: number | null) => (code ? `отклонено · HTTP ${code}` : "нет ответа"),
     },
     blocks: {

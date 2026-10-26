@@ -259,6 +259,16 @@ export type ProxyCheckerConnection = {
   deliveries: ToolDelivery[];
 };
 
+/** A send to the Proxy Checker running now on the server. It goes on whether
+ *  or not the page that started it is still open. */
+export type SendInProgress = {
+  trigger: string;
+  started_at: string;
+  geos: string[];
+  /** How many of `geos` are finished — and already saved. */
+  done: number;
+};
+
 /** One project's Proxy Checker schedule. `time` is HH:MM in UTC. */
 export type ProjectProxyChecker = {
   mode: ProxyCheckerMode;
@@ -283,6 +293,8 @@ export type ProjectProxyChecker = {
   /** Country → how many of those the SERPs showed; the rest ride along. */
   preview_found: Record<string, number>;
   deliveries: ToolDelivery[];
+  /** The project's sends running now, of any kind. */
+  sending: SendInProgress[];
 };
 
 /** Checking chosen domains for blocks every `hours`, without a SERP. */
@@ -305,6 +317,8 @@ export type DirectCheck = {
   next_run: string | null;
   last_at: string | null;
   connected: boolean;
+  /** The project's sends running now, of any kind. */
+  sending: SendInProgress[];
 };
 
 /** The project's GEOs: ISO country codes. */

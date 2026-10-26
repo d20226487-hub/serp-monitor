@@ -5,6 +5,7 @@ import { api, DirectCheck } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { Button, Callout, Card, Pill, SectionTitle, Switch, serverTime } from "@/components/ui";
 import { Icon } from "@/components/icons";
+import { SendingNote, useWhileSending } from "@/components/proxy-checker";
 
 /**
  * Checking chosen domains for blocks on a timer, whether or not any SERP was
@@ -67,6 +68,11 @@ export function DirectCheckCard({ projectId, reloadKey = 0, onChanged }: {
   useEffect(() => {
     api.getDirectCheck(projectId).then(take).catch(e => setErr(e?.message ?? String(e)));
   }, [projectId, reloadKey]);
+  useWhileSending(
+    data?.sending,
+    () => api.getDirectCheck(projectId).then(setData),
+    () => { setMsg(t.tools.proxyChecker.sendingDone); onChanged?.(); },
+  );
 
   if (!data) return err ? <Callout tone="bad" icon="alert">{err}</Callout> : null;
 
@@ -239,9 +245,10 @@ export function DirectCheckCard({ projectId, reloadKey = 0, onChanged }: {
           <Button variant="primary" size="sm" disabled={busy || !dirty} onClick={save}>{t.common.save}</Button>
           <Button
             size="sm"
-            disabled={busy || !data.connected || checking.length === 0 || checkingGeos.length === 0}
+            disabled={busy || !data.connected || checking.length === 0 || checkingGeos.length === 0
+              || data.sending.length > 0}
             onClick={checkNow}
-            title={x.checkNowHint}
+            title={data.sending.length > 0 ? t.tools.proxyChecker.sendingBusy : x.checkNowHint}
           >
             <Icon name="play" className="h-3.5 w-3.5" />
             {busy ? x.checking : x.checkNow}
@@ -259,6 +266,7 @@ export function DirectCheckCard({ projectId, reloadKey = 0, onChanged }: {
             <Link href="/settings#tools" className="underline underline-offset-2">{p.connectLink}</Link>
           </p>
         )}
+        <SendingNote sending={data.sending} />
         {err && <Callout tone="bad" icon="alert">{err}</Callout>}
       </div>
     </Card>

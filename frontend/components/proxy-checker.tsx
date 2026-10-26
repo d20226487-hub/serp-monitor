@@ -1,8 +1,8 @@
 "use client";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  api, ProjectProxyChecker, ProxyCheckerConnection, ProxyCheckerMode, ToolDelivery,
+  api, ProjectProxyChecker, ProxyCheckerConnection, ProxyCheckerMode, SendInProgress, ToolDelivery,
 } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { Button, Callout, Card, Empty, Pill, SectionTitle, inputClass } from "@/components/ui";
@@ -378,6 +378,47 @@ export function ProxyCheckerSettings({ onError }: { onError: (msg: string | null
 /* A project's page                                                     */
 /* ------------------------------------------------------------------ */
 
+/**
+ * A send runs to its end on the server whether or not the page that started it
+ * is still open (user, 2026-10-26: "What happens if I press the button
+ * Отправить сейчас and refresh … yes, do all three"). While one of the
+ * project's runs, the card says so, reads itself again every few seconds —
+ * only the data, so what is being edited stays — and keeps its send button off.
+ */
+export function useWhileSending(
+  sending: SendInProgress[] | undefined, refresh: () => Promise<unknown>, onFinished: () => void,
+) {
+  const running = (sending?.length ?? 0) > 0;
+  const wasRunning = useRef(false);
+  useEffect(() => {
+    if (wasRunning.current && !running) onFinished();
+    wasRunning.current = running;
+    if (!running) return;
+    const timer = setTimeout(() => { refresh().catch(() => {}); }, 4000);
+    return () => clearTimeout(timer);
+    // Each answer is a new list, which sets the next read.
+  }, [sending]);
+}
+
+/** "Sending now: 1 of 2 GEOs done · started 12:03", one line per running send. */
+export function SendingNote({ sending }: { sending: SendInProgress[] }) {
+  const { t } = useT();
+  const s = t.tools.proxyChecker;
+  if (sending.length === 0) return null;
+  return (
+    <Callout tone="info" icon="refresh">
+      {sending.map((x, i) => (
+        <p key={i}>
+          {s.sendingNow(
+            s.trigger[x.trigger] ?? x.trigger, x.done, x.geos.length,
+            serverTime(x.started_at)?.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) ?? "",
+          )}
+        </p>
+      ))}
+    </Callout>
+  );
+}
+
 export function ProjectProxyCheckerCard({ projectId, reloadKey = 0, onChanged }: {
   projectId: number;
   /** Bumped by the page when the project's GEOs were saved: the choice below
@@ -415,6 +456,11 @@ export function ProjectProxyCheckerCard({ projectId, reloadKey = 0, onChanged }:
   useEffect(() => {
     api.getProjectProxyChecker(projectId).then(take).catch(e => setErr(e?.message ?? String(e)));
   }, [projectId, reloadKey]);
+  useWhileSending(
+    data?.sending,
+    () => api.getProjectProxyChecker(projectId).then(setData),
+    () => { setMsg(s.sendingDone); onChanged?.(); },
+  );
 
   async function save() {
     if (!data) return;
@@ -578,15 +624,16 @@ export function ProjectProxyCheckerCard({ projectId, reloadKey = 0, onChanged }:
 
         <div className="flex flex-wrap items-center gap-2">
           <Button
-            disabled={busy || !data.connected || geos.length === 0 || dirty}
+            disabled={busy || !data.connected || geos.length === 0 || dirty || data.sending.length > 0}
             onClick={sendNow}
-            title={dirty ? p.saveFirst : p.sendNowHint(data.window_hours)}
+            title={data.sending.length > 0 ? s.sendingBusy : dirty ? p.saveFirst : p.sendNowHint(data.window_hours)}
           >
             <Icon name="play" className="h-3.5 w-3.5" />
             {busy ? p.sending : p.sendNow}
           </Button>
           {msg && <span className="text-sm text-slate-700 dark:text-slate-300">{msg}</span>}
         </div>
+        <SendingNote sending={data.sending} />
         {err && <Callout tone="bad" icon="alert">{err}</Callout>}
 
         {/* Folded: the line beside the button already says how the send went;

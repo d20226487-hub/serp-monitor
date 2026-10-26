@@ -36,7 +36,16 @@ One request per country:
   choice). A "Send now" on the project page sends the last 24 hours at any
   time, whatever the mode.
 * Every request made is kept in tool_deliveries: what went, where, and what
-  came back — an integration that fails silently is worse than none. Kept in
+  came back — an integration that fails silently is worse than none. Each
+  country's request and answer are saved as soon as that country is done:
+  a send can take minutes per country, and an app stopped half-way must not
+  lose the answers it already has.
+* A send runs to its end on the server whoever is still waiting for it — a
+  page refreshed after "Send now" does not stop it. While it runs it is in
+  `in_progress` (this process's memory: a restart ends the send as well), so
+  the page can say so after a refresh, and a second press for the same
+  project is refused (Busy) instead of sending everything twice (user,
+  2026-10-26, on what a refresh does: "yes, do all three"). Kept in
   full: the request as it went out (shown as a curl command, the token
   replaced by a mark) and the answer as it was received — status line,
   headers, body. "Refused, HTTP 403" alone cannot be acted on; the headers
@@ -97,10 +106,13 @@ entered there, and until both are nothing is sent.
 """
 from __future__ import annotations
 
+import itertools
 import json
 import logging
+import threading
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
-from typing import NamedTuple
+from typing import Iterator, NamedTuple
 
 import httpx
 from sqlalchemy import or_
@@ -560,11 +572,51 @@ def send_one(url: str, token: str, geo: str, domains: list[str],
             client.close()
 
 
+class Busy(Exception):
+    """A send for this project is already running."""
+
+
+#: The sends running now, by a number of their own: {"project_id", "trigger",
+#: "started_at" (naive UTC), "geos", "done"}.
+_RUNNING: dict[int, dict] = {}
+_RUNNING_LOCK = threading.Lock()
+_NUMBERS = itertools.count(1)
+
+
+@contextmanager
+def _sending(project_id: int, trigger: str, geos: list[str], *, exclusive: bool) -> Iterator[dict]:
+    """Mark a send of the project as running for as long as it runs.
+    `exclusive`: refuse (Busy) if one of the project's is running already."""
+    with _RUNNING_LOCK:
+        if exclusive and any(e["project_id"] == project_id for e in _RUNNING.values()):
+            raise Busy(project_id)
+        number = next(_NUMBERS)
+        entry = {"project_id": project_id, "trigger": trigger, "geos": list(geos), "done": 0,
+                 "started_at": datetime.now(timezone.utc).replace(tzinfo=None)}
+        _RUNNING[number] = entry
+    try:
+        yield entry
+    finally:
+        with _RUNNING_LOCK:
+            _RUNNING.pop(number, None)
+
+
+def in_progress(project_id: int) -> list[dict]:
+    """The project's sends running now, oldest first: {"trigger", "started_at",
+    "geos", "done"} — `done` = how many of those countries are finished."""
+    with _RUNNING_LOCK:
+        entries = [dict(e) for _, e in sorted(_RUNNING.items()) if e["project_id"] == project_id]
+    return [{k: e[k] for k in ("trigger", "started_at", "geos", "done")} for e in entries]
+
+
 def deliver(db: Session, project: Project, by_geo: dict[str, list[str]], *, trigger: str,
-            run_id: int | None = None, client: httpx.Client | None = None) -> list[ToolDelivery]:
-    """One request per country, each recorded. Nothing is sent, and nothing
-    recorded, when the connection is incomplete (no address or no token) or
-    nothing was found."""
+            run_id: int | None = None, client: httpx.Client | None = None,
+            exclusive: bool = False) -> list[ToolDelivery]:
+    """One request per country, each recorded — and saved — as soon as its
+    answer is in. Nothing is sent, and nothing recorded, when the connection
+    is incomplete (no address or no token) or nothing was found.
+    `exclusive`: refuse (Busy) while another send of the project is running —
+    a press of a button; the automatic sends are never refused."""
     conn = connection()
     if not conn["url"] or not conn["token"] or not by_geo:
         return []
@@ -573,21 +625,24 @@ def deliver(db: Session, project: Project, by_geo: dict[str, list[str]], *, trig
     parents = amp_parents(db, project)
     wait = timeout_minutes()
     out = []
-    for geo, domains in by_geo.items():
-        sent = send_one(conn["url"], conn["token"], geo, domains, client, wait_minutes=wait)
-        row = ToolDelivery(tool=TOOL, project_id=project.id, run_id=run_id, trigger=trigger, geo=geo,
-                           domains=domains, ok=sent.ok, status_code=sent.status_code, response=sent.excerpt,
-                           request=sent.request, response_raw=sent.raw)
-        db.add(row)
-        out.append(row)
-        if sent.ok and sent.data is not None:
-            db.flush()               # the row's id, for the statuses to point back at
-            record_statuses(db, geo, domains, sent.data, row.id, project_id=project.id,
-                            amp_parents={d: parents[d] for d in domains if d in parents})
-        if not sent.ok:
-            log.warning("proxy checker refused %s for project %s: %s %s",
-                        geo, project.id, sent.status_code, sent.excerpt[:120])
-    db.commit()
+    with _sending(project.id, trigger, list(by_geo), exclusive=exclusive) as progress:
+        for geo, domains in by_geo.items():
+            sent = send_one(conn["url"], conn["token"], geo, domains, client, wait_minutes=wait)
+            row = ToolDelivery(tool=TOOL, project_id=project.id, run_id=run_id, trigger=trigger, geo=geo,
+                               domains=domains, ok=sent.ok, status_code=sent.status_code, response=sent.excerpt,
+                               request=sent.request, response_raw=sent.raw)
+            db.add(row)
+            out.append(row)
+            if sent.ok and sent.data is not None:
+                db.flush()               # the row's id, for the statuses to point back at
+                record_statuses(db, geo, domains, sent.data, row.id, project_id=project.id,
+                                amp_parents={d: parents[d] for d in domains if d in parents})
+            if not sent.ok:
+                log.warning("proxy checker refused %s for project %s: %s %s",
+                            geo, project.id, sent.status_code, sent.excerpt[:120])
+            # This country is done: saved now, not when the last one is.
+            db.commit()
+            progress["done"] += 1
     return out
 
 
@@ -610,15 +665,16 @@ def after_run(run_id: int) -> None:
         db.close()
 
 
-def send_recent(project_id: int, trigger: str) -> list[ToolDelivery]:
+def send_recent(project_id: int, trigger: str, *, exclusive: bool = False) -> list[ToolDelivery]:
     """Everything the project's checks found in the last WINDOW_HOURS — the
-    daily send and the project page's "Send now"."""
+    daily send and the project page's "Send now" (`exclusive`: see deliver)."""
     db = SessionLocal()
     try:
         project = db.get(Project, project_id)
         if project is None:
             return []
-        rows = deliver(db, project, to_send(db, project, since=recent_window()), trigger=trigger)
+        rows = deliver(db, project, to_send(db, project, since=recent_window()), trigger=trigger,
+                       exclusive=exclusive)
         for r in rows:
             db.refresh(r)
             db.expunge(r)
@@ -678,15 +734,17 @@ def direct_to_send(db: Session, project: Project, domains: list[str] | None = ..
 
 
 def direct_check(project_id: int, trigger: str = "direct", domains: list[str] | None = ...,
-                 geos: list[str] | None = ...) -> list[ToolDelivery]:
+                 geos: list[str] | None = ..., *, exclusive: bool = False) -> list[ToolDelivery]:
     """Send the project's chosen domains for its chosen GEOs now — the timer's
-    choice, or the ones given ("Check now" sends what the page shows)."""
+    choice, or the ones given ("Check now" sends what the page shows).
+    `exclusive`: see deliver."""
     db = SessionLocal()
     try:
         project = db.get(Project, project_id)
         if project is None:
             return []
-        rows = deliver(db, project, direct_to_send(db, project, domains, geos), trigger=trigger)
+        rows = deliver(db, project, direct_to_send(db, project, domains, geos), trigger=trigger,
+                       exclusive=exclusive)
         for r in rows:
             db.refresh(r)
             db.expunge(r)

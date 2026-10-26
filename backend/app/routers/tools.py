@@ -167,7 +167,13 @@ def _project_state(db: Session, project: Project) -> dict:
         # How many of them the SERPs showed; the rest ride along.
         "preview_found": {geo: len(domains) for geo, domains in found.items()},
         "deliveries": _recent(db, project.id),
+        # The project's sends running now (see proxy_checker.in_progress).
+        "sending": pc.in_progress(project.id),
     }
+
+
+#: Said when a button is pressed while a send of the project is running.
+BUSY = "A send to the Proxy Checker for this project is already running: wait for it to finish."
 
 
 @router.get("/lookup/countries")
@@ -240,7 +246,10 @@ async def send_project_now(project_id: int, db: Session = Depends(get_db)):
     if not pc.connection_status()["connected"]:
         raise HTTPException(
             409, "The Proxy Checker is not connected: add its address and token in Settings → Tools Connection.")
-    sent = await run_in_threadpool(pc.send_recent, project.id, "manual")
+    try:
+        sent = await run_in_threadpool(lambda: pc.send_recent(project.id, "manual", exclusive=True))
+    except pc.Busy:
+        raise HTTPException(409, BUSY)
     return {"sent": [_delivery(d) for d in sent], **_project_state(db, project)}
 
 
@@ -284,6 +293,8 @@ def _direct_state(db: Session, project: Project) -> dict:
         "next_run": direct_check_next_run(project.id) if project.direct_check_enabled else None,
         "last_at": last[0] if last else None,
         "connected": pc.connection_status()["connected"],
+        # The project's sends running now, of any kind: one press at a time.
+        "sending": pc.in_progress(project.id),
     }
 
 
@@ -353,7 +364,11 @@ async def run_direct_check(project_id: int, payload: DirectCheckRunIn | None = N
         _unknown_domains(project, domains)
     if geos is not None:
         geos = _known_geos(db, project, geos)
-    sent = await run_in_threadpool(pc.direct_check, project.id, "direct_manual", domains, geos)
+    try:
+        sent = await run_in_threadpool(
+            lambda: pc.direct_check(project.id, "direct_manual", domains, geos, exclusive=True))
+    except pc.Busy:
+        raise HTTPException(409, BUSY)
     db.expire_all()
     return {"sent": [_delivery(d) for d in sent], **_direct_state(db, project)}
 
