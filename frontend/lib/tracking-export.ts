@@ -9,7 +9,7 @@
 // a decimal comma in Russian, "," and a point in English.
 
 import type { TrackingRow, TrackingSerp } from "@/lib/api";
-import { ChangeKind, Compare, bandStart, changeOf, spanOf, visible } from "@/lib/position-tracking";
+import { ChangeKind, Compare, NO_CLUSTER, bandStart, changeOf, spanOf, visible } from "@/lib/position-tracking";
 
 export { bandStart };
 
@@ -30,9 +30,12 @@ export type ExportChoice = {
   serps: string[] | null;
   bands: Band[] | null;
   changes: ChangeKind[] | null;
+  /** Clusters (NO_CLUSTER: none) — user, 2026-10-29: "Add the cluster
+   *  selection in the export as well". */
+  clusters: string[] | null;
 };
 
-export const EVERYTHING: ExportChoice = { serps: null, bands: null, changes: null };
+export const EVERYTHING: ExportChoice = { serps: null, bands: null, changes: null, clusters: null };
 
 /** The rows a choice keeps: every row the table can show under the comparison
  *  in use — whatever the table's own filters are — narrowed by the choice. */
@@ -47,6 +50,7 @@ export function exportRows(
       if (band === null || !choice.bands.includes(band)) return false;
     }
     if (choice.changes && !choice.changes.includes(changeOf(r, compare).kind)) return false;
+    if (choice.clusters && !choice.clusters.includes(r.cluster ?? NO_CLUSTER)) return false;
     return true;
   });
 }
@@ -54,6 +58,9 @@ export function exportRows(
 /** The words the file is written with — the page's language. */
 export type CsvWords = {
   head: string[];
+  /** The cluster column's title — given only for a project with clusters:
+   *  the column then follows the keyword. */
+  clusterHead?: string;
   engine: (engine: string) => string;
   kind: (kind: ChangeKind) => string;
 };
@@ -79,6 +86,7 @@ export function trackingTable(
     const point = compare === "check" ? r.previous_check : r.previous_period;
     return [
       r.keyword,
+      ...(words.clusterHead !== undefined ? [r.cluster ?? ""] : []),
       r.url,
       r.domain,
       (serp?.country_code ?? "").toUpperCase(),
@@ -93,7 +101,10 @@ export function trackingTable(
       words.kind(change.kind),
     ];
   });
-  return [words.head, ...body];
+  const head = words.clusterHead !== undefined
+    ? [words.head[0], words.clusterHead, ...words.head.slice(1)]
+    : words.head;
+  return [head, ...body];
 }
 
 /** CSV text as Excel reads it in either language. */

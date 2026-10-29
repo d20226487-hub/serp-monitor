@@ -60,6 +60,12 @@ class Project(Base):
     proxy_checker_mode: Mapped[str] = mapped_column(String(16), default="inherit")
     #: For "daily": HH:MM in UTC (the scheduler's clock).
     proxy_checker_time: Mapped[str | None] = mapped_column(String(5), nullable=True)
+    # Each keyword's cluster, by the keyword in lower case without surrounding
+    # spaces (user, 2026-10-29: "let the user add the cluster next to the
+    # keyword (keyword, cluster)"). On the project, not in the jobs: a job's
+    # keywords are plain strings, and a keyword in two jobs is one keyword of
+    # the project. NULL / empty: the project has no clusters.
+    keyword_clusters: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # Chosen domains sent to the Proxy Checker on a timer, whether or not any
     # SERP showed them (see proxy_checker.direct_to_send). Off until switched
     # on, on the project's Blocks tab.

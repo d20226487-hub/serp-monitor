@@ -791,13 +791,21 @@ def distribution(positions: Iterable[int]) -> dict[str, int]:
 
 def page_url(url: str | None) -> str:
     """One spelling per page: providers write a site's front page both as
-    "https://example.kz" and "https://example.kz/", and the host in either
-    case — eleven pages here came in two spellings, each a row of its own."""
-    raw = (url or "").strip()
+    "https://example.kz" and "https://example.kz/" — eleven pages here came in
+    two spellings, each a row of its own — and letter case does not make
+    another page either (user, 2026-10-29: "lower and upper cases should be
+    counted as one")."""
+    raw = (url or "").strip().lower()
     parts = urlsplit(raw)
     if not parts.scheme or not parts.netloc:
         return raw
-    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), parts.path or "/", parts.query, ""))
+    return urlunsplit((parts.scheme, parts.netloc, parts.path or "/", parts.query, ""))
+
+
+def keyword_key(keyword: str) -> str:
+    """A keyword as Position Tracking tells keywords apart: without regard to
+    letter case or surrounding spaces, as the project's keywords are listed."""
+    return keyword.strip().lower()
 
 
 def _serp_key_text(serp_key: tuple) -> str:
@@ -824,19 +832,38 @@ def project_position_tracking(
     with_prev = p_from is not None and p_to is not None
     in_period = [r for r in full.runs if since is None or r.started_at >= since]
     project = {"id": full.project.id, "name": full.project.name, "domains": full.domains}
+    project_clusters = sorted({c for c in (full.project.keyword_clusters or {}).values() if c}, key=str.lower)
     empty = {"project": project, "thresholds": list(TOP_N), "has_previous_period": False,
-             "serps": [], "rows": []}
+             "has_clusters": bool(project_clusters), "clusters": project_clusters, "serps": [], "rows": []}
     if not in_period:
         return empty
 
     def when(run_id: int) -> datetime:
         return full.run_by_id[run_id].started_at
 
+    # A keyword in two letter cases is one keyword (user, 2026-10-29: "lower
+    # and upper cases should be counted as one"), named as its latest check
+    # spelled it. Should one run hold both spellings, the page of the one met
+    # first stands for it, so no position is counted twice.
+    spelling: dict[tuple, tuple[datetime, str]] = {}
+    page_of: dict[tuple[tuple, int], str] = {}
+
+    def one_key(key: tuple, run_id: int) -> tuple:
+        norm = (keyword_key(key[0]), *key[1:])
+        page_of.setdefault((norm, run_id), key[0])
+        seen = spelling.get(norm)
+        if seen is None or when(run_id) > seen[0]:
+            spelling[norm] = (when(run_id), key[0])
+        return norm
+
     # Which runs measured each (keyword, SERP) in the period, oldest first,
     # and how deep each went.
     checks: dict[tuple, list[int]] = {}
     depth_of: dict[tuple[tuple, int], int] = {}
-    for key, run_id, depth, _slots in _coverage(db, {r.id for r in in_period}):
+    for raw_key, run_id, depth, _slots in _coverage(db, {r.id for r in in_period}):
+        key = one_key(raw_key, run_id)
+        if page_of[(key, run_id)] != raw_key[0]:
+            continue
         checks.setdefault(key, []).append(run_id)
         depth_of[(key, run_id)] = depth
     if not checks:
@@ -860,9 +887,11 @@ def project_position_tracking(
     for i in range(0, len(earlier), _LOOKBACK_RUNS):
         batch = earlier[i:i + _LOOKBACK_RUNS]
         found = sorted(_coverage(db, {r.id for r in batch}), key=lambda c: when(c[1]), reverse=True)
-        for key, run_id, _depth, _slots in found:
-            if key not in checks:
+        for raw_key, run_id, _depth, _slots in found:
+            norm = (keyword_key(raw_key[0]), *raw_key[1:])
+            if norm not in checks:
                 continue
+            key = one_key(raw_key, run_id)
             previous.setdefault(key, run_id)
             if with_prev and p_from <= when(run_id) < p_to:
                 in_prev.setdefault(key, run_id)
@@ -876,9 +905,13 @@ def project_position_tracking(
     # Every slot of the project's on every page read: (key, run) →
     # [(position, url, domain, amp_of)].
     on_page: dict[tuple, list[tuple]] = {}
-    for (*key, _host, run_id), cell in cells.items():
+    for (*raw_key, _host, run_id), cell in cells.items():
+        key = (keyword_key(raw_key[0]), *raw_key[1:])
+        # Only the page that stands for the keyword in that run.
+        if page_of.get((key, run_id), raw_key[0]) != raw_key[0]:
+            continue
         for position, url in cell["slots"]:
-            on_page.setdefault((tuple(key), run_id), []).append(
+            on_page.setdefault((key, run_id), []).append(
                 (position, page_url(url), cell["domain"], cell["amp_of"]))
 
     def at(key: tuple, run_id: int | None) -> dict[str, int]:
@@ -924,7 +957,7 @@ def project_position_tracking(
         # and so on"). `had_*` false: the keyword had no such check; a null
         # place: none of the project's was on that page.
         entry["keywords_best"].append({
-            "keyword": key[0],
+            "keyword": spelling[key][1],
             "now": best_on(key, latest),
             "had_check": key in previous,
             "check": best_on(key, previous.get(key)),
@@ -943,9 +976,11 @@ def project_position_tracking(
         entry["before_check"] = distribution(at_check) if entry.pop("_has_check") else None
 
     # --- a row per URL --------------------------------------------------------
+    # Each keyword's cluster, when the project gives it one.
+    clusters = {k: c for k, c in (full.project.keyword_clusters or {}).items() if c}
     rows = []
     for key, runs in checks.items():
-        keyword, serp_key = key[0], key[1:]
+        keyword, serp_key = spelling[key][1], key[1:]
         readings_by_run = {run_id: at(key, run_id) for run_id in runs}
         prev_check = at(key, previous.get(key))
         prev_period = at(key, in_prev.get(key))
@@ -963,6 +998,7 @@ def project_position_tracking(
             rows.append({
                 "serp": _serp_key_text(serp_key),
                 "keyword": keyword,
+                "cluster": clusters.get(key[0]),
                 "url": url,
                 "domain": domain,
                 "amp_of": amp_of,
@@ -989,6 +1025,12 @@ def project_position_tracking(
         "project": project,
         "thresholds": list(TOP_N),
         "has_previous_period": bool(in_prev),
+        # The cluster column, filter and export choice are shown for a project
+        # that has clusters (user, 2026-10-29: "If the project does not have
+        # clusters, do not display this cluster column") — whether or not its
+        # clustered keywords were checked in this period.
+        "has_clusters": bool(clusters),
+        "clusters": sorted(set(clusters.values()), key=str.lower),
         "serps": _ordered(serps),
         "rows": rows,
     }

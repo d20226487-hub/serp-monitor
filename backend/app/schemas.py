@@ -47,6 +47,8 @@ class ProjectOut(ProjectBase):
     keyword_count: int = 0
     geos: list[str] = Field(default_factory=list)
     engines: list[str] = Field(default_factory=list)
+    #: Keyword (lower case, trimmed) → its cluster.
+    keyword_clusters: dict[str, str] = Field(default_factory=dict)
 
     @field_validator("domains", mode="before")
     @classmethod

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TrackingRow, TrackingSerp } from "@/lib/api";
-import { NO_FILTERS, bandCount, bandStart, changeOf, spanOf, dropped, droppedKeywords, keep, serpExtras, sorted, visible } from "@/lib/position-tracking";
+import { NO_CLUSTER, NO_FILTERS, bandCount, bandStart, changeOf, isFilters, spanOf, dropped, droppedKeywords, keep, serpExtras, sorted, visible } from "@/lib/position-tracking";
 
 const SERP: TrackingSerp = {
   engine: "google", device: "mobile", country_code: "kz", language: "ru", location: "Almaty,Almaty,Kazakhstan",
@@ -9,7 +9,7 @@ const SERP: TrackingSerp = {
 
 function row(over: Partial<TrackingRow>): TrackingRow {
   return {
-    serp: "kz", keyword: "casino", url: "https://site-one.example/", domain: "site-one.example", amp_of: null,
+    serp: "kz", keyword: "casino", cluster: null, url: "https://site-one.example/", domain: "site-one.example", amp_of: null,
     position: 3, checked_at: "2026-10-29T07:00:00", best: 3, average: 3, position_sum: 3, checks: 1, ranked_in: 1, readings: [],
     previous_check: null, previous_period: null, ...over,
   };
@@ -58,6 +58,17 @@ describe("which rows show", () => {
     expect(keep(r, SERP, { ...NO_FILTERS, query: "CASI" })).toBe(true);
     expect(keep(r, SERP, { ...NO_FILTERS, query: "site-one" })).toBe(true);
     expect(keep(r, SERP, { ...NO_FILTERS, query: "bonus" })).toBe(false);
+  });
+
+  it("by cluster, and a keyword without one", () => {
+    const branded = row({ cluster: "Brand" });
+    const plain = row({ cluster: null });
+    expect([keep(branded, SERP, { ...NO_FILTERS, clusters: ["Brand"] }), keep(plain, SERP, { ...NO_FILTERS, clusters: ["Brand"] })])
+      .toEqual([true, false]);
+    expect(keep(plain, SERP, { ...NO_FILTERS, clusters: [NO_CLUSTER] })).toBe(true);
+    // Filters stored before there were clusters are still good.
+    const { clusters: _none, ...old } = NO_FILTERS;
+    expect(isFilters(old)).toBe(true);
   });
 });
 

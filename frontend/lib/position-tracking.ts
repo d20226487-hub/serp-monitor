@@ -77,6 +77,9 @@ export function visible(row: TrackingRow, compare: Compare): boolean {
   return !!point && point.position !== null;
 }
 
+/** Stands for "no cluster" among the clusters picked. */
+export const NO_CLUSTER = "";
+
 export type Filters = {
   engine: string;          // "all" or an engine
   geo: string;             // "all" or a country code, upper-case
@@ -84,9 +87,15 @@ export type Filters = {
   change: ChangeKind | "all";
   compare: Compare;
   query: string;           // in the keyword or the URL
+  /** The clusters to show (NO_CLUSTER for keywords without one); null or
+   *  absent = all of them (user, 2026-10-29: "add the filter to select the
+   *  cluster or clusters"). */
+  clusters?: string[] | null;
 };
 
-export const NO_FILTERS: Filters = { engine: "all", geo: "all", top: "all", change: "all", compare: "check", query: "" };
+export const NO_FILTERS: Filters = {
+  engine: "all", geo: "all", top: "all", change: "all", compare: "check", query: "", clusters: null,
+};
 
 const CHANGE_KINDS: (ChangeKind | "all")[] = ["all", "up", "down", "same", "new", "lost", "none"];
 
@@ -96,7 +105,9 @@ export function isFilters(v: unknown): v is Filters {
   const f = v as Record<string, unknown>;
   return typeof f.engine === "string" && typeof f.geo === "string" && typeof f.query === "string"
     && (f.top === "all" || (typeof f.top === "number" && f.top > 0))
-    && CHANGE_KINDS.includes(f.change as ChangeKind) && (f.compare === "check" || f.compare === "period");
+    && CHANGE_KINDS.includes(f.change as ChangeKind) && (f.compare === "check" || f.compare === "period")
+    && (f.clusters === undefined || f.clusters === null
+      || (Array.isArray(f.clusters) && f.clusters.every(c => typeof c === "string")));
 }
 
 export function keep(row: TrackingRow, serp: TrackingSerp | undefined, f: Filters): boolean {
@@ -105,15 +116,16 @@ export function keep(row: TrackingRow, serp: TrackingSerp | undefined, f: Filter
   if (f.geo !== "all" && (serp?.country_code ?? "").toUpperCase() !== f.geo) return false;
   if (f.top !== "all" && (row.position === null || row.position > f.top)) return false;
   if (f.change !== "all" && changeOf(row, f.compare).kind !== f.change) return false;
+  if (f.clusters && !f.clusters.includes(row.cluster ?? NO_CLUSTER)) return false;
   const q = f.query.trim().toLowerCase();
   if (q && !row.keyword.toLowerCase().includes(q) && !row.url.toLowerCase().includes(q)) return false;
   return true;
 }
 
-export type SortColumn = "keyword" | "geo" | "engine" | "position" | "best" | "average" | "change";
+export type SortColumn = "keyword" | "cluster" | "geo" | "engine" | "position" | "best" | "average" | "change";
 export type Sort = { column: SortColumn; descending: boolean };
 
-const SORT_COLUMNS: SortColumn[] = ["keyword", "geo", "engine", "position", "best", "average", "change"];
+const SORT_COLUMNS: SortColumn[] = ["keyword", "cluster", "geo", "engine", "position", "best", "average", "change"];
 
 export function isSort(v: unknown): v is Sort {
   if (!v || typeof v !== "object") return false;
@@ -141,6 +153,8 @@ export function sorted(
   const value = (r: TrackingRow): string | number | null => {
     switch (sort.column) {
       case "keyword": return r.keyword.toLowerCase();
+      // No cluster sorts last, either way.
+      case "cluster": return r.cluster ? r.cluster.toLowerCase() : null;
       case "geo": return (serpOf(r)?.country_code ?? "").toUpperCase();
       case "engine": return serpOf(r)?.engine ?? "";
       case "position": return r.position;

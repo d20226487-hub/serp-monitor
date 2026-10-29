@@ -8,7 +8,7 @@ import { DateRange, toQuery } from "@/lib/date-range";
 import { oneOf, useSessionState } from "@/lib/session-state";
 import { TrackingExport } from "@/components/tracking-export";
 import {
-  Change, ChangeKind, Compare, Dropped, Filters, NO_FILTERS, Sort, SortColumn, bandCount, bandStart, changeOf, dropped,
+  Change, ChangeKind, Compare, Dropped, Filters, NO_CLUSTER, NO_FILTERS, Sort, SortColumn, bandCount, bandStart, changeOf, dropped,
   droppedKeywords, isFilters, isSort, keep, serpExtras, sorted, spanOf,
 } from "@/lib/position-tracking";
 
@@ -39,9 +39,12 @@ import {
 
 const PAGE = 100;
 
-/** The table's columns besides the keyword, which every row is. */
-type Column = "geo" | "engine" | "position" | "best" | "average" | "trend" | "change";
-const COLUMNS: Column[] = ["geo", "engine", "position", "best", "average", "trend", "change"];
+/** The table's columns besides the keyword, which every row is. The cluster
+ *  is one only for a project with clusters (user, 2026-10-29: "If the project
+ *  does not have clusters, do not display this cluster column. The column
+ *  should go after the keyword"). */
+type Column = "cluster" | "geo" | "engine" | "position" | "best" | "average" | "trend" | "change";
+const COLUMNS: Column[] = ["cluster", "geo", "engine", "position", "best", "average", "trend", "change"];
 /** Which of them this browser hides, per project (user, 2026-10-29, after
  *  columns hidden in one project went in the others too: "Every project is
  *  distinct"): a viewer's preference, kept for each project apart. */
@@ -50,12 +53,81 @@ const hiddenKey = (projectId: number) => `serp-monitor:project:${projectId}:trac
  *  project it was meant for, so it is dropped. */
 const OLD_HIDDEN_KEY = "serp-monitor:tracking-hidden-columns";
 
+/** The cluster filter: "All", or the clusters picked — any number of them,
+ *  "no cluster" among them (user, 2026-10-29: "add the filter to select the
+ *  cluster or clusters"). Its list is placed against the window like the
+ *  column picker's, and closes the same ways. */
+function ClusterFilter({ clusters, picked, onPick }: {
+  clusters: string[]; picked: string[] | null; onPick: (next: string[] | null) => void;
+}) {
+  const { t } = useT();
+  const x = t.positions.tracking;
+  const [at, setAt] = useState<{ top: number; left: number } | null>(null);
+  const box = useRef<HTMLSpanElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const all = [...clusters, NO_CLUSTER];
+  useEffect(() => {
+    if (!at) return;
+    const close = () => setAt(null);
+    const away = (e: MouseEvent) => { if (box.current && !box.current.contains(e.target as Node)) close(); };
+    const escape = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", escape);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("mousedown", away);
+      document.removeEventListener("keydown", escape);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [at]);
+  const toggle = (c: string) => {
+    const now = picked ?? all;
+    const next = now.includes(c) ? now.filter(v => v !== c) : [...now, c];
+    onPick(next.length === all.length ? null : next);
+  };
+  const label = picked === null ? x.all : picked.length === 1 ? (picked[0] === NO_CLUSTER ? x.noCluster : picked[0]) : x.picked(picked.length);
+  return (
+    <span ref={box} className="relative inline-flex">
+      <button
+        ref={button}
+        type="button"
+        aria-expanded={at !== null}
+        onClick={() => {
+          const r = button.current?.getBoundingClientRect();
+          setAt(at || !r ? null : { top: r.bottom + 4, left: r.left });
+        }}
+        className={`${SELECT} flex min-w-28 items-center justify-between gap-2 ${picked ? "border-sky-500 dark:border-sky-400" : ""}`}
+      >
+        <span className="max-w-40 truncate">{label}</span>
+        <Icon name="chevronDown" className="h-3 w-3" />
+      </button>
+      {at && (
+        <div
+          style={{ top: at.top, left: at.left }}
+          className="fixed z-30 max-h-72 w-56 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 text-sm text-slate-700 shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+        >
+          {all.map(c => (
+            <label key={c || "-"} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-slate-100 dark:hover:bg-slate-800">
+              <input type="checkbox" checked={picked === null || picked.includes(c)} onChange={() => toggle(c)} />
+              {c === NO_CLUSTER ? <span className="italic">{x.noCluster}</span> : c}
+            </label>
+          ))}
+          <div className="mt-1 flex gap-3 border-t px-1 pt-1.5 text-xs dark:border-slate-800">
+            <button type="button" onClick={() => onPick(null)} className="text-sky-700 hover:underline dark:text-sky-400">{x.columnsAll}</button>
+            <button type="button" onClick={() => onPick([])} className="text-sky-700 hover:underline dark:text-sky-400">{x.exportClear}</button>
+          </div>
+        </div>
+      )}
+    </span>
+  );
+}
+
 /** The gear and its list of columns, each with a checkbox. The list is placed
  *  against the window, not the table: the table scrolls sideways in a box that
  *  would cut off anything hanging below its header. Closes on a click outside
  *  it, on Escape, and when the page scrolls from under it. */
-function ColumnPicker({ hidden, onToggle, onShowAll }: {
-  hidden: Column[]; onToggle: (c: Column) => void; onShowAll: () => void;
+function ColumnPicker({ columns, hidden, onToggle, onShowAll }: {
+  columns: Column[]; hidden: Column[]; onToggle: (c: Column) => void; onShowAll: () => void;
 }) {
   const { t } = useT();
   const x = t.positions.tracking;
@@ -104,7 +176,7 @@ function ColumnPicker({ hidden, onToggle, onShowAll }: {
           className="fixed z-30 w-48 rounded-lg border border-slate-200 bg-white p-2 text-sm font-normal text-slate-700 shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
         >
           <div className="px-1 pb-1 text-xs font-medium text-slate-500 dark:text-slate-400">{x.columns}</div>
-          {COLUMNS.map(c => (
+          {columns.map(c => (
             <label key={c} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-slate-100 dark:hover:bg-slate-800">
               <input type="checkbox" checked={!hidden.includes(c)} onChange={() => onToggle(c)} />
               {x.col[c]}
@@ -292,7 +364,9 @@ export function PositionTracking({ projectId, range, previous, reloadKey = 0, pe
     } catch {}
     setHidden(next);
   }, [projectId]);
-  const show = (c: Column) => !hidden.includes(c);
+  const hasClusters = !!data?.has_clusters;
+  const columns = COLUMNS.filter(c => c !== "cluster" || hasClusters);
+  const show = (c: Column) => columns.includes(c) && !hidden.includes(c);
   function pickColumns(next: Column[]) {
     setHidden(next);
     try { localStorage.setItem(hiddenKey(projectId), JSON.stringify(next)); } catch {}
@@ -524,6 +598,16 @@ export function PositionTracking({ projectId, range, previous, reloadKey = 0, pe
                 {(["up", "down", "same", "new", "lost"] as const).map(k => <option key={k} value={k}>{x.changeKinds[k]}</option>)}
               </select>
             </label>
+            {data?.has_clusters && (
+              <div className="flex flex-col gap-1 text-xs text-slate-600 dark:text-slate-400">
+                {x.col.cluster}
+                <ClusterFilter
+                  clusters={data.clusters}
+                  picked={filters.clusters ?? null}
+                  onPick={next => set({ clusters: next })}
+                />
+              </div>
+            )}
             <label className="flex flex-col gap-1 text-xs text-slate-600 dark:text-slate-400">
               {x.compare}
               <select
@@ -572,11 +656,13 @@ export function PositionTracking({ projectId, range, previous, reloadKey = 0, pe
                     <tr>
                       {header("keyword", x.col.keyword, undefined, false, (
                         <ColumnPicker
+                          columns={columns}
                           hidden={hidden}
                           onToggle={c => pickColumns(hidden.includes(c) ? hidden.filter(h => h !== c) : [...hidden, c])}
                           onShowAll={() => pickColumns([])}
                         />
                       ))}
+                      {show("cluster") && header("cluster", x.col.cluster)}
                       {show("geo") && header("geo", x.col.geo)}
                       {show("engine") && header("engine", x.col.engine)}
                       {show("position") && header("position", x.col.position, x.positionHint, true)}
@@ -610,6 +696,7 @@ export function PositionTracking({ projectId, range, previous, reloadKey = 0, pe
                               </span>
                             )}
                           </td>
+                          {show("cluster") && <td className={TD}>{r.cluster ?? <span className="text-slate-400 dark:text-slate-600">—</span>}</td>}
                           {show("geo") && <td className={`${TD} font-mono`}>{(serp?.country_code ?? "—").toUpperCase()}</td>}
                           {show("engine") && <td className={`${TD} whitespace-nowrap`}>
                             {serp ? (

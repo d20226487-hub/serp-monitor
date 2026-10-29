@@ -424,7 +424,12 @@ export default function ProjectPage() {
         )}
 
         {/* Editable one by one, with "clear all" (user, 2026-10-20). */}
-        <ProjectKeywordsCard projectId={id} jobs={jobs} onSaved={() => setJobsVersion(v => v + 1)} />
+        <ProjectKeywordsCard
+          projectId={id}
+          jobs={jobs}
+          clusters={project?.keyword_clusters ?? {}}
+          onSaved={() => setJobsVersion(v => v + 1)}
+        />
 
         {/* Today's AMP domain of each of the project's domains, from its AMP
             Rotator. Renders nothing for a project that has none. */}
@@ -577,7 +582,8 @@ export default function ProjectPage() {
               projectId={id}
               range={range}
               previous={previous}
-              reloadKey={uploadsVersion}
+              // Keywords and their clusters saved on the Overview change it too.
+              reloadKey={uploadsVersion + jobsVersion}
               periodPicker={
                 <RangePicker preset={preset} onPreset={setPreset} from={from} onFrom={setFrom} to={to} onTo={setTo} />
               }

@@ -121,6 +121,7 @@ def _migrate_sqlite_columns() -> None:
         ("projects", "direct_check_hours", "INTEGER NOT NULL DEFAULT 24"),
         ("projects", "direct_check_domains", "JSON"),
         ("projects", "direct_check_geos", "JSON"),
+        ("projects", "keyword_clusters", "JSON"),
         ("projects", "direct_check_since", "DATETIME"),
         # The request as sent and the answer as received. NULL on sends made
         # before they were kept; the log says so for those rows.

@@ -360,6 +360,8 @@ export type Project = {
   geos: string[];
   /** Engines its jobs run on. */
   engines: string[];
+  /** Keyword (lower case, trimmed) → its cluster. */
+  keyword_clusters: Record<string, string>;
   created_at: string;
   updated_at: string;
 };
@@ -561,6 +563,8 @@ export type TrackingRow = {
   /** TrackingSerp.key */
   serp: string;
   keyword: string;
+  /** The keyword's cluster, when the project gives it one. */
+  cluster: string | null;
   url: string;
   domain: string;
   /** On an AMP domain: the project domain it is the AMP domain of. */
@@ -587,6 +591,11 @@ export type ProjectTracking = {
   project: { id: number; name: string; domains: string[] };
   thresholds: number[];
   has_previous_period: boolean;
+  /** The project has clusters: the cluster column, filter and export choice
+   *  are shown — whatever this period checked. */
+  has_clusters: boolean;
+  /** The project's cluster names, sorted. */
+  clusters: string[];
   serps: TrackingSerp[];
   rows: TrackingRow[];
 };
@@ -981,9 +990,12 @@ export const api = {
       method: "POST", body: JSON.stringify(body),
     }),
   /** Add keywords to the project's own list (or to one job of it). */
-  addProjectKeywords: (id: number, keywords: string[], jobId?: number) =>
-    req<{ added: number; job_id: number }>(`/projects/${id}/keywords/add`, {
-      method: "POST", body: JSON.stringify({ keywords, ...(jobId !== undefined ? { job_id: jobId } : {}) }),
+  /** Add keywords to the project's own list (or a job of it), and set the
+   *  clusters given: keyword → cluster, "" or null to take one away. */
+  addProjectKeywords: (id: number, keywords: string[], clusters?: Record<string, string | null>, jobId?: number) =>
+    req<{ added: number; job_id: number | null; clusters: number }>(`/projects/${id}/keywords/add`, {
+      method: "POST",
+      body: JSON.stringify({ keywords, ...(clusters ? { clusters } : {}), ...(jobId !== undefined ? { job_id: jobId } : {}) }),
     }),
   createProject: (body: { name: string; domains: string[]; notes?: string | null }) =>
     req<Project>("/projects", { method: "POST", body: JSON.stringify(body) }),

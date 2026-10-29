@@ -196,3 +196,48 @@ class TestKeywordsBest:
                                   "had_period": False, "period": None}
         # bonus: first checked on Wednesday — nothing to compare with.
         assert (best["bonus"]["now"], best["bonus"]["had_check"]) == (4, False)
+
+
+class TestClusters:
+    def test_rows_carry_their_keywords_cluster(self, db):
+        p, job = project(db)
+        p.keyword_clusters = {"casino": "Brand"}
+        db.commit()
+        run(db, job, WED, [("casino", 2, A), ("bonus", 3, A)])
+        data = track(db, p)
+        assert data["has_clusters"] is True and data["clusters"] == ["Brand"]
+        assert {r["keyword"]: r["cluster"] for r in data["rows"]} == {"casino": "Brand", "bonus": None}
+
+    def test_a_project_with_clusters_has_them_whatever_the_period_checked(self, db):
+        p, job = project(db)
+        p.keyword_clusters = {"slots": "Games", "casino": "brand"}
+        db.commit()
+        run(db, job, WED, [("bonus", 3, A)])
+        data = track(db, p)
+        assert (data["has_clusters"], data["clusters"]) == (True, ["brand", "Games"])
+        assert pp.project_position_tracking(p.id, THU.isoformat(), None, None, None, db)["has_clusters"] is True
+
+    def test_none_without_clusters(self, db):
+        p, job = project(db)
+        run(db, job, WED, [("casino", 2, A)])
+        assert track(db, p)["has_clusters"] is False
+
+
+class TestLetterCase:
+    """User, 2026-10-29: "lower and upper cases should be counted as one"."""
+
+    def test_a_url_in_two_cases_is_one_page(self):
+        assert pp.page_url("https://Site-One.example/Casino") == pp.page_url("https://site-one.example/casino")
+
+    def test_a_keyword_in_two_cases_is_one_row_named_as_its_latest_check_spelled_it(self, db):
+        p, job = project(db)
+        run(db, job, TUE, [("Casino Online", 4, A)])
+        run(db, job, WED, [("casino online", 2, A)])
+        rows = track(db, p)["rows"]
+        assert [(r["keyword"], [x["position"] for x in r["readings"]]) for r in rows] == [("casino online", [4, 2])]
+
+    def test_both_spellings_in_one_run_are_counted_once(self, db):
+        p, job = project(db)
+        run(db, job, WED, [("Casino", 2, A), ("casino", 2, A)])
+        serp = track(db, p)["serps"][0]
+        assert (serp["keywords"], serp["now"]["3"]) == (1, 1)

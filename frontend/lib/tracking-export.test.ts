@@ -11,7 +11,7 @@ const at = (position: number | null, iso = "2026-10-28T07:00:00") => ({ at: iso,
 
 function row(over: Partial<TrackingRow>): TrackingRow {
   return {
-    serp: "kz", keyword: "casino", url: "https://site-one.example/", domain: "site-one.example", amp_of: null,
+    serp: "kz", keyword: "casino", cluster: null, url: "https://site-one.example/", domain: "site-one.example", amp_of: null,
     position: 3, checked_at: "2026-10-29T07:00:00", best: 3, average: 3, position_sum: 3, checks: 1, ranked_in: 1, readings: [],
     previous_check: null, previous_period: null, ...over,
   };
@@ -44,6 +44,12 @@ describe("exportRows", () => {
     expect(keywords(exportRows(rows, { ...EVERYTHING, bands: ["none"] }, "check", TOPS))).toEqual(["c"]);
   });
 
+  it("by cluster, and keywords without one", () => {
+    const clustered = [row({ keyword: "a", cluster: "Brand" }), row({ keyword: "b", cluster: null })];
+    expect(keywords(exportRows(clustered, { ...EVERYTHING, clusters: ["Brand"] }, "check", TOPS))).toEqual(["a"]);
+    expect(keywords(exportRows(clustered, { ...EVERYTHING, clusters: [""] }, "check", TOPS))).toEqual(["b"]);
+  });
+
   it("by SERP and by change", () => {
     expect(keywords(exportRows(rows, { ...EVERYTHING, serps: ["kg"] }, "check", TOPS))).toEqual(["d"]);
     expect(keywords(exportRows(rows, { ...EVERYTHING, changes: ["up", "lost"] }, "check", TOPS))).toEqual(["b", "c"]);
@@ -72,6 +78,14 @@ describe("the file", () => {
     const [, unmatched] = trackingTable([row({})], "ru", "check", () => SERP, words);
     expect([isNew[9], isNew[10]]).toEqual(["—", "new"]);
     expect([unmatched[9], unmatched[10]]).toEqual(["", "none"]);
+  });
+
+  it("the cluster follows the keyword, only for a project with clusters", () => {
+    const [head, line] = trackingTable([row({ cluster: "Brand" })], "ru", "check", () => SERP, { ...words, clusterHead: "cluster" });
+    expect([head[0], head[1], head[2]]).toEqual(["keyword", "cluster", "url"]);
+    expect([line[0], line[1], line[2]]).toEqual(["casino", "Brand", "https://site-one.example/"]);
+    const [noHead] = trackingTable([row({ cluster: "Brand" })], "ru", "check", () => SERP, words);
+    expect(noHead[1]).toBe("url");
   });
 
   it("Excel's way in each language: BOM, the separator, quotes where needed", () => {

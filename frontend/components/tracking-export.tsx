@@ -5,7 +5,7 @@ import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { DateRange, toInputValue } from "@/lib/date-range";
-import { ChangeKind, Compare, serpExtras } from "@/lib/position-tracking";
+import { ChangeKind, Compare, NO_CLUSTER, serpExtras } from "@/lib/position-tracking";
 import {
   Band, CsvWords, EVERYTHING, ExportChoice, bandStart, exportRows, toCsv, trackingTable,
 } from "@/lib/tracking-export";
@@ -43,6 +43,10 @@ export function TrackingExport({ data, compare, order, since, range }: {
   const [serps, setSerps] = useState<string[]>(allSerps);
   const [bands, setBands] = useState<Band[]>(allBands);
   const [changes, setChanges] = useState<ChangeKind[]>(KINDS);
+  // The project's clusters and "none", when it has clusters.
+  const allClusters = useMemo(() => (data.has_clusters ? [...data.clusters, NO_CLUSTER] : []), [data]);
+  const [clusters, setClusters] = useState<string[]>(allClusters);
+  useEffect(() => { setClusters(allClusters); }, [allClusters]);
   // Another period can bring other SERPs: start from all of them again.
   useEffect(() => { setSerps(allSerps); }, [allSerps]);
 
@@ -60,6 +64,7 @@ export function TrackingExport({ data, compare, order, since, range }: {
     serps: serps.length === allSerps.length ? null : serps,
     bands: bands.length === allBands.length ? null : bands,
     changes: changes.length === KINDS.length ? null : changes,
+    clusters: !data.has_clusters || clusters.length === allClusters.length ? null : clusters,
   };
   const picked = exportRows(data.rows, choice, compare, data.thresholds);
 
@@ -67,6 +72,7 @@ export function TrackingExport({ data, compare, order, since, range }: {
   function download(rows: TrackingRow[]) {
     const words: CsvWords = {
       head: x.csvHead,
+      ...(data.has_clusters ? { clusterHead: x.col.cluster } : {}),
       engine: e => t.variantLabel[e as "google" | "yandex"] ?? e,
       kind: k => x.changeRow[k],
     };
@@ -108,7 +114,7 @@ export function TrackingExport({ data, compare, order, since, range }: {
 
       {open && (
         <div className="w-full rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className={`grid gap-4 sm:grid-cols-2 ${data.has_clusters ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
             <fieldset>
               <legend className={LEGEND}>{x.exportGeoEngine}</legend>
               <div className="space-y-1.5">
@@ -169,6 +175,19 @@ export function TrackingExport({ data, compare, order, since, range }: {
                 {x.exportCompare(compare === "check" ? x.compareCheck : `${x.comparePeriod}${since ? ` (${since})` : ""}`)}
               </p>
             </fieldset>
+            {data.has_clusters && (
+              <fieldset>
+                <legend className={LEGEND}>{x.col.cluster}</legend>
+                <div className="max-h-64 overflow-y-auto">
+                  {allClusters.map(c => (
+                    <label key={c || "-"} className={BOX}>
+                      <input type="checkbox" checked={clusters.includes(c)} onChange={() => setClusters(toggled(clusters, c))} />
+                      {c === NO_CLUSTER ? <span className="italic">{x.noCluster}</span> : c}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-3 border-t pt-3 dark:border-slate-800">
             <span className="text-sm text-slate-700 dark:text-slate-300">{x.exportCount(picked.length)}</span>
@@ -178,7 +197,7 @@ export function TrackingExport({ data, compare, order, since, range }: {
             </Button>
             <button
               type="button"
-              onClick={() => { setSerps(allSerps); setBands(allBands); setChanges(KINDS); }}
+              onClick={() => { setSerps(allSerps); setBands(allBands); setChanges(KINDS); setClusters(allClusters); }}
               className="text-xs underline underline-offset-2"
             >
               {x.exportReset}
@@ -188,7 +207,7 @@ export function TrackingExport({ data, compare, order, since, range }: {
                 all the options besides the first GEO + поисковик"). */}
             <button
               type="button"
-              onClick={() => { setSerps(geos.length ? [geos[0][1][0]] : []); setBands([]); setChanges([]); }}
+              onClick={() => { setSerps(geos.length ? [geos[0][1][0]] : []); setBands([]); setChanges([]); setClusters([]); }}
               className="text-xs underline underline-offset-2"
             >
               {x.exportClear}

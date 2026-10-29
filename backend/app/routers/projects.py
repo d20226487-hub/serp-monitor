@@ -99,6 +99,7 @@ def _out(project: Project, summary: _Summary) -> ProjectOut:
         keyword_count=summary.keywords,
         geos=summary.geos,
         engines=summary.engines,
+        keyword_clusters=dict(project.keyword_clusters or {}),
     )
 
 
@@ -208,6 +209,12 @@ def delete_project(project_id: int, db: Session = Depends(get_db)):
 # page never changes what a scraping job checks (user: "the purpose of this
 # box is just to show what keywords are tracked"). Positions already read for
 # a removed keyword stay: deleting an upload removes those.
+#
+# A keyword can carry a cluster (user, 2026-10-29: "let the user add the
+# cluster next to the keyword (keyword, cluster)"), kept on the project by the
+# keyword's key and sent with the keywords added. Adding a keyword the project
+# has already sets its cluster and nothing else; an empty cluster takes it
+# away; a removed keyword's cluster goes with it.
 
 #: The most keywords one job takes — the job form's limit too.
 MAX_KEYWORDS_PER_JOB = 1000
@@ -215,6 +222,13 @@ MAX_KEYWORDS_PER_JOB = 1000
 
 def _key(keyword: str) -> str:
     return keyword.strip().lower()
+
+
+def clean_keyword(keyword: str) -> str:
+    """A keyword without spaces, commas or semicolons at its ends: a list
+    copied from a sheet brought "casino online," in as a keyword of
+    its own (user, 2026-10-29), and the cluster went on it instead."""
+    return keyword.strip().strip(",;").strip()
 
 
 def drop_keywords(have: list[str], drop: set[str]) -> list[str]:
@@ -228,7 +242,7 @@ def add_keywords(have: list[str], new: list[str]) -> tuple[list[str], list[str]]
     seen = {_key(k) for k in have}
     added: list[str] = []
     for k in new:
-        k = k.strip()
+        k = clean_keyword(k)
         if k and _key(k) not in seen:
             added.append(k)
             seen.add(_key(k))
@@ -242,15 +256,35 @@ class KeywordsRemoveIn(BaseModel):
 
 
 class KeywordsAddIn(BaseModel):
-    keywords: list[str]
+    keywords: list[str] = []
     #: Into this job of the project. Omitted = the project's own list (the job
     #: its CSV uploads are filed under).
     job_id: int | None = None
+    #: Keyword → its cluster; "" or null takes it away. Keywords the project
+    #: has already only get their cluster set.
+    clusters: dict[str, str | None] = {}
+
+
+def set_clusters(have: dict | None, changes: dict[str, str | None]) -> dict[str, str]:
+    """The project's clusters with `changes` made: by the keyword's key, a
+    cluster trimmed, an empty one removed."""
+    out = dict(have or {})
+    for keyword, cluster in changes.items():
+        key = _key(clean_keyword(keyword))
+        if not key:
+            continue
+        cluster = clean_keyword(cluster or "")
+        if cluster:
+            out[key] = cluster
+        else:
+            out.pop(key, None)
+    return out
 
 
 @router.post("/{project_id}/keywords/remove")
 def remove_project_keywords(project_id: int, payload: KeywordsRemoveIn, db: Session = Depends(get_db)):
-    if db.get(Project, project_id) is None:
+    project = db.get(Project, project_id)
+    if project is None:
         raise HTTPException(404)
     drop = {_key(k) for k in payload.keywords if k.strip()}
     jobs_changed = removed = 0
@@ -261,26 +295,38 @@ def remove_project_keywords(project_id: int, payload: KeywordsRemoveIn, db: Sess
             job.keywords = after
             jobs_changed += 1
             removed += len(before) - len(after)
+    # A removed keyword's cluster goes with it.
+    if payload.all:
+        project.keyword_clusters = None
+    elif project.keyword_clusters:
+        project.keyword_clusters = {k: c for k, c in project.keyword_clusters.items() if k not in drop} or None
     db.commit()
     return {"jobs_changed": jobs_changed, "removed": removed}
 
 
 @router.post("/{project_id}/keywords/add")
 def add_project_keywords(project_id: int, payload: KeywordsAddIn, db: Session = Depends(get_db)):
-    if payload.job_id is None:
-        project = db.get(Project, project_id)
-        if project is None:
-            raise HTTPException(404)
-        from .serp_upload import _job as own_list
-        job = own_list(db, project)
-    else:
-        job = db.get(Job, payload.job_id)
-    if job is None or job.project_id != project_id:
-        raise HTTPException(404, "That job is not in this project.")
-    keywords, added = add_keywords(list(job.keywords or []), payload.keywords)
-    if len(keywords) > MAX_KEYWORDS_PER_JOB:
-        raise HTTPException(
-            400, f"A job holds at most {MAX_KEYWORDS_PER_JOB} keywords; {job.name!r} would have {len(keywords)}.")
-    job.keywords = keywords
+    project = db.get(Project, project_id)
+    if project is None:
+        raise HTTPException(404)
+    added: list[str] = []
+    job_id: int | None = None
+    # Only clusters to set: no job is touched — or made.
+    if any(k.strip() for k in payload.keywords):
+        if payload.job_id is None:
+            from .serp_upload import _job as own_list
+            job = own_list(db, project)
+        else:
+            job = db.get(Job, payload.job_id)
+        if job is None or job.project_id != project_id:
+            raise HTTPException(404, "That job is not in this project.")
+        keywords, added = add_keywords(list(job.keywords or []), payload.keywords)
+        if len(keywords) > MAX_KEYWORDS_PER_JOB:
+            raise HTTPException(
+                400, f"A job holds at most {MAX_KEYWORDS_PER_JOB} keywords; {job.name!r} would have {len(keywords)}.")
+        job.keywords = keywords
+        job_id = job.id
+    if payload.clusters:
+        project.keyword_clusters = set_clusters(project.keyword_clusters, payload.clusters) or None
     db.commit()
-    return {"added": len(added), "job_id": job.id}
+    return {"added": len(added), "job_id": job_id, "clusters": len(project.keyword_clusters or {})}
