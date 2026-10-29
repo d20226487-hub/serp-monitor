@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { customRange, rangeFor, toInputValue } from "@/lib/date-range";
+import { customRange, previousRange, rangeFor, toInputValue } from "@/lib/date-range";
 
 // A Wednesday, mid-month, mid-afternoon local time.
 const NOW = new Date(2026, 8, 23, 15, 30, 0);  // 23 Sep 2026
@@ -97,5 +97,38 @@ describe("toInputValue", () => {
     // not on UTC; late-evening dates are the ones that break.
     const lateEvening = new Date(2026, 8, 23, 23, 30, 0);
     expect(toInputValue(lateEvening)).toBe("2026-09-23");
+  });
+});
+
+describe("previousRange", () => {
+  const prev = (preset: Parameters<typeof rangeFor>[0]) => {
+    const r = previousRange(preset, rangeFor(preset, NOW), NOW);
+    return [localIso(r.start), localIso(r.end)];
+  };
+
+  it("today is compared with yesterday, yesterday with the day before", () => {
+    expect(prev("today")).toEqual(["2026-09-22 00:00:00", "2026-09-23 00:00:00"]);
+    expect(prev("yesterday")).toEqual(["2026-09-21 00:00:00", "2026-09-22 00:00:00"]);
+  });
+
+  it("this week with the whole of last week, Monday to Monday", () => {
+    expect(prev("week")).toEqual(["2026-09-14 00:00:00", "2026-09-21 00:00:00"]);
+  });
+
+  it("this month with the whole of last month, this year with last year", () => {
+    expect(prev("month")).toEqual(["2026-08-01 00:00:00", "2026-09-01 00:00:00"]);
+    expect(prev("year")).toEqual(["2025-01-01 00:00:00", "2026-01-01 00:00:00"]);
+  });
+
+  it("a custom range with as many days just before it", () => {
+    const custom = customRange("2026-10-12", "2026-10-18")!;
+    const r = previousRange("custom", custom, NOW);
+    expect([localIso(r.start), localIso(r.end)]).toEqual(["2026-10-05 00:00:00", "2026-10-12 00:00:00"]);
+  });
+
+  it("January is compared with December of the year before", () => {
+    const jan = new Date(2026, 0, 15, 12, 0, 0);
+    const r = previousRange("month", rangeFor("month", jan), jan);
+    expect([localIso(r.start), localIso(r.end)]).toEqual(["2025-12-01 00:00:00", "2026-01-01 00:00:00"]);
   });
 });

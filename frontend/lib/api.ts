@@ -517,6 +517,80 @@ export type VisibilityWeights = {
 
 /** The same window, averaged per (keyword, domain) instead of reduced to its
  *  most recent run. */
+/** Position Tracking, one SERP: how many of the project's positions are in
+ *  each top N at the latest check of every keyword, and the same for the
+ *  previous period (null: none of its keywords was checked then). */
+export type TrackingSerp = {
+  engine: string;
+  device: string | null;
+  country_code: string | null;
+  language: string | null;
+  location: string | null;
+  google_domain: string | null;
+  key: string;
+  keywords: number;
+  /** The deepest position those checks reached: a top 20 read off pages of
+   *  ten is the top 10 again. */
+  depth: number;
+  /** "3" | "5" | … | "100" → positions. */
+  now: Record<string, number>;
+  before: Record<string, number> | null;
+  /** The same at each keyword's check before its latest one; null when none
+   *  of them had one. */
+  before_check: Record<string, number> | null;
+  /** Each keyword's best place of the project's: now, at its previous check
+   *  and in the previous period. `had_*` false: no such check; a null place:
+   *  none of the project's was on that page. */
+  keywords_best: KeywordBest[];
+};
+
+export type KeywordBest = {
+  keyword: string;
+  now: number | null;
+  had_check: boolean;
+  check: number | null;
+  had_period: boolean;
+  period: number | null;
+};
+
+/** A check of a keyword: when, and where the URL stood (null: not on it). */
+export type TrackingPoint = { at: string; position: number | null };
+
+/** Position Tracking, one URL of the project's on one keyword in one SERP. */
+export type TrackingRow = {
+  /** TrackingSerp.key */
+  serp: string;
+  keyword: string;
+  url: string;
+  domain: string;
+  /** On an AMP domain: the project domain it is the AMP domain of. */
+  amp_of: string | null;
+  /** At the latest check of the period; null = not on that page. */
+  position: number | null;
+  checked_at: string;
+  /** Over every check of the period it ranked in. */
+  best: number | null;
+  average: number | null;
+  /** The positions behind the average, summed. */
+  position_sum: number;
+  checks: number;
+  ranked_in: number;
+  /** The latest checks of the period, oldest first, for the sparkline. */
+  readings: TrackingPoint[];
+  /** The check before the latest one — even from before the period — and the
+   *  latest of the previous period; null when the keyword had none. */
+  previous_check: TrackingPoint | null;
+  previous_period: TrackingPoint | null;
+};
+
+export type ProjectTracking = {
+  project: { id: number; name: string; domains: string[] };
+  thresholds: number[];
+  has_previous_period: boolean;
+  serps: TrackingSerp[];
+  rows: TrackingRow[];
+};
+
 export type ProjectAverages = {
   project: { id: number; name: string; domains: string[] };
   runs: RunRef[];
@@ -881,6 +955,14 @@ export const api = {
     return req<ProjectAverages>(
       `/projects/${id}/positions/average${tail ? `?${tail}` : ""}`,
     );
+  },
+  /** Position Tracking for a period, compared with the previous one. */
+  projectTracking: (
+    id: number, range: { start: string; end: string }, previous: { start: string; end: string } | null,
+  ) => {
+    const qs = new URLSearchParams({ start: range.start, end: range.end });
+    if (previous) { qs.set("prev_start", previous.start); qs.set("prev_end", previous.end); }
+    return req<ProjectTracking>(`/projects/${id}/positions/tracking?${qs}`);
   },
   /** What each SERP slot is worth, as a share of the page, plus its running
    *  totals and the built-in curve to revert to. */

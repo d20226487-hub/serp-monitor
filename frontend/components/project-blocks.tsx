@@ -7,6 +7,7 @@ import { Icon } from "@/components/icons";
 import { Tip } from "@/components/tip";
 import { ampPeriodText } from "@/lib/amp-period";
 import { RANGE_PRESETS, RangePreset, customRange, rangeFor, toInputValue, toQuery } from "@/lib/date-range";
+import { isDateInput, isText, oneOf, useSessionState } from "@/lib/session-state";
 
 /**
  * Which of the project's domains are in the SERPs, and the status each proxy
@@ -176,13 +177,17 @@ export function ProjectBlocksCard({ projectId, reloadKey = 0 }: {
 }) {
   const { t } = useT();
   const x = t.tools.blocks;
-  const [preset, setPreset] = useState<RangePreset>("today");
-  const [from, setFrom] = useState(() => toInputValue(new Date()));
-  const [to, setTo] = useState(() => toInputValue(new Date()));
+  // The period and filters are kept for this browser tab, so a reload comes
+  // back to them; the demo never is — it must not come on by itself.
+  const stored = `serp-monitor:project:${projectId}:blocks-`;
+  const [preset, setPreset] = useSessionState<RangePreset>(`${stored}preset`, "today", oneOf(RANGE_PRESETS));
+  const [from, setFrom] = useSessionState(`${stored}from`, toInputValue(new Date()), isDateInput);
+  const [to, setTo] = useSessionState(`${stored}to`, toInputValue(new Date()), isDateInput);
   const [demo, setDemo] = useState(false);
   const [data, setData] = useState<ProjectBlocks | null>(null);
-  const [kind, setKind] = useState<"all" | BlockKind>("all");
-  const [geo, setGeo] = useState("all");
+  const [kind, setKind] = useSessionState<"all" | BlockKind>(
+    `${stored}kind`, "all", oneOf(["all", "not_pass", "unchecked", "pass"] as const));
+  const [geo, setGeo] = useSessionState(`${stored}geo`, "all", isText);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -458,9 +463,11 @@ export function ProjectNotPassingCard({ projectId, reloadKey = 0, onOpenBlocks }
 }) {
   const { t } = useT();
   const x = t.tools.blocks;
-  const [preset, setPreset] = useState<RangePreset>("today");
-  const [from, setFrom] = useState(() => toInputValue(new Date()));
-  const [to, setTo] = useState(() => toInputValue(new Date()));
+  // Kept for this browser tab, so a reload comes back to the same period.
+  const stored = `serp-monitor:project:${projectId}:failing-`;
+  const [preset, setPreset] = useSessionState<RangePreset>(`${stored}preset`, "today", oneOf(RANGE_PRESETS));
+  const [from, setFrom] = useSessionState(`${stored}from`, toInputValue(new Date()), isDateInput);
+  const [to, setTo] = useSessionState(`${stored}to`, toInputValue(new Date()), isDateInput);
   const [data, setData] = useState<ProjectFailing | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);

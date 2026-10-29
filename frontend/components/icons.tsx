@@ -12,7 +12,8 @@ export type IconName =
   | "globe" | "pages" | "activity" | "shield" | "search" | "play" | "refresh"
   | "desktop" | "phone" | "flag" | "layers" | "pointer" | "link" | "image" | "code" | "text"
   | "external" | "chevronRight" | "chevronDown" | "clock" | "robot" | "coin" | "list"
-  | "plus" | "download" | "upload" | "pencil" | "trash" | "copy" | "key" | "user" | "sliders" | "traffic";
+  | "plus" | "download" | "upload" | "pencil" | "trash" | "copy" | "key" | "user" | "sliders" | "traffic"
+  | "gear";
 
 const PATHS: Record<IconName, ReactNode> = {
   summary: <path d="M12 3.5l1.9 5 5 1.9-5 1.9-1.9 5-1.9-5-5-1.9 5-1.9zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" />,
@@ -187,6 +188,13 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <circle cx="12" cy="8" r="3.5" />
       <path d="M5 20a7 7 0 0 1 14 0" />
+    </>
+  ),
+  // A cog of eight teeth around a hole: settings.
+  gear: (
+    <>
+      <path d="M19.1 10.2L21.5 10.7L21.5 13.3L19.1 13.8L18.3 15.8L19.7 17.8L17.8 19.7L15.8 18.3L13.8 19.1L13.3 21.5L10.7 21.5L10.2 19.1L8.2 18.3L6.2 19.7L4.3 17.8L5.7 15.8L4.9 13.8L2.5 13.3L2.5 10.7L4.9 10.2L5.7 8.2L4.3 6.2L6.2 4.3L8.2 5.7L10.2 4.9L10.7 2.5L13.3 2.5L13.8 4.9L15.8 5.7L17.8 4.3L19.7 6.2L18.3 8.2Z" />
+      <circle cx="12" cy="12" r="3" />
     </>
   ),
   sliders: (

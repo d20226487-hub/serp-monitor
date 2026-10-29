@@ -15,6 +15,10 @@ Two views of the same measurements, because they answer different questions:
   averaging. One reading is a snapshot and can be a fluke; ten readings with
   their spread are a position.
 
+* ``/positions/tracking`` — a rank tracker's view: how many of the project's
+  positions are in each top N against the previous period, and a row per
+  ranking URL with its best, average and readings. See the section at the end.
+
 Decisions worth knowing, because they are what make the numbers mean something:
 
 * Results are split into one table per SERP, and a SERP is the whole of
@@ -65,6 +69,7 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from statistics import fmean
 from typing import Literal, NamedTuple
+from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
@@ -279,10 +284,11 @@ def _whos(win: _Window) -> list[tuple[str, bool]]:
     return [(d, False) for d in win.domains] + [(d, True) for d in win.domains if d in with_amp]
 
 
-def _hits(db: Session, win: _Window, run_ids: set[int]) -> dict[tuple, dict]:
+def _hits(db: Session, win: _Window, run_ids: set[int], *, with_slots: bool = False) -> dict[tuple, dict]:
     """One entry per (keyword, SERP, host, run), for the hosts that are the
     project's — `host` being (project domain, AMP host or None): the domain
-    itself, or one of its AMP domains.
+    itself, or one of its AMP domains. `with_slots`: each entry also lists
+    every slot as (position, url), for a view that follows URLs.
 
     A site can hold several slots on one page, and the two questions about that
     want different answers. `position` is the best of them — the position the
@@ -360,17 +366,25 @@ def _hits(db: Session, win: _Window, run_ids: set[int]) -> dict[tuple, dict]:
         prior = cells.get(cell_key)
         if prior is None:
             made["positions"] = [position]
+            if with_slots:
+                made["slots"] = [(position, url)]
             cells[cell_key] = made
         else:
             # Every slot is kept; which one supplies the headline fields —
             # the URL, the displayed host, the substitution flag — is decided
             # by the best of them, so a row describes the listing it reports.
             prior["positions"].append(position)
+            if with_slots:
+                prior["slots"].append((position, url))
             if position < prior["position"]:
                 made["positions"] = prior["positions"]
+                if with_slots:
+                    made["slots"] = prior["slots"]
                 cells[cell_key] = made
     for cell in cells.values():
         cell["positions"].sort()
+        if with_slots:
+            cell["slots"].sort()
     return cells
 
 
@@ -733,4 +747,248 @@ def project_position_averages(
         "project": {"id": win.project.id, "name": win.project.name, "domains": win.domains},
         "runs": _run_list(win),
         "serps": _ordered(serps),
+    }
+
+
+# --------------------------------------------------------------------------
+# Position Tracking
+# --------------------------------------------------------------------------
+#
+# A rank tracker's view of the same measurements (user, 2026-10-29: "I want to
+# add more granular position tracking like in rank trackers"): how many of the
+# project's positions are in the top 3, 5 … 100 of each SERP, against the
+# previous period; and every URL of the project's that ranked, with its best
+# and average position over the period, its readings, and how it moved.
+#
+# Decided with the user:
+# * The distribution counts POSITIONS, not keywords: a keyword where three of
+#   the project's sites hold #1, #4 and #9 adds 3 to the top 10 — how much of
+#   the page the network holds.
+# * A row is one URL on one keyword in one SERP.
+# * The previous period is the previous calendar one (today → yesterday, this
+#   week → last week …); the page works it out, as it does the period, in the
+#   reader's own clock, and sends both.
+# Each period is read by the latest check of every keyword in it, as the
+# "Latest" view is.
+
+#: The distribution's columns: positions in the top N. Top 1 first (user,
+#: 2026-10-29: "we should add top 1 before top 3 to all the tables and our
+#: logic").
+TOP_N = (1, 3, 5, 10, 20, 30, 50, 100)
+#: Readings sent per row for its sparkline: the latest ones. Best and average
+#: are over every reading of the period.
+SPARK_POINTS = 60
+#: Runs read at a time when looking back past the period for each keyword's
+#: previous check.
+_LOOKBACK_RUNS = 20
+
+
+def distribution(positions: Iterable[int]) -> dict[str, int]:
+    """How many of the positions are in the top N, for every N of TOP_N."""
+    held = list(positions)
+    return {str(n): sum(1 for p in held if p <= n) for n in TOP_N}
+
+
+def page_url(url: str | None) -> str:
+    """One spelling per page: providers write a site's front page both as
+    "https://example.kz" and "https://example.kz/", and the host in either
+    case — eleven pages here came in two spellings, each a row of its own."""
+    raw = (url or "").strip()
+    parts = urlsplit(raw)
+    if not parts.scheme or not parts.netloc:
+        return raw
+    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), parts.path or "/", parts.query, ""))
+
+
+def _serp_key_text(serp_key: tuple) -> str:
+    return "|".join("" if v is None else str(v) for v in serp_key)
+
+
+@router.get("/{project_id}/positions/tracking")
+def project_position_tracking(
+    project_id: int,
+    start: str | None = Query(None, description="ISO-8601, inclusive"),
+    end: str | None = Query(None, description="ISO-8601, exclusive"),
+    prev_start: str | None = Query(None, description="The previous period: ISO-8601, inclusive"),
+    prev_end: str | None = Query(None, description="The previous period: ISO-8601, exclusive"),
+    db: Session = Depends(get_db),
+):
+    """Position Tracking for a period: the distribution of the project's
+    positions by top N per SERP, against the previous period, and a row per
+    ranking URL — see the section comment above."""
+    # Every run up to the end of the period: a keyword's previous check may
+    # well be from before the period began.
+    full = _window(db, project_id, None, end)
+    since = _parse_stamp(start, "start")
+    p_from, p_to = _parse_stamp(prev_start, "prev_start"), _parse_stamp(prev_end, "prev_end")
+    with_prev = p_from is not None and p_to is not None
+    in_period = [r for r in full.runs if since is None or r.started_at >= since]
+    project = {"id": full.project.id, "name": full.project.name, "domains": full.domains}
+    empty = {"project": project, "thresholds": list(TOP_N), "has_previous_period": False,
+             "serps": [], "rows": []}
+    if not in_period:
+        return empty
+
+    def when(run_id: int) -> datetime:
+        return full.run_by_id[run_id].started_at
+
+    # Which runs measured each (keyword, SERP) in the period, oldest first,
+    # and how deep each went.
+    checks: dict[tuple, list[int]] = {}
+    depth_of: dict[tuple[tuple, int], int] = {}
+    for key, run_id, depth, _slots in _coverage(db, {r.id for r in in_period}):
+        checks.setdefault(key, []).append(run_id)
+        depth_of[(key, run_id)] = depth
+    if not checks:
+        return empty
+    for runs in checks.values():
+        runs.sort(key=when)
+
+    # Each keyword's check before its latest one — inside the period when it
+    # was checked twice there, else the latest before the period — and its
+    # latest check inside the previous period. Looked for in the runs before
+    # the period, newest first, a few at a time, until every keyword has one
+    # and the previous period is behind.
+    previous: dict[tuple, int] = {key: runs[-2] for key, runs in checks.items() if len(runs) > 1}
+    in_prev: dict[tuple, int] = {}
+    if with_prev:
+        for key, runs in checks.items():
+            inside = [r for r in runs if p_from <= when(r) < p_to]
+            if inside:
+                in_prev[key] = inside[-1]
+    earlier = [r for r in full.runs if since is not None and r.started_at < since]   # newest first
+    for i in range(0, len(earlier), _LOOKBACK_RUNS):
+        batch = earlier[i:i + _LOOKBACK_RUNS]
+        found = sorted(_coverage(db, {r.id for r in batch}), key=lambda c: when(c[1]), reverse=True)
+        for key, run_id, _depth, _slots in found:
+            if key not in checks:
+                continue
+            previous.setdefault(key, run_id)
+            if with_prev and p_from <= when(run_id) < p_to:
+                in_prev.setdefault(key, run_id)
+        all_found = all(key in previous for key in checks)
+        past_prev = not with_prev or batch[-1].started_at < p_from
+        if all_found and past_prev:
+            break
+
+    wanted = {r.id for r in in_period} | set(previous.values()) | set(in_prev.values())
+    cells = _hits(db, full, wanted, with_slots=True)
+    # Every slot of the project's on every page read: (key, run) →
+    # [(position, url, domain, amp_of)].
+    on_page: dict[tuple, list[tuple]] = {}
+    for (*key, _host, run_id), cell in cells.items():
+        for position, url in cell["slots"]:
+            on_page.setdefault((tuple(key), run_id), []).append(
+                (position, page_url(url), cell["domain"], cell["amp_of"]))
+
+    def at(key: tuple, run_id: int | None) -> dict[str, int]:
+        """URL → its position on that page (the better one if it held two)."""
+        out: dict[str, int] = {}
+        for position, url, _domain, _amp in on_page.get((key, run_id), []) if run_id else []:
+            if url not in out or position < out[url]:
+                out[url] = position
+        return out
+
+    def best_on(key: tuple, run_id: int | None) -> int | None:
+        """The project's best place on that page, if it had one there."""
+        held = [p for p, *_rest in on_page.get((key, run_id), [])] if run_id else []
+        return min(held) if held else None
+
+    # --- the distribution, per SERP -----------------------------------------
+    serps: dict[tuple, dict] = {}
+    for key, runs in checks.items():
+        serp_key = key[1:]
+        latest = runs[-1]
+        entry = serps.setdefault(serp_key, {
+            **dict(zip(SERP_COLUMNS, serp_key)), "key": _serp_key_text(serp_key),
+            "keywords": 0, "depth": 0, "_now": [], "_before": [], "_has_before": False,
+            "_check": [], "_has_check": False, "keywords_best": [],
+        })
+        entry["keywords"] += 1
+        # How deep the latest checks go: a top 20 read off pages of ten is
+        # the top 10 again, and the page says so.
+        entry["depth"] = max(entry["depth"], depth_of.get((key, latest), 0))
+        entry["_now"] += [p for p, *_rest in on_page.get((key, latest), [])]
+        if key in in_prev:
+            entry["_has_before"] = True
+            entry["_before"] += [p for p, *_rest in on_page.get((key, in_prev[key]), [])]
+        # And at each keyword's check before its latest one (user, 2026-10-29:
+        # "Add the same filter to the Обзор" — compare with the previous
+        # check, as the table does by default).
+        if key in previous:
+            entry["_has_check"] = True
+            entry["_check"] += [p for p, *_rest in on_page.get((key, previous[key]), [])]
+        # Each keyword's best place now and at both points it can be compared
+        # with, for the keywords that dropped out of a top (user, 2026-10-29:
+        # "the table which will display Кол Выпавших запросов for top 3, top 5,
+        # and so on"). `had_*` false: the keyword had no such check; a null
+        # place: none of the project's was on that page.
+        entry["keywords_best"].append({
+            "keyword": key[0],
+            "now": best_on(key, latest),
+            "had_check": key in previous,
+            "check": best_on(key, previous.get(key)),
+            "had_period": key in in_prev,
+            "period": best_on(key, in_prev.get(key)),
+        })
+    for entry in serps.values():
+        entry["now"] = distribution(entry.pop("_now"))
+        before = entry.pop("_before")
+        # Null when no keyword of this SERP was checked in the previous period:
+        # nothing to compare with, which is not the same as zero.
+        entry["before"] = distribution(before) if entry.pop("_has_before") else None
+        # The same at the previous checks; null when none of the SERP's
+        # keywords had one.
+        at_check = entry.pop("_check")
+        entry["before_check"] = distribution(at_check) if entry.pop("_has_check") else None
+
+    # --- a row per URL --------------------------------------------------------
+    rows = []
+    for key, runs in checks.items():
+        keyword, serp_key = key[0], key[1:]
+        readings_by_run = {run_id: at(key, run_id) for run_id in runs}
+        prev_check = at(key, previous.get(key))
+        prev_period = at(key, in_prev.get(key))
+        # Every URL of the project's this keyword had a page with, and whose
+        # it is — in the period, or only at a check it is compared with (then
+        # it has dropped out since).
+        whose: dict[str, tuple[str, str | None]] = {}
+        for run_id in [*reversed(runs), previous.get(key), in_prev.get(key)]:
+            for _p, url, domain, amp_of in on_page.get((key, run_id), []) if run_id else []:
+                whose.setdefault(url, (domain, amp_of))
+        latest_run = runs[-1]
+        for url, (domain, amp_of) in sorted(whose.items()):
+            series = [(run_id, readings_by_run[run_id].get(url)) for run_id in runs]
+            present = [p for _r, p in series if p is not None]
+            rows.append({
+                "serp": _serp_key_text(serp_key),
+                "keyword": keyword,
+                "url": url,
+                "domain": domain,
+                "amp_of": amp_of,
+                # At the latest check of the period; null = not on that page.
+                "position": readings_by_run[latest_run].get(url),
+                "checked_at": when(latest_run),
+                "best": min(present) if present else None,
+                "average": round(fmean(present), 1) if present else None,
+                # The sum behind the average, so the page can add the check it
+                # compares with to it exactly rather than from a rounded mean.
+                "position_sum": sum(present),
+                "checks": len(runs),
+                "ranked_in": len(present),
+                "readings": [{"at": when(r), "position": p} for r, p in series[-SPARK_POINTS:]],
+                # What a change is measured against: null = this keyword had
+                # no such check; a null position = the URL was not on it.
+                "previous_check": {"at": when(previous[key]), "position": prev_check.get(url)}
+                if key in previous else None,
+                "previous_period": {"at": when(in_prev[key]), "position": prev_period.get(url)}
+                if key in in_prev else None,
+            })
+    rows.sort(key=lambda r: (r["keyword"].lower(), r["serp"], r["position"] or 10_000, r["url"]))
+    return {
+        "project": project,
+        "thresholds": list(TOP_N),
+        "has_previous_period": bool(in_prev),
+        "serps": _ordered(serps),
+        "rows": rows,
     }

@@ -13,12 +13,15 @@ import { ProjectCsvUploadsCard, SerpCsvUploadBar, SerpCsvUploadCard } from "@/co
 import { ProjectKeywordsCard } from "@/components/project-keywords";
 import type { SerpCsvUpload } from "@/lib/api";
 import { ProjectGeosCard } from "@/components/project-geos";
-import { Button, Card, Empty, ErrorNote, SectionTitle, StatTile } from "@/components/ui";
+import { Button, Card, Empty, ErrorNote, SectionTitle, StatTile, Switch } from "@/components/ui";
+import { PositionTracking } from "@/components/position-tracking";
+import { RangePicker } from "@/components/range-picker";
 import { Icon, IconName } from "@/components/icons";
 import { Tip } from "@/components/tip";
 import {
-  RANGE_PRESETS, RangePreset, customRange, rangeFor, toInputValue, toQuery,
+  RANGE_PRESETS, RangePreset, customRange, previousRange, rangeFor, toInputValue, toQuery,
 } from "@/lib/date-range";
+import { isBool, isDateInput, oneOf, useScrollMemory, useSessionState } from "@/lib/session-state";
 
 /**
  * One project, in three tabs (user, 2026-10-06):
@@ -33,7 +36,12 @@ import {
  *   to the Proxy Checker that says so.
  *
  * The tab is kept in the address (#positions), so a reload or a link lands on
- * the same one; no hash is the Overview.
+ * the same one; no hash is the Overview. The rest of where the reader was —
+ * the positions' view and period, Position Tracking and its filters, the
+ * periods of the blocks cards, how far down the page — is kept for this browser
+ * tab (lib/session-state), so a reload comes back to it (user, 2026-10-29:
+ * "When the user refreshes can we save the last place they were inside the
+ * project?").
  */
 type ProjectTab = "overview" | "positions" | "blocks" | "uploads";
 const PROJECT_TABS: { id: ProjectTab; icon: IconName }[] = [
@@ -100,6 +108,8 @@ export default function ProjectPage() {
   }
 
   const [project, setProject] = useState<Project | null>(null);
+  // How far down the page, taken back once the project is in.
+  useScrollMemory(`serp-monitor:project:${id}:scroll`, project !== null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [positions, setPositions] = useState<ProjectPositions | null>(null);
   const [averages, setAverages] = useState<ProjectAverages | null>(null);
@@ -107,7 +117,13 @@ export default function ProjectPage() {
   // window rather than two tables stacked on one page: they cover the same
   // SERPs and the same keywords, so showing both at once doubles the scrolling
   // to say one thing twice.
-  const [view, setView] = useState<PositionView>("latest");
+  // Kept for this browser tab under the project's own keys.
+  const stored = `serp-monitor:project:${id}:`;
+  const [view, setView] = useSessionState<PositionView>(`${stored}positions-view`, "latest", oneOf(VIEWS));
+  // Position Tracking: the tab read the way a rank tracker reads it (user,
+  // 2026-10-29), switched on under the period chips; while it is on, the
+  // "Positions — Latest / Average" heading and its tables make way for it.
+  const [tracking, setTracking] = useSessionState(`${stored}tracking`, false, isBool);
   // Bumped when the project's GEOs are saved, so the tools that choose among
   // them (the Proxy Checker card) read the new list.
   const [geosVersion, setGeosVersion] = useState(0);
@@ -132,9 +148,9 @@ export default function ProjectPage() {
   const [exportSites, setExportSites] = useState<"all" | "ours">("all");
   // The export's choices stay folded behind one button until asked for.
   const [exportOpen, setExportOpen] = useState(false);
-  const [preset, setPreset] = useState<RangePreset>("today");
-  const [from, setFrom] = useState(() => toInputValue(new Date()));
-  const [to, setTo] = useState(() => toInputValue(new Date()));
+  const [preset, setPreset] = useSessionState<RangePreset>(`${stored}positions-preset`, "today", oneOf(RANGE_PRESETS));
+  const [from, setFrom] = useSessionState(`${stored}positions-from`, toInputValue(new Date()), isDateInput);
+  const [to, setTo] = useSessionState(`${stored}positions-to`, toInputValue(new Date()), isDateInput);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
@@ -143,6 +159,8 @@ export default function ProjectPage() {
     () => (preset === "custom" ? customRange(from, to) : rangeFor(preset)),
     [preset, from, to],
   );
+  // What Position Tracking compares with: the previous calendar period.
+  const previous = useMemo(() => (range ? previousRange(preset, range) : null), [preset, range]);
 
   // Only the view being looked at is fetched: the averaged one reads every run
   // in the range rather than the latest per row, and most visits never open it.
@@ -150,7 +168,7 @@ export default function ProjectPage() {
   // The same goes for the tab: positions are read while the Positions tab is
   // open, not on every visit to the Overview.
   const load = useCallback(async () => {
-    if (!range || tab !== "positions") return;
+    if (!range || tab !== "positions" || tracking) return;
     setLoading(true);
     try {
       if (view === "average") setAverages(await api.projectAverages(id, toQuery(range)));
@@ -161,7 +179,7 @@ export default function ProjectPage() {
     } finally {
       setLoading(false);
     }
-  }, [id, range, view, tab, uploadsVersion]);
+  }, [id, range, view, tab, uploadsVersion, tracking]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -436,7 +454,7 @@ export default function ProjectPage() {
               default, to remove the clutter"), at the right (user: "Move it to
               the right"), its choices opening below it ("Make it collapsible to
               the bottom"). */}
-          {view === "latest" && range && positions && positions.serps.length > 0 && (
+          {!tracking && view === "latest" && range && positions && positions.serps.length > 0 && (
             <div className="flex flex-col items-end gap-2 text-xs">
               <button
                 type="button"
@@ -490,79 +508,63 @@ export default function ProjectPage() {
             </div>
           )}
           <div className="flex flex-wrap items-center gap-2">
-            <SectionTitle icon="activity">{t.positions.title}</SectionTitle>
-            <div
-              role="group"
-              aria-label={t.positions.view}
-              className="inline-flex overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700"
-            >
-              {VIEWS.map(v => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setView(v)}
-                  aria-pressed={view === v}
-                  title={v === "latest" ? t.positions.viewLatestHint : t.positions.viewAverageHint}
-                  className={`border-l px-2.5 py-1 text-xs transition first:border-l-0 dark:border-slate-700 ${
-                    view === v
-                      ? "bg-slate-900 font-medium text-white dark:bg-slate-100 dark:text-slate-900"
-                      : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-                  }`}
+            {!tracking && (
+              <>
+                <SectionTitle icon="activity">{t.positions.title}</SectionTitle>
+                <div
+                  role="group"
+                  aria-label={t.positions.view}
+                  className="inline-flex overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700"
                 >
-                  {v === "latest" ? t.positions.viewLatest : t.positions.viewAverage}
-                </button>
-              ))}
-            </div>
+                  {VIEWS.map(v => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setView(v)}
+                      aria-pressed={view === v}
+                      title={v === "latest" ? t.positions.viewLatestHint : t.positions.viewAverageHint}
+                      className={`border-l px-2.5 py-1 text-xs transition first:border-l-0 dark:border-slate-700 ${
+                        view === v
+                          ? "bg-slate-900 font-medium text-white dark:bg-slate-100 dark:text-slate-900"
+                          : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                      }`}
+                    >
+                      {v === "latest" ? t.positions.viewLatest : t.positions.viewAverage}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
             {/* Pushed to the right, away from the title and the view toggle:
                 which reading you are looking at belongs beside the heading, when
                 it was taken is a separate choice and reads better as its own
                 group at the far end. */}
-            <div className="ml-auto inline-flex overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700">
-              {RANGE_PRESETS.map(p => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setPreset(p)}
-                  aria-pressed={preset === p}
-                  className={`border-l px-2.5 py-1 text-xs transition first:border-l-0 dark:border-slate-700 ${
-                    preset === p
-                      ? "bg-slate-900 font-medium text-white dark:bg-slate-100 dark:text-slate-900"
-                      : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-                  }`}
-                >
-                  {t.positions.presets[p]}
-                </button>
-              ))}
-            </div>
-            {preset === "custom" && (
-              <span className="inline-flex items-center gap-1.5 text-xs">
-                <input
-                  type="date"
-                  value={from}
-                  onChange={e => setFrom(e.target.value)}
-                  className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                />
-                <span className="text-slate-500 dark:text-slate-400">–</span>
-                <input
-                  type="date"
-                  value={to}
-                  onChange={e => setTo(e.target.value)}
-                  className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                />
-              </span>
-            )}
+            <RangePicker
+              className="ml-auto"
+              preset={preset} onPreset={setPreset} from={from} onFrom={setFrom} to={to} onTo={setTo}
+            />
             {/* Folded behind an ⓘ: how many rows came from how many runs is
                 worth being able to check, but it is not worth a sentence of
                 prose between the controls and the table. */}
-            <div className="flex items-center gap-2">
-              {loading && (
-                <span className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-                  <Icon name="refresh" className="h-3 w-3 animate-spin" />
-                  {t.common.loading}
-                </span>
-              )}
-              {summaryText && <Tip text={summaryText} label={summaryText} />}
-            </div>
+            {!tracking && (
+              <div className="flex items-center gap-2">
+                {loading && (
+                  <span className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                    <Icon name="refresh" className="h-3 w-3 animate-spin" />
+                    {t.common.loading}
+                  </span>
+                )}
+                {summaryText && <Tip text={summaryText} label={summaryText} />}
+              </div>
+            )}
+          </div>
+          {/* Under the period chips, as asked: "add a separate view under the
+              date slider called Отслеживание Позиций". */}
+          <div className="flex justify-end">
+            <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium" title={t.positions.tracking.toggleHint}>
+              <Switch checked={tracking} onChange={setTracking} label={t.positions.tracking.toggle} />
+              {t.positions.tracking.toggle}
+            </label>
           </div>
 
           {preset === "custom" && !range && (
@@ -570,10 +572,24 @@ export default function ProjectPage() {
               {t.positions.badRange}
             </div>
           )}
-          {err && <ErrorNote>{err}</ErrorNote>}
-          {view === "latest"
-            ? positions && <PositionTable data={positions} />
-            : averages && <AveragePositionTable data={averages} />}
+          {tracking ? (
+            <PositionTracking
+              projectId={id}
+              range={range}
+              previous={previous}
+              reloadKey={uploadsVersion}
+              periodPicker={
+                <RangePicker preset={preset} onPreset={setPreset} from={from} onFrom={setFrom} to={to} onTo={setTo} />
+              }
+            />
+          ) : (
+            <>
+              {err && <ErrorNote>{err}</ErrorNote>}
+              {view === "latest"
+                ? positions && <PositionTable data={positions} />
+                : averages && <AveragePositionTable data={averages} />}
+            </>
+          )}
         </section>
       </div>
 

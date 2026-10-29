@@ -76,6 +76,40 @@ export function rangeFor(preset: RangePreset, now: Date = new Date()): DateRange
   }
 }
 
+/**
+ * The period before this one, to compare with (user, 2026-10-29, choosing
+ * "previous calendar period"): today → yesterday, yesterday → the day before,
+ * this week → last week, this month → last month, this year → last year — the
+ * whole of each — and a custom range → the same number of days just before
+ * it. In the viewer's own clock, like the period itself.
+ */
+export function previousRange(preset: RangePreset, range: DateRange, now: Date = new Date()): DateRange {
+  const today = startOfDay(now);
+  switch (preset) {
+    case "today":
+      return { start: addDays(today, -1), end: today };
+    case "yesterday":
+      return { start: addDays(today, -2), end: addDays(today, -1) };
+    case "week": {
+      const monday = startOfWeek(now);
+      return { start: addDays(monday, -7), end: monday };
+    }
+    case "month":
+      return {
+        start: new Date(today.getFullYear(), today.getMonth() - 1, 1),
+        end: new Date(today.getFullYear(), today.getMonth(), 1),
+      };
+    case "year":
+      return { start: new Date(today.getFullYear() - 1, 0, 1), end: new Date(today.getFullYear(), 0, 1) };
+    case "custom": {
+      // Whole days, counted on the calendar rather than in milliseconds, so a
+      // range across a daylight-saving change does not come out an hour short.
+      const days = Math.round((startOfDay(range.end).getTime() - startOfDay(range.start).getTime()) / 86_400_000);
+      return { start: addDays(range.start, -days), end: new Date(range.start) };
+    }
+  }
+}
+
 /** A custom range from two `<input type="date">` values, end inclusive.
  *  Returns null while the pair is incomplete or backwards, so a half-typed
  *  range never fires a query for a window nobody asked for. */
