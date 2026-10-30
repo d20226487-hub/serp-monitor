@@ -2,8 +2,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ProjectTracking, TrackingRow } from "@/lib/api";
 import { useT } from "@/lib/i18n";
-import { Button } from "@/components/ui";
+import { Button, inputClass } from "@/components/ui";
 import { Icon } from "@/components/icons";
+import { Choice, SEARCH_FROM, found } from "@/components/floating-list";
 import { DateRange, toInputValue } from "@/lib/date-range";
 import { ChangeKind, Compare, NO_CLUSTER, serpExtras } from "@/lib/position-tracking";
 import {
@@ -22,6 +23,7 @@ import {
 const KINDS: ChangeKind[] = ["up", "down", "same", "new", "lost", "none"];
 const BOX = "flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-slate-100 dark:hover:bg-slate-800";
 const LEGEND = "mb-1 text-xs font-medium text-slate-500 dark:text-slate-400";
+const LINK = "text-xs text-sky-700 hover:underline dark:text-sky-400";
 
 const toggled = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter(x => x !== v) : [...list, v]);
 
@@ -47,6 +49,10 @@ export function TrackingExport({ data, compare, order, since, range }: {
   const allClusters = useMemo(() => (data.has_clusters ? [...data.clusters, NO_CLUSTER] : []), [data]);
   const [clusters, setClusters] = useState<string[]>(allClusters);
   useEffect(() => { setClusters(allClusters); }, [allClusters]);
+  const [findCluster, setFindCluster] = useState("");
+  const clusterChoices = useMemo<Choice[]>(() => allClusters.map(c => (c === NO_CLUSTER
+    ? { value: c, label: <span className="italic">{x.noCluster}</span>, text: x.noCluster }
+    : { value: c, label: c, text: c })), [allClusters, x.noCluster]);
   // Another period can bring other SERPs: start from all of them again.
   useEffect(() => { setSerps(allSerps); }, [allSerps]);
 
@@ -177,14 +183,34 @@ export function TrackingExport({ data, compare, order, since, range }: {
             </fieldset>
             {data.has_clusters && (
               <fieldset>
-                <legend className={LEGEND}>{x.col.cluster}</legend>
-                <div className="max-h-64 overflow-y-auto">
-                  {allClusters.map(c => (
-                    <label key={c || "-"} className={BOX}>
-                      <input type="checkbox" checked={clusters.includes(c)} onChange={() => setClusters(toggled(clusters, c))} />
-                      {c === NO_CLUSTER ? <span className="italic">{x.noCluster}</span> : c}
+                <legend className={LEGEND}>
+                  {x.col.cluster}
+                  {clusters.length < allClusters.length && ` · ${x.picked(clusters.length)}`}
+                </legend>
+                {/* With many clusters (user, 2026-10-30): a search, and all or
+                    none of them at once without touching the other groups. */}
+                {allClusters.length >= SEARCH_FROM && (
+                  <input
+                    value={findCluster}
+                    onChange={e => setFindCluster(e.target.value)}
+                    placeholder={x.findIn}
+                    className={`${inputClass} mb-1.5 py-1 text-xs`}
+                  />
+                )}
+                <div className="mb-1 flex gap-3 px-1">
+                  <button type="button" onClick={() => setClusters(allClusters)} className={LINK}>{x.groupAll}</button>
+                  <button type="button" onClick={() => setClusters([])} className={LINK}>{x.groupNone}</button>
+                </div>
+                <div className="max-h-64 overflow-y-auto overscroll-contain">
+                  {found(clusterChoices, findCluster).map(c => (
+                    <label key={c.value || "-"} className={BOX}>
+                      <input type="checkbox" checked={clusters.includes(c.value)} onChange={() => setClusters(toggled(clusters, c.value))} />
+                      {c.label}
                     </label>
                   ))}
+                  {found(clusterChoices, findCluster).length === 0 && (
+                    <p className="px-1 py-0.5 text-xs text-slate-500 dark:text-slate-400">{t.clusters.nothingFound}</p>
+                  )}
                 </div>
               </fieldset>
             )}

@@ -10,7 +10,7 @@ from app.db import Base
 from app.models import Job, Project
 from app.routers.projects import (
     KeywordsAddIn, KeywordsRemoveIn, MAX_KEYWORDS_PER_JOB, add_keywords, add_project_keywords, drop_keywords,
-    remove_project_keywords, set_clusters,
+    live_clusters, remove_project_keywords, set_clusters,
 )
 
 
@@ -31,7 +31,8 @@ class TestTheLists:
 def db():
     engine = create_engine("sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
-    with sessionmaker(bind=engine)() as session:
+    # As the app's own sessions: no flush before a query.
+    with sessionmaker(bind=engine, autoflush=False)() as session:
         yield session
 
 
@@ -119,11 +120,29 @@ class TestClusters:
         assert "slots" in upload.keywords and phone.keywords == ["casino", "Wrong one", "bonus"]
 
     def test_only_clusters_touches_no_job_and_makes_none(self, db):
-        project = Project(name="Fresh", domains=[])
-        db.add(project)
-        db.commit()
+        project, _other, phone, upload, _ = setup(db)
         got = add_project_keywords(project.id, KeywordsAddIn(clusters={"casino": "Brand"}), db)
-        assert (got["job_id"], db.query(Job).filter(Job.project_id == project.id).count()) == (None, 0)
+        assert got["job_id"] is None and (phone.keywords, upload.keywords) == (
+            ["casino", "Wrong one", "bonus"], ["wrong one", "wrong two"])
+        assert project.keyword_clusters == {"casino": "Brand"}
+        fresh = Project(name="Fresh", domains=[])
+        db.add(fresh)
+        db.commit()
+        add_project_keywords(fresh.id, KeywordsAddIn(clusters={"casino": "Brand"}), db)
+        assert db.query(Job).filter(Job.project_id == fresh.id).count() == 0
+        # Not a keyword of the project's: no cluster is kept for it.
+        assert fresh.keyword_clusters is None
+
+    def test_a_keyword_gone_another_way_leaves_its_cluster_behind_until_a_save(self, db):
+        """User, 2026-10-30: "list only clusters of keywords the project still
+        has, and drop the leftovers when keywords are saved"."""
+        project, _other, phone, upload, _ = setup(db)
+        add_project_keywords(project.id, KeywordsAddIn(clusters={"casino": "Brand", "wrong two": "Other"}), db)
+        upload.keywords = ["wrong one"]          # edited elsewhere: "wrong two" left the project
+        db.commit()
+        assert live_clusters(db, project) == {"casino": "Brand"}
+        assert project.keyword_clusters == {"casino": "Brand", "wrong two": "Other"}
+        add_project_keywords(project.id, KeywordsAddIn(keywords=["slots"]), db)
         assert project.keyword_clusters == {"casino": "Brand"}
 
     def test_a_removed_keyword_takes_its_cluster_and_clear_all_takes_them_all(self, db):

@@ -6,6 +6,7 @@ import { api, Job, Project } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { Button, Callout, Card, Empty, SectionTitle, inputClass } from "@/components/ui";
 import { Icon } from "@/components/icons";
+import { Choice, PickOne, SEARCH_FROM } from "@/components/floating-list";
 import { projectKeywords } from "@/components/project-keywords";
 import { parsePasted } from "@/lib/keyword-import";
 
@@ -18,6 +19,11 @@ import { parsePasted } from "@/lib/keyword-import";
  * all at once — and every keyword of the project with its cluster, to change
  * one by one or from a pasted list. Nothing is written until "Save", as on the
  * project page; the keywords themselves are added and removed there.
+ *
+ * Made for many clusters (user, 2026-10-30: "How scalable and user-friendly
+ * these will be when there are many clusters?"): the clusters' table has a
+ * search and sorts by name or size, and the keywords' cluster choice is a
+ * list with a search rather than the browser's own select.
  */
 
 const key = (k: string) => k.trim().toLowerCase();
@@ -29,6 +35,8 @@ const LINK = "text-xs text-sky-700 hover:underline dark:text-sky-400";
 const ALL = "\u0000all";
 const NONE = "\u0000none";
 
+type ClusterSort = { by: "name" | "count"; descending: boolean };
+
 export default function ProjectClustersPage() {
   const { t } = useT();
   const x = t.clusters;
@@ -39,6 +47,8 @@ export default function ProjectClustersPage() {
   const [edits, setEdits] = useState<Record<string, string | null>>({});
   const [query, setQuery] = useState("");
   const [only, setOnly] = useState(ALL);
+  const [findCluster, setFindCluster] = useState("");
+  const [sort, setSort] = useState<ClusterSort>({ by: "name", descending: false });
   const [renaming, setRenaming] = useState<{ from: string; to: string } | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulk, setBulk] = useState("");
@@ -133,6 +143,38 @@ export default function ProjectClustersPage() {
   });
   const changes = Object.keys(edits).length;
 
+  // The clusters' table: found by name, in the order asked for — the biggest
+  // first, the first time it is sorted by size.
+  const cq = findCluster.trim().toLowerCase();
+  const listed = summary.clusters
+    .filter(([name]) => !cq || name.toLowerCase().includes(cq))
+    .sort((a, b) => {
+      const by = sort.by === "count" ? a[1] - b[1] || 0 : a[0].localeCompare(b[0]);
+      return (sort.descending ? -by : by) || a[0].localeCompare(b[0]);
+    });
+  const sortBy = (by: ClusterSort["by"]) =>
+    setSort(s => ({ by, descending: s.by === by ? !s.descending : by === "count" }));
+  function sortHead(by: ClusterSort["by"], label: string, right = false) {
+    const active = sort.by === by;
+    return (
+      <th className={`${TH} ${right ? "text-right" : ""}`} aria-sort={active ? (sort.descending ? "descending" : "ascending") : "none"}>
+        <button
+          type="button"
+          onClick={() => sortBy(by)}
+          className={`inline-flex items-center gap-1 uppercase hover:text-slate-900 dark:hover:text-slate-100 ${active ? "text-slate-900 dark:text-slate-100" : ""}`}
+        >
+          {label}
+          <Icon name="chevronDown" className={`h-3 w-3 transition ${active ? "" : "opacity-30"} ${active && !sort.descending ? "rotate-180" : ""}`} />
+        </button>
+      </th>
+    );
+  }
+  const onlyChoices: Choice[] = [
+    { value: ALL, label: x.allClusters, text: x.allClusters },
+    { value: NONE, label: <span className="italic">{x.none}</span>, text: x.none },
+    ...summary.clusters.map(([name]) => ({ value: name, label: name, text: name })),
+  ];
+
   if (!project) {
     return err ? <Callout tone="bad" icon="alert">{err}</Callout> : <div className="text-sm text-slate-500">{t.common.loading}</div>;
   }
@@ -166,17 +208,33 @@ export default function ProjectClustersPage() {
         {summary.clusters.length === 0 ? (
           <Empty>{x.noClusters}</Empty>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+          <div className="space-y-2">
+          {summary.clusters.length >= SEARCH_FROM && (
+            <div className="flex flex-wrap items-center gap-3">
+              <input
+                value={findCluster}
+                onChange={e => setFindCluster(e.target.value)}
+                placeholder={x.findCluster}
+                className={`${inputClass} max-w-xs py-1 text-sm`}
+              />
+              {cq && <span className="text-xs text-slate-500 dark:text-slate-400">{x.shown(listed.length, summary.clusters.length)}</span>}
+            </div>
+          )}
+          {/* A long list scrolls in its own box, so the keywords below stay in reach. */}
+          <div className="max-h-[32rem] overflow-auto rounded-lg border border-slate-200 dark:border-slate-800">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 dark:bg-slate-900/50">
+              <thead className="sticky top-0 z-[1] bg-slate-50 dark:bg-slate-900">
                 <tr>
-                  <th className={TH}>{x.cluster}</th>
-                  <th className={`${TH} text-right`}>{x.keywords}</th>
+                  {sortHead("name", x.cluster)}
+                  {sortHead("count", x.keywords, true)}
                   <th className={TH} />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                {summary.clusters.map(([name, count]) => (
+                {listed.length === 0 && (
+                  <tr><td colSpan={3} className={`${TD} text-slate-500 dark:text-slate-400`}>{x.nothingFound}</td></tr>
+                )}
+                {listed.map(([name, count]) => (
                   <tr key={name}>
                     <td className={TD}>
                       {renaming?.from === name ? (
@@ -221,7 +279,7 @@ export default function ProjectClustersPage() {
                     </td>
                   </tr>
                 ))}
-                <tr>
+                {!cq && <tr>
                   <td className={TD}>
                     <button
                       type="button"
@@ -235,9 +293,10 @@ export default function ProjectClustersPage() {
                   <td className={`${TD} text-right`}>
                     <button type="button" onClick={() => showCluster(NONE)} className={LINK}>{x.show}</button>
                   </td>
-                </tr>
+                </tr>}
               </tbody>
             </table>
+          </div>
           </div>
         )}
       </Card>
@@ -252,15 +311,16 @@ export default function ProjectClustersPage() {
                 placeholder={x.search}
                 className={`${inputClass} max-w-xs py-1 text-sm`}
               />
-              <select
+              <PickOne
+                choices={onlyChoices}
                 value={only}
-                onChange={e => { setOnly(e.target.value); setLimit(PAGE); }}
-                className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-              >
-                <option value={ALL}>{x.allClusters}</option>
-                <option value={NONE}>{x.none}</option>
-                {summary.clusters.map(([name]) => <option key={name} value={name}>{name}</option>)}
-              </select>
+                onPick={v => { setOnly(v); setLimit(PAGE); }}
+                findLabel={x.findCluster}
+                nothing={x.nothingFound}
+                className={`min-w-40 rounded-lg border bg-white px-2 py-1 text-sm text-slate-900 dark:bg-slate-950 dark:text-slate-100 ${
+                  only === ALL ? "border-slate-300 dark:border-slate-700" : "border-sky-500 dark:border-sky-400"
+                }`}
+              />
               <Button size="sm" onClick={() => setBulkOpen(o => !o)} aria-expanded={bulkOpen} className="ml-auto">
                 <Icon name="list" className="h-3.5 w-3.5" />{x.bulk}
               </Button>

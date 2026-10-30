@@ -1,5 +1,5 @@
 "use client";
-import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import { api, ProjectTracking, TrackingPoint, TrackingRow, TrackingSerp } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { Card, Empty, ErrorNote, Pill, SectionTitle, inputClass, serverTime } from "@/components/ui";
@@ -7,6 +7,7 @@ import { Icon } from "@/components/icons";
 import { DateRange, toQuery } from "@/lib/date-range";
 import { oneOf, useSessionState } from "@/lib/session-state";
 import { TrackingExport } from "@/components/tracking-export";
+import { Choice, FLOATING, SEARCH_FROM, found, useFloatingList } from "@/components/floating-list";
 import {
   Change, ChangeKind, Compare, Dropped, Filters, NO_CLUSTER, NO_FILTERS, Sort, SortColumn, bandCount, bandStart, changeOf, dropped,
   droppedKeywords, isFilters, isSort, keep, serpExtras, sorted, spanOf,
@@ -53,68 +54,65 @@ const hiddenKey = (projectId: number) => `serp-monitor:project:${projectId}:trac
  *  project it was meant for, so it is dropped. */
 const OLD_HIDDEN_KEY = "serp-monitor:tracking-hidden-columns";
 
-/** The cluster filter: "All", or the clusters picked — any number of them,
- *  "no cluster" among them (user, 2026-10-29: "add the filter to select the
- *  cluster or clusters"). Its list is placed against the window like the
- *  column picker's, and closes the same ways. */
-function ClusterFilter({ clusters, picked, onPick }: {
-  clusters: string[]; picked: string[] | null; onPick: (next: string[] | null) => void;
+/** A filter of several choices at once — "All", or the ones picked: the
+ *  clusters (user, 2026-10-29: "add the filter to select the cluster or
+ *  clusters") and the position bands (2026-10-30: "make the position filter
+ *  multi select"). The actions stay above the list, and a long list gets a
+ *  search, so neither scrolls out of reach. */
+function MultiFilter({ choices, picked, onPick }: {
+  choices: Choice[]; picked: string[] | null; onPick: (next: string[] | null) => void;
 }) {
   const { t } = useT();
   const x = t.positions.tracking;
-  const [at, setAt] = useState<{ top: number; left: number } | null>(null);
-  const box = useRef<HTMLSpanElement>(null);
-  const button = useRef<HTMLButtonElement>(null);
-  const all = [...clusters, NO_CLUSTER];
-  useEffect(() => {
-    if (!at) return;
-    const close = () => setAt(null);
-    const away = (e: MouseEvent) => { if (box.current && !box.current.contains(e.target as Node)) close(); };
-    const escape = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
-    document.addEventListener("mousedown", away);
-    document.addEventListener("keydown", escape);
-    window.addEventListener("scroll", close, true);
-    return () => {
-      document.removeEventListener("mousedown", away);
-      document.removeEventListener("keydown", escape);
-      window.removeEventListener("scroll", close, true);
-    };
-  }, [at]);
-  const toggle = (c: string) => {
+  const list = useFloatingList(240);
+  const [find, setFind] = useState("");
+  const all = choices.map(c => c.value);
+  const shown = found(choices, find);
+  const toggle = (v: string) => {
     const now = picked ?? all;
-    const next = now.includes(c) ? now.filter(v => v !== c) : [...now, c];
+    const next = now.includes(v) ? now.filter(p => p !== v) : [...now, v];
     onPick(next.length === all.length ? null : next);
   };
-  const label = picked === null ? x.all : picked.length === 1 ? (picked[0] === NO_CLUSTER ? x.noCluster : picked[0]) : x.picked(picked.length);
+  const label = picked === null
+    ? x.all
+    : picked.length === 1 ? (choices.find(c => c.value === picked[0])?.text ?? picked[0]) : x.picked(picked.length);
   return (
-    <span ref={box} className="relative inline-flex">
+    <span ref={list.box} className="relative inline-flex">
       <button
-        ref={button}
+        ref={list.button}
         type="button"
-        aria-expanded={at !== null}
-        onClick={() => {
-          const r = button.current?.getBoundingClientRect();
-          setAt(at || !r ? null : { top: r.bottom + 4, left: r.left });
-        }}
+        aria-expanded={list.open}
+        onClick={() => { setFind(""); list.toggle(); }}
         className={`${SELECT} flex min-w-28 items-center justify-between gap-2 ${picked ? "border-sky-500 dark:border-sky-400" : ""}`}
       >
         <span className="max-w-40 truncate">{label}</span>
         <Icon name="chevronDown" className="h-3 w-3" />
       </button>
-      {at && (
-        <div
-          style={{ top: at.top, left: at.left }}
-          className="fixed z-30 max-h-72 w-56 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2 text-sm text-slate-700 shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-        >
-          {all.map(c => (
-            <label key={c || "-"} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-slate-100 dark:hover:bg-slate-800">
-              <input type="checkbox" checked={picked === null || picked.includes(c)} onChange={() => toggle(c)} />
-              {c === NO_CLUSTER ? <span className="italic">{x.noCluster}</span> : c}
-            </label>
-          ))}
-          <div className="mt-1 flex gap-3 border-t px-1 pt-1.5 text-xs dark:border-slate-800">
-            <button type="button" onClick={() => onPick(null)} className="text-sky-700 hover:underline dark:text-sky-400">{x.columnsAll}</button>
-            <button type="button" onClick={() => onPick([])} className="text-sky-700 hover:underline dark:text-sky-400">{x.exportClear}</button>
+      {list.open && (
+        <div style={list.style} className={`${FLOATING} flex flex-col`}>
+          <div className="flex shrink-0 flex-col gap-1.5 border-b p-2 dark:border-slate-800">
+            {choices.length >= SEARCH_FROM && (
+              <input
+                autoFocus
+                value={find}
+                onChange={e => setFind(e.target.value)}
+                placeholder={x.findIn}
+                className={`${inputClass} py-1 text-xs`}
+              />
+            )}
+            <div className="flex gap-3 px-1 text-xs">
+              <button type="button" onClick={() => onPick(null)} className="text-sky-700 hover:underline dark:text-sky-400">{x.columnsAll}</button>
+              <button type="button" onClick={() => onPick([])} className="text-sky-700 hover:underline dark:text-sky-400">{x.exportClear}</button>
+            </div>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
+            {shown.map(c => (
+              <label key={c.value || "-"} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-slate-100 dark:hover:bg-slate-800">
+                <input type="checkbox" checked={picked === null || picked.includes(c.value)} onChange={() => toggle(c.value)} />
+                {c.label}
+              </label>
+            ))}
+            {shown.length === 0 && <p className="px-1 py-1 text-xs text-slate-500 dark:text-slate-400">{x.emptyFilter}</p>}
           </div>
         </div>
       )}
@@ -122,46 +120,21 @@ function ClusterFilter({ clusters, picked, onPick }: {
   );
 }
 
-/** The gear and its list of columns, each with a checkbox. The list is placed
- *  against the window, not the table: the table scrolls sideways in a box that
- *  would cut off anything hanging below its header. Closes on a click outside
- *  it, on Escape, and when the page scrolls from under it. */
+/** The gear and its list of columns, each with a checkbox; a floating list
+ *  like the cluster filter's. */
 function ColumnPicker({ columns, hidden, onToggle, onShowAll }: {
   columns: Column[]; hidden: Column[]; onToggle: (c: Column) => void; onShowAll: () => void;
 }) {
   const { t } = useT();
   const x = t.positions.tracking;
-  const [at, setAt] = useState<{ top: number; left: number } | null>(null);
-  const open = at !== null;
-  const box = useRef<HTMLSpanElement>(null);
-  const button = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const close = () => setAt(null);
-    const away = (e: MouseEvent) => { if (box.current && !box.current.contains(e.target as Node)) close(); };
-    const escape = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
-    document.addEventListener("mousedown", away);
-    document.addEventListener("keydown", escape);
-    window.addEventListener("scroll", close, true);
-    window.addEventListener("resize", close);
-    return () => {
-      document.removeEventListener("mousedown", away);
-      document.removeEventListener("keydown", escape);
-      window.removeEventListener("scroll", close, true);
-      window.removeEventListener("resize", close);
-    };
-  }, [open]);
-  function toggle() {
-    const r = button.current?.getBoundingClientRect();
-    setAt(open || !r ? null : { top: r.bottom + 4, left: r.left });
-  }
+  const list = useFloatingList(192);
   return (
-    <span ref={box} className="relative ml-1 inline-flex align-middle normal-case tracking-normal">
+    <span ref={list.box} className="relative ml-1 inline-flex align-middle normal-case tracking-normal">
       <button
-        ref={button}
+        ref={list.button}
         type="button"
-        onClick={toggle}
-        aria-expanded={open}
+        onClick={list.toggle}
+        aria-expanded={list.open}
         aria-label={x.columnsHint}
         title={x.columnsHint}
         className={`rounded p-0.5 hover:bg-slate-200 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-slate-100 ${
@@ -170,11 +143,8 @@ function ColumnPicker({ columns, hidden, onToggle, onShowAll }: {
       >
         <Icon name="gear" className="h-3.5 w-3.5" />
       </button>
-      {at && (
-        <div
-          style={{ top: at.top, left: at.left }}
-          className="fixed z-30 w-48 rounded-lg border border-slate-200 bg-white p-2 text-sm font-normal text-slate-700 shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-        >
+      {list.open && (
+        <div style={list.style} className={`${FLOATING} overflow-y-auto overscroll-contain p-2`}>
           <div className="px-1 pb-1 text-xs font-medium text-slate-500 dark:text-slate-400">{x.columns}</div>
           {columns.map(c => (
             <label key={c} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 hover:bg-slate-100 dark:hover:bg-slate-800">
@@ -397,7 +367,7 @@ export function PositionTracking({ projectId, range, previous, reloadKey = 0, pe
   }, [data]);
   const shown = useMemo(() => {
     if (!data) return [];
-    const kept = data.rows.filter(r => keep(r, serpByKey.get(r.serp), filters));
+    const kept = data.rows.filter(r => keep(r, serpByKey.get(r.serp), filters, data.thresholds));
     return sorted(kept, sort, filters.compare, r => serpByKey.get(r.serp));
   }, [data, serpByKey, filters, sort]);
   const any = useMemo(() => (data?.rows ?? []).some(r => r.best !== null), [data]);
@@ -580,17 +550,20 @@ export function PositionTracking({ projectId, range, previous, reloadKey = 0, pe
                 {geos.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
             </label>
-            <label className="flex flex-col gap-1 text-xs text-slate-600 dark:text-slate-400">
+            <div className="flex flex-col gap-1 text-xs text-slate-600 dark:text-slate-400">
               {x.position}
-              <select
-                className={SELECT}
-                value={String(filters.top)}
-                onChange={e => set({ top: e.target.value === "all" ? "all" : Number(e.target.value) })}
-              >
-                <option value="all">{x.all}</option>
-                {(data?.thresholds ?? []).map(n => <option key={n} value={n}>{x.top(n)}</option>)}
-              </select>
-            </label>
+              <MultiFilter
+                choices={[
+                  ...(data?.thresholds ?? []).map(n => {
+                    const text = x.exportBand(n, bandStart(n, data!.thresholds));
+                    return { value: String(n), label: text, text };
+                  }),
+                  { value: "none", label: x.exportNone, text: x.exportNone },
+                ]}
+                picked={filters.bands ? filters.bands.map(String) : null}
+                onPick={next => set({ bands: next === null ? null : next.map(v => (v === "none" ? "none" : Number(v))) })}
+              />
+            </div>
             <label className="flex flex-col gap-1 text-xs text-slate-600 dark:text-slate-400">
               {x.change}
               <select className={SELECT} value={filters.change} onChange={e => set({ change: e.target.value as ChangeKind | "all" })}>
@@ -601,8 +574,11 @@ export function PositionTracking({ projectId, range, previous, reloadKey = 0, pe
             {data?.has_clusters && (
               <div className="flex flex-col gap-1 text-xs text-slate-600 dark:text-slate-400">
                 {x.col.cluster}
-                <ClusterFilter
-                  clusters={data.clusters}
+                <MultiFilter
+                  choices={[
+                    ...data.clusters.map(c => ({ value: c, label: c, text: c })),
+                    { value: NO_CLUSTER, label: <span className="italic">{x.noCluster}</span>, text: x.noCluster },
+                  ]}
                   picked={filters.clusters ?? null}
                   onPick={next => set({ clusters: next })}
                 />

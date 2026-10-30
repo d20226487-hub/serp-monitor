@@ -9,21 +9,10 @@
 // a decimal comma in Russian, "," and a point in English.
 
 import type { TrackingRow, TrackingSerp } from "@/lib/api";
-import { ChangeKind, Compare, NO_CLUSTER, bandStart, changeOf, spanOf, visible } from "@/lib/position-tracking";
+import { Band, ChangeKind, Compare, NO_CLUSTER, bandOf, bandStart, changeOf, spanOf, visible } from "@/lib/position-tracking";
 
-export { bandStart };
-
-/** A band of positions: a top N stands for the places after the top before
- *  it (the user's choice: "Топ 1 = #1, Топ 3 = #2–3 … Топ 100 = #51–100"), so
- *  several can be picked at once. "none": not on the latest page. */
-export type Band = number | "none";
-
-/** The band a latest position is in; null when it is deeper than the last top. */
-export function bandOf(position: number | null, thresholds: number[]): Band | null {
-  if (position === null) return "none";
-  for (const n of thresholds) if (position <= n) return n;
-  return null;
-}
+export { bandOf, bandStart };
+export type { Band };
 
 /** What to export. null = all of it. */
 export type ExportChoice = {

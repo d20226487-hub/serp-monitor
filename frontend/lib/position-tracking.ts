@@ -80,10 +80,25 @@ export function visible(row: TrackingRow, compare: Compare): boolean {
 /** Stands for "no cluster" among the clusters picked. */
 export const NO_CLUSTER = "";
 
+/** A band of positions: a top N stands for the places after the top before
+ *  it — Топ 1 = #1, Топ 3 = #2–3 … Топ 100 = #51–100 — so several can be
+ *  picked at once. "none": not on the latest page. */
+export type Band = number | "none";
+
+/** The band a latest position is in; null when it is deeper than the last top. */
+export function bandOf(position: number | null, thresholds: number[]): Band | null {
+  if (position === null) return "none";
+  for (const n of thresholds) if (position <= n) return n;
+  return null;
+}
+
 export type Filters = {
   engine: string;          // "all" or an engine
   geo: string;             // "all" or a country code, upper-case
-  top: number | "all";     // the latest position within the top N
+  /** The bands of the latest position to show, "none" among them; null or
+   *  absent = all (user, 2026-10-30: "maybe make the position filter multi
+   *  select?"). */
+  bands?: Band[] | null;
   change: ChangeKind | "all";
   compare: Compare;
   query: string;           // in the keyword or the URL
@@ -94,7 +109,7 @@ export type Filters = {
 };
 
 export const NO_FILTERS: Filters = {
-  engine: "all", geo: "all", top: "all", change: "all", compare: "check", query: "", clusters: null,
+  engine: "all", geo: "all", bands: null, change: "all", compare: "check", query: "", clusters: null,
 };
 
 const CHANGE_KINDS: (ChangeKind | "all")[] = ["all", "up", "down", "same", "new", "lost", "none"];
@@ -104,17 +119,21 @@ export function isFilters(v: unknown): v is Filters {
   if (!v || typeof v !== "object") return false;
   const f = v as Record<string, unknown>;
   return typeof f.engine === "string" && typeof f.geo === "string" && typeof f.query === "string"
-    && (f.top === "all" || (typeof f.top === "number" && f.top > 0))
+    && (f.bands === undefined || f.bands === null
+      || (Array.isArray(f.bands) && f.bands.every(b => b === "none" || (typeof b === "number" && b > 0))))
     && CHANGE_KINDS.includes(f.change as ChangeKind) && (f.compare === "check" || f.compare === "period")
     && (f.clusters === undefined || f.clusters === null
       || (Array.isArray(f.clusters) && f.clusters.every(c => typeof c === "string")));
 }
 
-export function keep(row: TrackingRow, serp: TrackingSerp | undefined, f: Filters): boolean {
+export function keep(row: TrackingRow, serp: TrackingSerp | undefined, f: Filters, thresholds: number[]): boolean {
   if (!visible(row, f.compare)) return false;
   if (f.engine !== "all" && serp?.engine !== f.engine) return false;
   if (f.geo !== "all" && (serp?.country_code ?? "").toUpperCase() !== f.geo) return false;
-  if (f.top !== "all" && (row.position === null || row.position > f.top)) return false;
+  if (f.bands) {
+    const band = bandOf(row.position, thresholds);
+    if (band === null || !f.bands.includes(band)) return false;
+  }
   if (f.change !== "all" && changeOf(row, f.compare).kind !== f.change) return false;
   if (f.clusters && !f.clusters.includes(row.cluster ?? NO_CLUSTER)) return false;
   const q = f.query.trim().toLowerCase();

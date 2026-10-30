@@ -210,12 +210,23 @@ class TestClusters:
 
     def test_a_project_with_clusters_has_them_whatever_the_period_checked(self, db):
         p, job = project(db)
+        job.keywords = ["casino", "slots", "bonus"]
         p.keyword_clusters = {"slots": "Games", "casino": "brand"}
         db.commit()
         run(db, job, WED, [("bonus", 3, A)])
         data = track(db, p)
         assert (data["has_clusters"], data["clusters"]) == (True, ["brand", "Games"])
         assert pp.project_position_tracking(p.id, THU.isoformat(), None, None, None, db)["has_clusters"] is True
+
+    def test_not_one_whose_keyword_has_left_the_project(self, db):
+        """Its job edited: the keyword's checks stay, its cluster is not listed."""
+        p, job = project(db)
+        p.keyword_clusters = {"casino": "Brand", "gone": "Old"}
+        db.commit()
+        run(db, job, WED, [("casino", 2, A), ("gone", 3, A)])
+        data = track(db, p)
+        assert data["clusters"] == ["Brand"]
+        assert {r["keyword"]: r["cluster"] for r in data["rows"]} == {"casino": "Brand", "gone": None}
 
     def test_none_without_clusters(self, db):
         p, job = project(db)

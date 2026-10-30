@@ -15,6 +15,7 @@ function row(over: Partial<TrackingRow>): TrackingRow {
   };
 }
 const at = (position: number | null) => ({ at: "2026-10-28T07:00:00", position });
+const TOPS = [1, 3, 5, 10, 20, 30, 50, 100];
 
 describe("changeOf", () => {
   it("places gained or lost against the previous check", () => {
@@ -48,24 +49,30 @@ describe("which rows show", () => {
 
   it("filters by engine, GEO, top N, change and text", () => {
     const r = row({ position: 4, previous_check: at(6) });
-    expect(keep(r, SERP, NO_FILTERS)).toBe(true);
-    expect(keep(r, SERP, { ...NO_FILTERS, engine: "yandex" })).toBe(false);
-    expect(keep(r, SERP, { ...NO_FILTERS, geo: "KZ" })).toBe(true);
-    expect(keep(r, SERP, { ...NO_FILTERS, top: 3 })).toBe(false);
-    expect(keep(r, SERP, { ...NO_FILTERS, top: 5 })).toBe(true);
-    expect(keep(r, SERP, { ...NO_FILTERS, change: "up" })).toBe(true);
-    expect(keep(r, SERP, { ...NO_FILTERS, change: "down" })).toBe(false);
-    expect(keep(r, SERP, { ...NO_FILTERS, query: "CASI" })).toBe(true);
-    expect(keep(r, SERP, { ...NO_FILTERS, query: "site-one" })).toBe(true);
-    expect(keep(r, SERP, { ...NO_FILTERS, query: "bonus" })).toBe(false);
+    expect(keep(r, SERP, NO_FILTERS, TOPS)).toBe(true);
+    expect(keep(r, SERP, { ...NO_FILTERS, engine: "yandex" }, TOPS)).toBe(false);
+    expect(keep(r, SERP, { ...NO_FILTERS, geo: "KZ" }, TOPS)).toBe(true);
+    // Bands: Топ 3 is #2–3, Топ 5 is #4–5 — several at once.
+    expect(keep(r, SERP, { ...NO_FILTERS, bands: [3] }, TOPS)).toBe(false);
+    expect(keep(r, SERP, { ...NO_FILTERS, bands: [5] }, TOPS)).toBe(true);
+    expect(keep(r, SERP, { ...NO_FILTERS, bands: [1, 5] }, TOPS)).toBe(true);
+    expect(keep(row({ position: null, best: 2, previous_check: at(3) }), SERP, { ...NO_FILTERS, bands: ["none"] }, TOPS)).toBe(true);
+    expect(keep(r, SERP, { ...NO_FILTERS, change: "up" }, TOPS)).toBe(true);
+    expect(keep(r, SERP, { ...NO_FILTERS, change: "down" }, TOPS)).toBe(false);
+    expect(keep(r, SERP, { ...NO_FILTERS, query: "CASI" }, TOPS)).toBe(true);
+    expect(keep(r, SERP, { ...NO_FILTERS, query: "site-one" }, TOPS)).toBe(true);
+    expect(keep(r, SERP, { ...NO_FILTERS, query: "bonus" }, TOPS)).toBe(false);
   });
 
   it("by cluster, and a keyword without one", () => {
     const branded = row({ cluster: "Brand" });
     const plain = row({ cluster: null });
-    expect([keep(branded, SERP, { ...NO_FILTERS, clusters: ["Brand"] }), keep(plain, SERP, { ...NO_FILTERS, clusters: ["Brand"] })])
+    expect([keep(branded, SERP, { ...NO_FILTERS, clusters: ["Brand"] }, TOPS), keep(plain, SERP, { ...NO_FILTERS, clusters: ["Brand"] }, TOPS)])
       .toEqual([true, false]);
-    expect(keep(plain, SERP, { ...NO_FILTERS, clusters: [NO_CLUSTER] })).toBe(true);
+    expect(keep(plain, SERP, { ...NO_FILTERS, clusters: [NO_CLUSTER] }, TOPS)).toBe(true);
+    // Filters stored before there were clusters, or before the bands
+    // (with a single "top"), are still good: filters stored before the bands.
+    expect(isFilters({ ...NO_FILTERS, top: 3, bands: undefined })).toBe(true);
     // Filters stored before there were clusters are still good.
     const { clusters: _none, ...old } = NO_FILTERS;
     expect(isFilters(old)).toBe(true);

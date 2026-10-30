@@ -215,6 +215,14 @@ def delete_project(project_id: int, db: Session = Depends(get_db)):
 # keyword's key and sent with the keywords added. Adding a keyword the project
 # has already sets its cluster and nothing else; an empty cluster takes it
 # away; a removed keyword's cluster goes with it.
+#
+# A cluster is a cluster of a keyword the project HAS. A keyword can leave the
+# project other ways too — its job deleted, moved to another project or
+# edited — and its cluster is then not listed anywhere (the clusters page
+# never showed it; Position Tracking's filter and export listed it, empty),
+# and goes for good the next time the project's keywords are saved (user,
+# 2026-10-30, agreeing to "list only clusters of keywords the project still
+# has, and drop the leftovers when keywords are saved").
 
 #: The most keywords one job takes — the job form's limit too.
 MAX_KEYWORDS_PER_JOB = 1000
@@ -247,6 +255,23 @@ def add_keywords(have: list[str], new: list[str]) -> tuple[list[str], list[str]]
             added.append(k)
             seen.add(_key(k))
     return list(have) + added, added
+
+
+def project_keyword_keys(db: Session, project_id: int) -> set[str]:
+    """The keys of every keyword of the project's jobs."""
+    # With the keywords this request has just given a job: the app's sessions
+    # do not flush on their own.
+    db.flush()
+    rows = db.query(Job.keywords).filter(Job.project_id == project_id).all()
+    return {_key(k) for (keywords,) in rows for k in keywords or [] if k.strip()}
+
+
+def live_clusters(db: Session, project: Project) -> dict[str, str]:
+    """The project's clusters of the keywords it has."""
+    if not project.keyword_clusters:
+        return {}
+    have = project_keyword_keys(db, project.id)
+    return {k: c for k, c in project.keyword_clusters.items() if c and k in have}
 
 
 class KeywordsRemoveIn(BaseModel):
@@ -295,11 +320,8 @@ def remove_project_keywords(project_id: int, payload: KeywordsRemoveIn, db: Sess
             job.keywords = after
             jobs_changed += 1
             removed += len(before) - len(after)
-    # A removed keyword's cluster goes with it.
-    if payload.all:
-        project.keyword_clusters = None
-    elif project.keyword_clusters:
-        project.keyword_clusters = {k: c for k, c in project.keyword_clusters.items() if k not in drop} or None
+    # A removed keyword's cluster goes with it, and any left over too.
+    project.keyword_clusters = live_clusters(db, project) or None
     db.commit()
     return {"jobs_changed": jobs_changed, "removed": removed}
 
@@ -328,5 +350,8 @@ def add_project_keywords(project_id: int, payload: KeywordsAddIn, db: Session = 
         job_id = job.id
     if payload.clusters:
         project.keyword_clusters = set_clusters(project.keyword_clusters, payload.clusters) or None
+    # Only for keywords it has: a cluster for one it does not is not kept, and
+    # leftovers go.
+    project.keyword_clusters = live_clusters(db, project) or None
     db.commit()
     return {"added": len(added), "job_id": job_id, "clusters": len(project.keyword_clusters or {})}

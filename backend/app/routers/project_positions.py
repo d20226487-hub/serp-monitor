@@ -84,6 +84,7 @@ from ..models import Job, JobRun, Project, Result
 from ..positions_csv import Page, PageResult, counted_host, grid_rows, list_rows, ours_index, to_csv
 from ..visibility import share, visibility
 from .export import _slugify
+from .projects import live_clusters
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -832,9 +833,12 @@ def project_position_tracking(
     with_prev = p_from is not None and p_to is not None
     in_period = [r for r in full.runs if since is None or r.started_at >= since]
     project = {"id": full.project.id, "name": full.project.name, "domains": full.domains}
-    project_clusters = sorted({c for c in (full.project.keyword_clusters or {}).values() if c}, key=str.lower)
+    # Each keyword's cluster, of the keywords the project has: not one whose
+    # keyword has left it.
+    clusters = live_clusters(db, full.project)
+    cluster_names = sorted(set(clusters.values()), key=str.lower)
     empty = {"project": project, "thresholds": list(TOP_N), "has_previous_period": False,
-             "has_clusters": bool(project_clusters), "clusters": project_clusters, "serps": [], "rows": []}
+             "has_clusters": bool(clusters), "clusters": cluster_names, "serps": [], "rows": []}
     if not in_period:
         return empty
 
@@ -976,8 +980,6 @@ def project_position_tracking(
         entry["before_check"] = distribution(at_check) if entry.pop("_has_check") else None
 
     # --- a row per URL --------------------------------------------------------
-    # Each keyword's cluster, when the project gives it one.
-    clusters = {k: c for k, c in (full.project.keyword_clusters or {}).items() if c}
     rows = []
     for key, runs in checks.items():
         keyword, serp_key = spelling[key][1], key[1:]
@@ -1030,7 +1032,7 @@ def project_position_tracking(
         # clusters, do not display this cluster column") — whether or not its
         # clustered keywords were checked in this period.
         "has_clusters": bool(clusters),
-        "clusters": sorted(set(clusters.values()), key=str.lower),
+        "clusters": cluster_names,
         "serps": _ordered(serps),
         "rows": rows,
     }
