@@ -45,6 +45,33 @@ export function oneOf<T extends string>(choices: readonly T[]) {
 export const isText = (v: unknown): v is string => typeof v === "string";
 
 /**
+ * A change that leaves the page shorter — a filter that leaves fewer rows —
+ * does not move it (user, 2026-11-01: "When I press очистить все on the
+ * clusters filter, it seems like it jumps up"). A page shorter than the place
+ * it is scrolled to is scrolled up to its new end by the browser: what was on
+ * screen jumps, and a list open there closes on that scroll. So the returned
+ * `hold()`, called before such a change, keeps the page at least as tall as
+ * the bottom of the screen; the room left below is given back as the page is
+ * scrolled up, so nothing ever moves for it.
+ */
+export function useHoldPlace(): () => void {
+  useEffect(() => {
+    const giveBack = () => {
+      const held = parseFloat(document.body.style.minHeight);
+      if (!held) return;
+      const bottom = window.scrollY + window.innerHeight;
+      if (bottom < held) document.body.style.minHeight = `${bottom}px`;
+    };
+    window.addEventListener("scroll", giveBack, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", giveBack);
+      document.body.style.minHeight = "";
+    };
+  }, []);
+  return () => { document.body.style.minHeight = `${window.scrollY + window.innerHeight}px`; };
+}
+
+/**
  * Where the page was scrolled to, back after a reload. The page's content
  * arrives after it is drawn, so the place is taken back as soon as the page is
  * tall enough to hold it — and given up if the reader scrolls first, or after

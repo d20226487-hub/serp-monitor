@@ -9,6 +9,7 @@ import { Icon } from "@/components/icons";
 import { Choice, PickOne, SEARCH_FROM } from "@/components/floating-list";
 import { projectKeywords } from "@/components/project-keywords";
 import { parsePasted } from "@/lib/keyword-import";
+import { useHoldPlace } from "@/lib/session-state";
 
 /**
  * A project's clusters, to see and to edit (user, 2026-10-29: "let the user
@@ -58,11 +59,15 @@ export default function ProjectClustersPage() {
   const [err, setErr] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
   const keywordsCard = useRef<HTMLDivElement>(null);
+  // A search or a cluster picked that leaves fewer rows must not move the
+  // page, as on Position Tracking.
+  const holdPlace = useHoldPlace();
 
   /** One cluster's keywords — or those without one — in the list below,
    *  brought into view (user, 2026-10-29: "When the user clicks on the
    *  cluster name, it should show the cluster contents"). */
   function showCluster(name: string) {
+    holdPlace();
     setOnly(name);
     setLimit(PAGE);
     setQuery("");
@@ -213,7 +218,7 @@ export default function ProjectClustersPage() {
             <div className="flex flex-wrap items-center gap-3">
               <input
                 value={findCluster}
-                onChange={e => setFindCluster(e.target.value)}
+                onChange={e => { holdPlace(); setFindCluster(e.target.value); }}
                 placeholder={x.findCluster}
                 className={`${inputClass} max-w-xs py-1 text-sm`}
               />
@@ -307,14 +312,14 @@ export default function ProjectClustersPage() {
             <div className="flex flex-wrap items-center gap-2">
               <input
                 value={query}
-                onChange={e => { setQuery(e.target.value); setLimit(PAGE); }}
+                onChange={e => { holdPlace(); setQuery(e.target.value); setLimit(PAGE); }}
                 placeholder={x.search}
                 className={`${inputClass} max-w-xs py-1 text-sm`}
               />
               <PickOne
                 choices={onlyChoices}
                 value={only}
-                onPick={v => { setOnly(v); setLimit(PAGE); }}
+                onPick={v => { holdPlace(); setOnly(v); setLimit(PAGE); }}
                 findLabel={x.findCluster}
                 nothing={x.nothingFound}
                 className={`min-w-40 rounded-lg border bg-white px-2 py-1 text-sm text-slate-900 dark:bg-slate-950 dark:text-slate-100 ${

@@ -5,7 +5,7 @@ import { useT } from "@/lib/i18n";
 import { Card, Empty, ErrorNote, Pill, SectionTitle, inputClass, serverTime } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { DateRange, toQuery } from "@/lib/date-range";
-import { oneOf, useSessionState } from "@/lib/session-state";
+import { oneOf, useHoldPlace, useSessionState } from "@/lib/session-state";
 import { TrackingExport } from "@/components/tracking-export";
 import { Choice, FLOATING, SEARCH_FROM, found, useFloatingList } from "@/components/floating-list";
 import {
@@ -378,7 +378,9 @@ export function PositionTracking({ projectId, range, previous, reloadKey = 0, pe
     [data],
   );
   const since = periodText(previous);
-  const set = (patch: Partial<Filters>) => setFilters(f => ({ ...f, ...patch }));
+  // A filter that leaves fewer rows must not move the page.
+  const holdPlace = useHoldPlace();
+  const set = (patch: Partial<Filters>) => { holdPlace(); setFilters(f => ({ ...f, ...patch })); };
 
   /** A column heading that sorts by its column; again to turn the order round. */
   function header(column: SortColumn, label: string, hint?: string, right?: boolean, extra?: ReactNode) {
