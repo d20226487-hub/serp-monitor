@@ -140,11 +140,17 @@ export default function ProjectClustersPage() {
     } finally { setBusy(false); }
   }
 
+  // A keyword is listed by its cluster as saved or as changed here: one whose
+  // cluster is being edited while the list is narrowed to a cluster (or found
+  // by a cluster's name) stays put until "Save" — it vanished at the first
+  // letter typed (2026-11-01).
   const q = key(query);
+  const inCluster = (c: string | null) => only === ALL || (only === NONE ? c === null : c === only);
   const shown = keywords.filter(k => {
-    const c = clusterOf(k);
-    if (only === NONE ? c !== null : only !== ALL && c !== only) return false;
-    return !q || key(k).includes(q) || (c ?? "").toLowerCase().includes(q);
+    const now = clusterOf(k);
+    const was = saved[key(k)] ?? null;
+    if (!inCluster(now) && !inCluster(was)) return false;
+    return !q || key(k).includes(q) || [now, was].some(c => (c ?? "").toLowerCase().includes(q));
   });
   const changes = Object.keys(edits).length;
 
