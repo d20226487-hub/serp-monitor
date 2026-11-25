@@ -49,8 +49,11 @@ class ProjectOut(ProjectBase):
     engines: list[str] = Field(default_factory=list)
     #: Keyword (lower case, trimmed) → its cluster.
     keyword_clusters: dict[str, str] = Field(default_factory=dict)
+    #: The domains written with "www." — asked about that way at the AMP
+    #: rotator, and nowhere else. Derived from `domains` as sent on save.
+    www_domains: list[str] = Field(default_factory=list)
 
-    @field_validator("domains", mode="before")
+    @field_validator("domains", "www_domains", mode="before")
     @classmethod
     def _none_to_empty_list(cls, v):
         return [] if v is None else v

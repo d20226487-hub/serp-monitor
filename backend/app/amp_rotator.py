@@ -249,6 +249,10 @@ def import_config(db, endpoint: AmpEndpoint, data: object, file_name: str | None
     not a config."""
     project = db.get(Project, endpoint.project_id)
     sites, problems = read_config(data)
+    # Read the config's "site" the way the rotator is asked: www.domain.com is
+    # the project's domain.com when the project asks for it that way.
+    names = rotator_names(project)
+    sites = [s._replace(site=names.get(s.site, s.site)) for s in sites]
     # What the daily checks named last for each domain, and since when.
     latest: dict[str, tuple[str, datetime, datetime]] = {}
     for domain, host, first, last in (
@@ -426,6 +430,19 @@ def project_domains(project: Project) -> list[str]:
     return seen
 
 
+def rotator_names(project: Project) -> dict[str, str]:
+    """The name to ask the rotator about → the project domain it stands for.
+
+    The rotator matches site names exactly — asked about www.domain.com it
+    answers "" for a site it holds as domain.com, and the other way round
+    (measured 2026-11-25 on both real rotators). So a domain the user wrote
+    with "www." is asked about with it. The answer is still credited to the
+    bare domain, which is what everything else keys on.
+    """
+    www = set(project.www_domains or [])
+    return {(f"www.{d}" if d in www else d): d for d in project_domains(project)}
+
+
 def refresh_endpoint(endpoint_id: int, client: httpx.Client | None = None) -> bool:
     """Ask one endpoint about its project's domains and keep the answer.
     True when the rotator answered. Own session: called from the scheduler,
@@ -436,7 +453,8 @@ def refresh_endpoint(endpoint_id: int, client: httpx.Client | None = None) -> bo
         project = db.get(Project, endpoint.project_id) if endpoint else None
         if endpoint is None or project is None:
             return False
-        domains = project_domains(project)
+        names = rotator_names(project)
+        domains = list(names)
         url = endpoint.url
     finally:
         db.close()
@@ -450,6 +468,9 @@ def refresh_endpoint(endpoint_id: int, client: httpx.Client | None = None) -> bo
         got = Fetched(False, None, {}, "the project has no domains to ask about")
     else:
         got = fetch(url, username, password, domains, client)
+        # Answers come back under the name asked; everything is kept under
+        # the bare project domain.
+        got = got._replace(amp={names[name]: amp for name, amp in got.amp.items()})
 
     db = SessionLocal()
     try:

@@ -24,22 +24,48 @@ _SEPARATORS = re.compile(r"[\s,;|]+")
 _HOST = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$")
 
 
-def normalize_domain(raw: str) -> str | None:
-    """One pasted token as a bare host, or None when it is not one."""
+def _host_of(raw: str) -> str:
+    """The host part of one pasted token: lower case, no scheme, path,
+    credentials, port or surrounding dots. "www." is still on it."""
     s = (raw or "").strip().strip('"\'').lower()
     if not s:
-        return None
+        return ""
     # A URL, or something with a path glued on: let urlsplit find the host.
     # It only populates .netloc when a scheme is present, hence the prefix.
     if "/" in s or "://" in s:
         s = urlsplit(s if "://" in s else f"//{s}").netloc or s
     # Credentials and port are not part of the identity we compare on.
     s = s.rsplit("@", 1)[-1].split(":", 1)[0]
+    return s.strip(".")
+
+
+def normalize_domain(raw: str) -> str | None:
+    """One pasted token as a bare host, or None when it is not one."""
+    s = _host_of(raw)
     if s.startswith("www."):
-        s = s[4:]
-    s = s.strip(".")
+        s = s[4:].strip(".")
     # A trailing dot is a legal FQDN; an internal empty label is not.
     return s if _HOST.match(s) else None
+
+
+def typed_with_www(values: list[str] | None) -> list[str]:
+    """The domains (bare, as stored) that were written with "www.".
+
+    Kept for ONE purpose: the AMP rotator matches site names exactly, so a site
+    registered there as www.domain.com answers "" when asked about domain.com
+    (measured 2026-11-25: asking either rotator for the other spelling of all
+    25 sites that have an AMP returned "" every time). Everything else — the
+    positions, Blocks and the Proxy Checker — keeps comparing the bare domain,
+    which already matches results on both spellings. Written both ways, the
+    www spelling wins: someone added it on purpose.
+    """
+    out: list[str] = []
+    for v in values or []:
+        if _host_of(str(v)).startswith("www."):
+            host = normalize_domain(str(v))
+            if host and host not in out:
+                out.append(host)
+    return out
 
 
 def parse_domains(text: str) -> tuple[list[str], list[str]]:

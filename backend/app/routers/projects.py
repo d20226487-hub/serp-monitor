@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from ..amp_rotator import remove_project as remove_amp_endpoints
 from ..db import get_db
 from ..models import Job, Project
-from ..providers.domain_paste import clean_domain_list
+from ..providers.domain_paste import clean_domain_list, typed_with_www
 from ..scheduler import remove_amp_rotator_schedule, remove_project_schedules
 from ..schemas import ProjectCreate, ProjectOut, ProjectUpdate
 
@@ -92,6 +92,7 @@ def _out(project: Project, summary: _Summary) -> ProjectOut:
         id=project.id,
         name=project.name,
         domains=project.domains or [],
+        www_domains=project.www_domains or [],
         notes=project.notes,
         created_at=project.created_at,
         updated_at=project.updated_at,
@@ -127,6 +128,7 @@ def create_project(payload: ProjectCreate, db: Session = Depends(get_db)):
     project = Project(
         name=name,
         domains=clean_domain_list(payload.domains),
+        www_domains=typed_with_www(payload.domains),
         notes=(payload.notes or None),
     )
     db.add(project)
@@ -158,6 +160,7 @@ def update_project(
         project.name = name
     if "domains" in fields:
         project.domains = clean_domain_list(payload.domains)
+        project.www_domains = typed_with_www(payload.domains)
     if "notes" in fields:
         project.notes = payload.notes or None
     db.commit()

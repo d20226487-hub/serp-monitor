@@ -351,6 +351,9 @@ export type Project = {
   /** Normalised hosts: lowercase, no scheme or path, no leading "www.".
    *  Subdomains are kept. Stored for position tracking to use later. */
   domains: string[];
+  /** Of `domains`, the ones written with "www." — asked about that way at
+   *  the AMP rotator, and nowhere else. */
+  www_domains?: string[];
   notes: string | null;
   /** What this project's jobs add up to, computed per response — the jobs
    *  decide all of it, so a stored copy would drift. */

@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { Project } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { Button, inputClass } from "@/components/ui";
-import { parseDomains } from "@/lib/domain-paste";
+import { domainsAsWritten, parseDomains } from "@/lib/domain-paste";
 
 /**
  * Create or edit a project: a name, and the domains being watched for it.
@@ -25,12 +25,16 @@ export function ProjectForm({
   const { t } = useT();
   const [name, setName] = useState(initial?.name ?? "");
   // Stored normalised, so reopening shows exactly what is saved rather than
-  // whatever was originally pasted.
-  const [domainsText, setDomainsText] = useState((initial?.domains ?? []).join("\n"));
+  // whatever was originally pasted — with "www." back on the domains written
+  // that way, or saving the form unchanged would drop it.
+  const [domainsText, setDomainsText] = useState(
+    domainsAsWritten(initial?.domains ?? [], initial?.www_domains).join("\n"),
+  );
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [error, setError] = useState<string | null>(null);
 
   const parsed = useMemo(() => parseDomains(domainsText), [domainsText]);
+  const withWww = parsed.domains.filter(d => d.startsWith("www."));
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -84,6 +88,16 @@ export function ProjectForm({
             {t.projects.domainsCount(parsed.domains.length)}
             {parsed.duplicates > 0 && ` · ${t.projects.domainsDuplicates(parsed.duplicates)}`}
           </div>
+          {/* Said before saving: a www. spelling is what the AMP rotator
+              will be asked about, and the rotator matches names exactly. */}
+          {withWww.length > 0 && (
+            <div className="text-slate-600 dark:text-slate-400">
+              {t.projects.domainsWww(
+                withWww.length,
+                withWww.slice(0, 5).join(", ") + (withWww.length > 5 ? "…" : ""),
+              )}
+            </div>
+          )}
           {parsed.rejected.length > 0 && (
             <div className="text-amber-700 dark:text-amber-300">
               {t.projects.domainsRejected(

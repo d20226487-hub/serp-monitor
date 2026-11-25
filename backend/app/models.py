@@ -42,6 +42,12 @@ class Project(Base):
     # Subdomains are KEPT — a doorway on kz.example.com is a different target
     # from example.com, and position tracking has to tell them apart.
     domains: Mapped[list] = mapped_column(JSON, default=list)
+    # The domains (bare, as in `domains`) the user wrote with "www.". Used
+    # ONLY to ask the AMP rotator, which matches site names exactly: a site
+    # registered there as www.domain.com answers "" for domain.com. Nothing
+    # else reads it — positions, Blocks and the Proxy Checker compare the
+    # bare domain, which matches both spellings already.
+    www_domains: Mapped[list | None] = mapped_column(JSON, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     # The project's GEOs: every country this project works in, as ISO codes
     # ("KG"), set on the project page (user, 2026-10-05: "first the user should

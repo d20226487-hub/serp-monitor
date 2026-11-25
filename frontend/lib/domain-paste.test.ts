@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeDomain, parseDomains } from "@/lib/domain-paste";
+import { domainsAsWritten, normalizeDomain, parseDomains } from "@/lib/domain-paste";
 
 describe("normalizeDomain", () => {
   it("strips everything that is not the host", () => {
@@ -46,9 +46,28 @@ describe("parseDomains", () => {
   it("keeps pasted order and counts repeats", () => {
     // A list someone arranged by importance comes back arranged the same way;
     // the duplicate here is the same host under two spellings.
+    // Written both ways, the www spelling wins (the AMP rotator is asked about
+    // it that way) — but the domain keeps the place it was first pasted at.
     const { domains, duplicates } = parseDomains("zeta.com\nalpha.com\nhttps://www.ZETA.com/x");
-    expect(domains).toEqual(["zeta.com", "alpha.com"]);
+    expect(domains).toEqual(["www.zeta.com", "alpha.com"]);
     expect(duplicates).toBe(1);
+  });
+
+  it("keeps a www. the user wrote and trims everything else", () => {
+    // The rotator matches site names exactly: a site held there as
+    // www.domain.com answers nothing for domain.com.
+    const { domains } = parseDomains(
+      "WWW.Site-One.example\nhttps://www.site-two.example:443/promo?x=1\nsite-three.example",
+    );
+    expect(domains).toEqual(["www.site-one.example", "www.site-two.example", "site-three.example"]);
+    // The stored domain itself is still bare.
+    expect(normalizeDomain("WWW.Site-One.example")).toBe("site-one.example");
+  });
+
+  it("reopens a saved project with its www. spellings back on", () => {
+    expect(domainsAsWritten(["a.example", "b.example"], ["b.example"]))
+      .toEqual(["a.example", "www.b.example"]);
+    expect(domainsAsWritten(["a.example"], undefined)).toEqual(["a.example"]);
   });
 
   it("reports rejects rather than dropping them silently", () => {

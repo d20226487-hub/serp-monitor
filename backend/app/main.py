@@ -185,6 +185,8 @@ def _migrate_sqlite_columns() -> None:
         ("results", "provider", "VARCHAR(20)"),
         # Tries a compare query took, counting automatic transient retries.
         ("run_queries", "attempts", "INTEGER"),
+        # Domains the user wrote with www., for the AMP rotator request only.
+        ("projects", "www_domains", "JSON"),
     ]
     # Values to backfill into rows that predate a column. ALTER TABLE ADD COLUMN
     # without a DEFAULT leaves existing rows NULL, which then fails response
